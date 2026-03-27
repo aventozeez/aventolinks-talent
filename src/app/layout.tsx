@@ -1,7 +1,11 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import Navbar from '@/components/layout/Navbar'
 import Footer from '@/components/layout/Footer'
+
+export const viewport: Viewport = {
+  themeColor: '#006B3F',
+}
 
 export const metadata: Metadata = {
   title: 'AventoLinks — Nigeria\'s #1 Learning & Talent Platform',
@@ -18,7 +22,6 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_NG',
   },
-  themeColor: '#006B3F',
 }
 
 export default function RootLayout({

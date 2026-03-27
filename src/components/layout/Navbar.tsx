@@ -1,10 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Menu, X, ChevronDown, BookOpen, Shield, LayoutDashboard, LogOut, User } from 'lucide-react'
-import { supabase, type Profile } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// Create client inline to guarantee env vars are picked up at runtime
+const getSupabase = () => createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+type Profile = {
+  id: string
+  full_name: string
+  email: string
+  role: string
+}
 
 const navLinks = [
   { label: 'Find Tutors', href: '/tutors' },
@@ -36,41 +49,67 @@ const isStaff = (role?: string) => role === 'admin' || role === 'moderator'
 
 export default function Navbar() {
   const router = useRouter()
+  const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
+  const supabaseRef = useRef(getSupabase())
 
+  // Close menus on route change
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    setMenuOpen(false)
+    setUserMenuOpen(false)
+  }, [pathname])
+
+  // Auth state — runs only on client after hydration
+  useEffect(() => {
+    setHydrated(true)
+    const sb = supabaseRef.current
+
+    const fetchProfile = async (userId: string) => {
+      const { data, error } = await sb
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .eq('id', userId)
+        .single()
+      if (data && !error) setProfile(data)
+    }
+
+    // Check existing session immediately
+    sb.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) fetchProfile(session.user.id)
     })
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) fetchProfile(session.user.id)
-      else setProfile(null)
+
+    // Keep in sync with auth changes (login, logout, token refresh)
+    const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        fetchProfile(session.user.id)
+      } else {
+        setProfile(null)
+      }
     })
+
     return () => subscription.unsubscribe()
   }, [])
 
-  const fetchProfile = async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    if (data) setProfile(data)
-  }
-
   const handleSignOut = async () => {
-    await supabase.auth.signOut()
+    await supabaseRef.current.auth.signOut()
     setProfile(null)
     setMenuOpen(false)
     setUserMenuOpen(false)
     router.push('/')
+    router.refresh()
   }
 
   const closeAll = () => {
     setMenuOpen(false)
     setUserMenuOpen(false)
   }
+
+  // Don't flash login buttons before hydration check completes
+  const showAuthButtons = hydrated
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 shadow-sm">
@@ -87,7 +126,7 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop Nav */}
+          {/* Desktop Nav Links */}
           <div className="hidden lg:flex items-center gap-1">
             {navLinks.map((link) => (
               <div
@@ -116,28 +155,29 @@ export default function Navbar() {
               </div>
             ))}
 
-            {/* Staff Portal link — desktop, only for admin/moderator */}
+            {/* Staff Portal — desktop, visible only to admin/moderator */}
             {isStaff(profile?.role) && (
-              <Link
-                href="/dashboard/staff"
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md hover:bg-primary-100 transition-colors ml-1"
-              >
+              <Link href="/dashboard/staff"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md hover:bg-primary-100 transition-colors ml-1">
                 <Shield className="w-3.5 h-3.5" />
                 Staff Portal
               </Link>
             )}
           </div>
 
-          {/* Desktop Right — auth state aware */}
-          <div className="hidden lg:flex items-center gap-3">
-            {profile ? (
+          {/* Desktop Right — auth aware */}
+          <div className="hidden lg:flex items-center gap-3 min-w-[160px] justify-end">
+            {!showAuthButtons ? (
+              // Skeleton while hydrating
+              <div className="w-32 h-9 bg-gray-100 rounded-full animate-pulse" />
+            ) : profile ? (
               <div className="relative">
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 hover:border-primary-800 transition-colors"
                 >
-                  <div className="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center text-primary-800 text-xs font-bold">
-                    {profile.full_name?.charAt(0).toUpperCase()}
+                  <div className="w-7 h-7 rounded-full bg-primary-800 flex items-center justify-center text-white text-xs font-bold">
+                    {profile.full_name?.charAt(0)?.toUpperCase() || 'U'}
                   </div>
                   <span className="text-sm font-medium text-gray-700 max-w-[100px] truncate">
                     {profile.full_name?.split(' ')[0]}
@@ -146,28 +186,31 @@ export default function Navbar() {
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-2 z-50">
-                    <div className="px-4 py-2 border-b border-gray-50">
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-gray-100 rounded-xl shadow-xl py-2 z-50">
+                    <div className="px-4 py-2.5 border-b border-gray-50">
                       <p className="text-sm font-semibold text-gray-900 truncate">{profile.full_name}</p>
-                      <p className="text-xs text-gray-400 capitalize">{profile.role}</p>
+                      <p className="text-xs text-gray-400">{profile.email}</p>
+                      <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                        isStaff(profile.role) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                      }`}>{profile.role}</span>
                     </div>
                     <Link href="/dashboard" onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                      <LayoutDashboard className="w-4 h-4" /> Dashboard
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                      <LayoutDashboard className="w-4 h-4 text-gray-400" /> Dashboard
                     </Link>
                     <Link href="/dashboard/profile" onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                      <User className="w-4 h-4" /> My Profile
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                      <User className="w-4 h-4 text-gray-400" /> My Profile
                     </Link>
                     {isStaff(profile.role) && (
                       <Link href="/dashboard/staff" onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-primary-800 hover:bg-primary-50">
+                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-primary-800 hover:bg-primary-50 transition-colors">
                         <Shield className="w-4 h-4" /> Staff Portal
                       </Link>
                     )}
                     <div className="border-t border-gray-50 mt-1 pt-1">
                       <button onClick={handleSignOut}
-                        className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
                         <LogOut className="w-4 h-4" /> Sign Out
                       </button>
                     </div>
@@ -188,7 +231,7 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Mobile Menu Toggle */}
           <button
             className="lg:hidden p-2 rounded-md text-gray-600 hover:text-primary-800"
             onClick={() => setMenuOpen(!menuOpen)}
@@ -200,13 +243,13 @@ export default function Navbar() {
 
       {/* ── Mobile Menu ── */}
       {menuOpen && (
-        <div className="lg:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-1">
+        <div className="lg:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-1 shadow-lg">
 
-          {/* Logged-in user info */}
+          {/* Logged-in user card */}
           {profile && (
             <div className="flex items-center gap-3 px-3 py-3 mb-2 bg-gray-50 rounded-xl">
-              <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-800 font-bold">
-                {profile.full_name?.charAt(0).toUpperCase()}
+              <div className="w-9 h-9 rounded-full bg-primary-800 flex items-center justify-center text-white font-bold flex-shrink-0">
+                {profile.full_name?.charAt(0)?.toUpperCase() || 'U'}
               </div>
               <div>
                 <p className="text-sm font-semibold text-gray-900">{profile.full_name}</p>
@@ -237,7 +280,7 @@ export default function Navbar() {
             </div>
           ))}
 
-          {/* Staff Portal — mobile, only for admin/moderator */}
+          {/* Staff Portal — mobile */}
           {isStaff(profile?.role) && (
             <Link href="/dashboard/staff"
               className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md"
@@ -246,7 +289,7 @@ export default function Navbar() {
             </Link>
           )}
 
-          {/* Auth buttons */}
+          {/* Auth section */}
           <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
             {profile ? (
               <>
@@ -276,6 +319,11 @@ export default function Navbar() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Close user menu on outside click */}
+      {userMenuOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
       )}
     </nav>
   )
