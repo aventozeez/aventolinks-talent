@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:preply.com)",
+      "Bash(pandoc \"web structure.docx\" -o output.md)",
+      "Bash(python -c \":*)",
+      "Read(//c/Users/azeez/AppData/Local/Programs/**)",
+      "Read(//c/Users/azeez/AppData/Roaming/**)",
+      "Bash(python3 -c \":*)",
+      "Bash(\"/c/Users/azeez/AppData/Local/Microsoft/WindowsApps/python3.exe\" -c \":*)",
+      "Bash(npm --version)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Read(//c//**)",
+      "Bash(powershell.exe -Command \"Get-Command node -ErrorAction SilentlyContinue | Select-Object Source\")",
+      "Bash(powershell.exe -Command \"Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force; Write-Output ''Done''\")",
+      "Bash(powershell.exe -Command \"Get-Command npm | Select-Object -ExpandProperty Source\")",
+      "Bash(\"/c/Program Files/nodejs/npm.cmd\" install)",
+      "Bash(powershell.exe -Command \":*)",
+      "Bash(git --version)",
+      "Bash(git config:*)",
+      "Bash(powershell.exe -Command \"git --version; git config --global user.name; git config --global user.email\")"
+    ]
+  }
+}
