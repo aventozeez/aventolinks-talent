@@ -1,0 +1,2 @@
+:HL["/_next/static/chunks/0rq2ys02w6lpu.css","style"]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"mentorship","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}},"staleTime":300,"buildId":"z14gQLe3h0IcyinZhV2Cl"}
