@@ -1,17 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, ChevronDown, BookOpen } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Menu, X, ChevronDown, BookOpen, Shield, LayoutDashboard, LogOut, User } from 'lucide-react'
+import { supabase, type Profile } from '@/lib/supabase'
 
 const navLinks = [
+  { label: 'Find Tutors', href: '/tutors' },
   {
-    label: 'Find Tutors',
-    href: '/tutors',
-  },
-  {
-    label: 'Subjects',
-    href: '/subjects',
+    label: 'Subjects', href: '/subjects',
     dropdown: [
       { label: 'WAEC / NECO / JAMB', href: '/subjects/exams' },
       { label: 'STEM & Sciences', href: '/subjects/stem' },
@@ -20,8 +18,7 @@ const navLinks = [
     ],
   },
   {
-    label: 'Languages',
-    href: '/languages',
+    label: 'Languages', href: '/languages',
     dropdown: [
       { label: 'English', href: '/languages/english' },
       { label: 'French', href: '/languages/french' },
@@ -35,9 +32,45 @@ const navLinks = [
   { label: 'For Schools', href: '/schools' },
 ]
 
+const isStaff = (role?: string) => role === 'admin' || role === 'moderator'
+
 export default function Navbar() {
+  const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) fetchProfile(session.user.id)
+    })
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) fetchProfile(session.user.id)
+      else setProfile(null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    if (data) setProfile(data)
+  }
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    setProfile(null)
+    setMenuOpen(false)
+    setUserMenuOpen(false)
+    router.push('/')
+  }
+
+  const closeAll = () => {
+    setMenuOpen(false)
+    setUserMenuOpen(false)
+  }
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 shadow-sm">
@@ -45,7 +78,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2" onClick={closeAll}>
             <div className="w-8 h-8 rounded-lg bg-primary-800 flex items-center justify-center">
               <BookOpen className="w-5 h-5 text-white" />
             </div>
@@ -70,15 +103,11 @@ export default function Navbar() {
                   {link.label}
                   {link.dropdown && <ChevronDown className="w-3.5 h-3.5" />}
                 </Link>
-
                 {link.dropdown && activeDropdown === link.label && (
                   <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-gray-100 rounded-xl shadow-lg py-1 z-50">
                     {link.dropdown.map((item) => (
-                      <Link
-                        key={item.label}
-                        href={item.href}
-                        className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-800 transition-colors"
-                      >
+                      <Link key={item.label} href={item.href}
+                        className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-800 transition-colors">
                         {item.label}
                       </Link>
                     ))}
@@ -86,22 +115,77 @@ export default function Navbar() {
                 )}
               </div>
             ))}
+
+            {/* Staff Portal link — desktop, only for admin/moderator */}
+            {isStaff(profile?.role) && (
+              <Link
+                href="/dashboard/staff"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md hover:bg-primary-100 transition-colors ml-1"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                Staff Portal
+              </Link>
+            )}
           </div>
 
-          {/* Auth Buttons */}
+          {/* Desktop Right — auth state aware */}
           <div className="hidden lg:flex items-center gap-3">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-800 transition-colors"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/register"
-              className="px-5 py-2 text-sm font-semibold text-white bg-primary-800 rounded-full hover:bg-primary-700 transition-colors"
-            >
-              Get started
-            </Link>
+            {profile ? (
+              <div className="relative">
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 hover:border-primary-800 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center text-primary-800 text-xs font-bold">
+                    {profile.full_name?.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-sm font-medium text-gray-700 max-w-[100px] truncate">
+                    {profile.full_name?.split(' ')[0]}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-50">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{profile.full_name}</p>
+                      <p className="text-xs text-gray-400 capitalize">{profile.role}</p>
+                    </div>
+                    <Link href="/dashboard" onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                      <LayoutDashboard className="w-4 h-4" /> Dashboard
+                    </Link>
+                    <Link href="/dashboard/profile" onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                      <User className="w-4 h-4" /> My Profile
+                    </Link>
+                    {isStaff(profile.role) && (
+                      <Link href="/dashboard/staff" onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-primary-800 hover:bg-primary-50">
+                        <Shield className="w-4 h-4" /> Staff Portal
+                      </Link>
+                    )}
+                    <div className="border-t border-gray-50 mt-1 pt-1">
+                      <button onClick={handleSignOut}
+                        className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                        <LogOut className="w-4 h-4" /> Sign Out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <Link href="/login"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-800 transition-colors">
+                  Log in
+                </Link>
+                <Link href="/register"
+                  className="px-5 py-2 text-sm font-semibold text-white bg-primary-800 rounded-full hover:bg-primary-700 transition-colors">
+                  Get started
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -114,27 +198,37 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* ── Mobile Menu ── */}
       {menuOpen && (
         <div className="lg:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-1">
+
+          {/* Logged-in user info */}
+          {profile && (
+            <div className="flex items-center gap-3 px-3 py-3 mb-2 bg-gray-50 rounded-xl">
+              <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-800 font-bold">
+                {profile.full_name?.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{profile.full_name}</p>
+                <p className="text-xs text-gray-400 capitalize">{profile.role}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Nav links */}
           {navLinks.map((link) => (
             <div key={link.label}>
-              <Link
-                href={link.href}
+              <Link href={link.href}
                 className="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-primary-800 hover:bg-primary-50 rounded-md"
-                onClick={() => setMenuOpen(false)}
-              >
+                onClick={() => setMenuOpen(false)}>
                 {link.label}
               </Link>
               {link.dropdown && (
                 <div className="ml-4 border-l-2 border-primary-100 pl-3 mt-1 space-y-1">
                   {link.dropdown.map((item) => (
-                    <Link
-                      key={item.label}
-                      href={item.href}
+                    <Link key={item.label} href={item.href}
                       className="block py-1.5 text-sm text-gray-600 hover:text-primary-800"
-                      onClick={() => setMenuOpen(false)}
-                    >
+                      onClick={() => setMenuOpen(false)}>
                       {item.label}
                     </Link>
                   ))}
@@ -142,13 +236,44 @@ export default function Navbar() {
               )}
             </div>
           ))}
+
+          {/* Staff Portal — mobile, only for admin/moderator */}
+          {isStaff(profile?.role) && (
+            <Link href="/dashboard/staff"
+              className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md"
+              onClick={() => setMenuOpen(false)}>
+              <Shield className="w-4 h-4" /> Staff Portal
+            </Link>
+          )}
+
+          {/* Auth buttons */}
           <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
-            <Link href="/login" className="w-full text-center py-2.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-full">
-              Log in
-            </Link>
-            <Link href="/register" className="w-full text-center py-2.5 text-sm font-semibold text-white bg-primary-800 rounded-full">
-              Get started free
-            </Link>
+            {profile ? (
+              <>
+                <Link href="/dashboard"
+                  className="w-full text-center py-2.5 text-sm font-semibold text-primary-800 border-2 border-primary-800 rounded-full"
+                  onClick={() => setMenuOpen(false)}>
+                  My Dashboard
+                </Link>
+                <button onClick={handleSignOut}
+                  className="w-full text-center py-2.5 text-sm font-medium text-red-600 border border-red-200 rounded-full hover:bg-red-50">
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/login"
+                  className="w-full text-center py-2.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-full"
+                  onClick={() => setMenuOpen(false)}>
+                  Log in
+                </Link>
+                <Link href="/register"
+                  className="w-full text-center py-2.5 text-sm font-semibold text-white bg-primary-800 rounded-full"
+                  onClick={() => setMenuOpen(false)}>
+                  Get started free
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
