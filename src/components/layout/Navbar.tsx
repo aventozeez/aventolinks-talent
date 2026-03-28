@@ -155,13 +155,19 @@ export default function Navbar() {
               </div>
             ))}
 
-            {/* Staff Portal — desktop, visible only to admin/moderator */}
+            {/* Staff-only links — desktop, visible only to admin/moderator */}
             {isStaff(profile?.role) && (
-              <Link href="/dashboard/staff"
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md hover:bg-primary-100 transition-colors ml-1">
-                <Shield className="w-3.5 h-3.5" />
-                Staff Portal
-              </Link>
+              <>
+                <Link href="/quiz"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gold-600 bg-gold-50 rounded-md hover:bg-gold-100 transition-colors ml-1">
+                  🏆 Scholars Challenge
+                </Link>
+                <Link href="/dashboard/staff"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md hover:bg-primary-100 transition-colors ml-1">
+                  <Shield className="w-3.5 h-3.5" />
+                  Staff Portal
+                </Link>
+              </>
             )}
           </div>
 
@@ -280,13 +286,20 @@ export default function Navbar() {
             </div>
           ))}
 
-          {/* Staff Portal — mobile */}
+          {/* Staff-only links — mobile */}
           {isStaff(profile?.role) && (
-            <Link href="/dashboard/staff"
-              className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md"
-              onClick={() => setMenuOpen(false)}>
-              <Shield className="w-4 h-4" /> Staff Portal
-            </Link>
+            <>
+              <Link href="/quiz"
+                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-gold-600 bg-gold-50 rounded-md"
+                onClick={() => setMenuOpen(false)}>
+                🏆 Scholars Challenge
+              </Link>
+              <Link href="/dashboard/staff"
+                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md"
+                onClick={() => setMenuOpen(false)}>
+                <Shield className="w-4 h-4" /> Staff Portal
+              </Link>
+            </>
           )}
 
           {/* Auth section */}
