@@ -112,10 +112,11 @@ export default function StaffPortal() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/login'); return }
       const { data: prof } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
-      if (!prof || (prof.role !== 'admin' && prof.role !== 'moderator')) {
+      const role = prof?.role ?? session.user.user_metadata?.role
+      if (!role || (role !== 'admin' && role !== 'moderator')) {
         router.push('/dashboard'); return
       }
-      setMyRole(prof.role as Role)
+      setMyRole(role as Role)
       setLoading(false)
     }
     init()

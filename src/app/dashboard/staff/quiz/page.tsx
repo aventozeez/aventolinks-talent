@@ -64,7 +64,8 @@ export default function AdminQuizPage() {
     sb.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) { router.push('/login'); return }
       const { data } = await sb.from('profiles').select('role').eq('id', session.user.id).single()
-      if (data?.role === 'admin' || data?.role === 'moderator') {
+      const role = data?.role ?? session.user.user_metadata?.role
+      if (role === 'admin' || role === 'moderator') {
         setAuthorized(true)
       } else {
         router.push('/dashboard')

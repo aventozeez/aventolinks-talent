@@ -140,7 +140,8 @@ export default function CompetitionPage() {
         .select("role")
         .eq("id", session.user.id)
         .single();
-      if (!profile || !["admin", "moderator"].includes(profile.role)) {
+      const role = profile?.role ?? session.user.user_metadata?.role;
+      if (!role || !["admin", "moderator"].includes(role)) {
         router.replace("/dashboard");
         return;
       }

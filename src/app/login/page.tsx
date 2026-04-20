@@ -28,13 +28,16 @@ export default function LoginPage() {
     }
 
     if (data.session) {
+      // Try profiles table first; fall back to user_metadata if RLS blocks it
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', data.session.user.id)
         .single()
 
-      if (profile?.role === 'admin' || profile?.role === 'moderator') {
+      const role = profile?.role ?? data.session.user.user_metadata?.role
+
+      if (role === 'admin' || role === 'moderator') {
         router.push('/dashboard/staff/competition/')
       } else {
         router.push('/dashboard')
