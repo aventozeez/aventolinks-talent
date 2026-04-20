@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { BookOpen, Eye, EyeOff, Loader2 } from 'lucide-react'
-import { signIn } from '@/lib/supabase'
+import { signIn, supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -28,7 +28,17 @@ export default function LoginPage() {
     }
 
     if (data.session) {
-      router.push('/dashboard')
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.session.user.id)
+        .single()
+
+      if (profile?.role === 'admin' || profile?.role === 'moderator') {
+        router.push('/dashboard/staff/competition/')
+      } else {
+        router.push('/dashboard')
+      }
     }
   }
 
