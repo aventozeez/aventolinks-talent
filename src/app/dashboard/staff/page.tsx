@@ -311,6 +311,9 @@ export default function StaffPortal() {
                     Manage User Roles
                   </button>
                 )}
+                <a href="/dashboard/staff/competition" className="px-4 py-2 bg-blue-50 text-blue-700 rounded-full text-sm font-medium hover:bg-blue-100 inline-flex items-center gap-1.5">
+                  ⚔️ Competition Manager
+                </a>
                 <a href="/dashboard/staff/quiz" className="px-4 py-2 bg-gold-500/10 text-yellow-700 rounded-full text-sm font-medium hover:bg-gold-500/20 inline-flex items-center gap-1.5">
                   🏆 Quiz Manager
                 </a>

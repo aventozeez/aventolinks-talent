@@ -162,6 +162,10 @@ export default function Navbar() {
                   className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gold-600 bg-gold-50 rounded-md hover:bg-gold-100 transition-colors ml-1">
                   🏆 Scholars Challenge
                 </Link>
+                <Link href="/dashboard/staff/competition"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-[#0a1628] rounded-md hover:bg-[#1a2d4a] transition-colors ml-1">
+                  ⚔️ Competition
+                </Link>
                 <Link href="/dashboard/staff"
                   className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md hover:bg-primary-100 transition-colors ml-1">
                   <Shield className="w-3.5 h-3.5" />
@@ -209,10 +213,16 @@ export default function Navbar() {
                       <User className="w-4 h-4 text-gray-400" /> My Profile
                     </Link>
                     {isStaff(profile.role) && (
-                      <Link href="/dashboard/staff" onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-primary-800 hover:bg-primary-50 transition-colors">
-                        <Shield className="w-4 h-4" /> Staff Portal
-                      </Link>
+                      <>
+                        <Link href="/dashboard/staff/competition" onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-[#0a1628] hover:bg-gray-50 transition-colors">
+                          ⚔️ Competition Manager
+                        </Link>
+                        <Link href="/dashboard/staff" onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-primary-800 hover:bg-primary-50 transition-colors">
+                          <Shield className="w-4 h-4" /> Staff Portal
+                        </Link>
+                      </>
                     )}
                     <div className="border-t border-gray-50 mt-1 pt-1">
                       <button onClick={handleSignOut}
@@ -293,6 +303,11 @@ export default function Navbar() {
                 className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-gold-600 bg-gold-50 rounded-md"
                 onClick={() => setMenuOpen(false)}>
                 🏆 Scholars Challenge
+              </Link>
+              <Link href="/dashboard/staff/competition"
+                className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-white bg-[#0a1628] rounded-md"
+                onClick={() => setMenuOpen(false)}>
+                ⚔️ Competition Manager
               </Link>
               <Link href="/dashboard/staff"
                 className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold text-primary-800 bg-primary-50 rounded-md"
