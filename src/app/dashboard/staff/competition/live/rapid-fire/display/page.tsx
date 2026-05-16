@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 // Must stay in sync with the admin page constants
 const RF_LIVE_KEY   = 'sc_rf_live_v2'
@@ -42,27 +42,41 @@ export default function RapidFireDisplay() {
   const [ds,        setDs]       = useState<RFDisplayState>(blank())
   const [remaining, setRemaining] = useState(60)
   const [qKey,      setQKey]     = useState(0)    // incremented on question change for CSS animation
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevQRef    = useRef('')
+  const lastRawRef  = useRef<string | null>(null)  // avoids re-renders on unchanged data
 
-  // ── Read from localStorage + subscribe to changes ───────────────
-  useEffect(() => {
-    const read = () => {
-      try {
-        const raw = localStorage.getItem(RF_LIVE_KEY)
-        if (raw) setDs(JSON.parse(raw))
-      } catch { /* ignore */ }
-    }
-    read()
-
-    const handler = (e: StorageEvent) => {
-      if (e.key === RF_LIVE_KEY && e.newValue) {
-        try { setDs(JSON.parse(e.newValue)) } catch { /* ignore */ }
+  // ── Sync from localStorage (used by both event + poll) ──────────
+  const syncFromStorage = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(RF_LIVE_KEY)
+      if (raw && raw !== lastRawRef.current) {
+        lastRawRef.current = raw
+        setDs(JSON.parse(raw))
       }
+    } catch { /* ignore */ }
+  }, [])
+
+  // ── Subscribe: storage event (cross-tab) + 300ms poll (fallback) ─
+  useEffect(() => {
+    syncFromStorage() // read on mount
+
+    // Primary: fires instantly in other tabs when admin writes
+    const handler = (e: StorageEvent) => {
+      if (e.key === RF_LIVE_KEY) syncFromStorage()
     }
     window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
-  }, [])
+
+    // Fallback: catches cases where storage event doesn't fire
+    // (e.g. same browsing context, certain hosting configurations)
+    pollIntervalRef.current = setInterval(syncFromStorage, 300)
+
+    return () => {
+      window.removeEventListener('storage', handler)
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+    }
+  }, [syncFromStorage])
 
   // ── Animate question card when the question text changes ─────────
   useEffect(() => {
@@ -74,7 +88,7 @@ export default function RapidFireDisplay() {
 
   // ── Independent countdown timer ──────────────────────────────────
   useEffect(() => {
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+    if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null }
     if (!ds.timerStartedAt) { setRemaining(60); return }
 
     const tick = () => {
@@ -83,8 +97,8 @@ export default function RapidFireDisplay() {
       setRemaining(rem)
     }
     tick()
-    intervalRef.current = setInterval(tick, 100)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+    timerIntervalRef.current = setInterval(tick, 100)
+    return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current) }
   }, [ds.timerStartedAt, ds.timerDuration])
 
   // ── Derived ──────────────────────────────────────────────────────
