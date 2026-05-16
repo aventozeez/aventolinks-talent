@@ -15,8 +15,8 @@ const supabase = createClient(
 
 // ─── constants ───────────────────────────────────────────────────────────────
 export const RF_LIVE_KEY = "sc_rf_live_v2";
-const TIMER_MS   = 60_000;   // 60 seconds
-const TOTAL_QS   = 10;       // questions per team
+const TIMER_MS   = 60_000;   // 60 seconds per team
+const TOTAL_QS   = 10;       // questions in starting pool
 const PTS        = 10;       // points per correct answer
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -52,8 +52,8 @@ export type RFDisplayState = {
   timerDuration: number;
   currentQuestion: string;
   currentSubject: string;
-  questionIndex: number;    // 0-based — which question is on screen
-  totalQuestions: number;   // always 10
+  correctCount: number;   // how many answered correctly this turn
+  queueLength: number;    // questions still in play (shrinks on correct, stays on wrong/pass)
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -70,43 +70,42 @@ export default function RapidFireAdminPage() {
   const router = useRouter();
 
   // ── data ──────────────────────────────────────────────────────────────────
-  const [loading,    setLoading]    = useState(true);
-  const [matchData,  setMatchData]  = useState<MatchData | null>(null);
-  const [matchMode,  setMatchMode]  = useState(false);
-  const [questions,  setQuestions]  = useState<Question[]>([]);   // exactly TOTAL_QS items
+  const [loading,   setLoading]   = useState(true);
+  const [matchData, setMatchData] = useState<MatchData | null>(null);
+  const [matchMode, setMatchMode] = useState(false);
+  const [allQuestions, setAllQuestions] = useState<Question[]>([]); // full pool
 
   // ── game state ────────────────────────────────────────────────────────────
-  const [teamAName, setTeamAName] = useState("Team A");
-  const [teamBName, setTeamBName] = useState("Team B");
-  const [phase,     setPhase]     = useState<Phase>("setup");
-  const [qIndex,    setQIndex]    = useState(0);   // 0–9, which question is showing
-  const [scoreA,    setScoreA]    = useState(0);
-  const [scoreB,    setScoreB]    = useState(0);
+  const [teamAName, setTeamAName]   = useState("Team A");
+  const [teamBName, setTeamBName]   = useState("Team B");
+  const [phase,     setPhase]       = useState<Phase>("setup");
+  const [queue,     setQueue]       = useState<Question[]>([]);  // active queue, [0] is current
+  const [correctCount, setCorrectCount] = useState(0);           // correct this turn
+  const [scoreA,    setScoreA]      = useState(0);
+  const [scoreB,    setScoreB]      = useState(0);
   const [timerStartedAt, setTimerStartedAt] = useState<number | null>(null);
-  const [remaining, setRemaining] = useState(60);
-  const [flash,     setFlash]     = useState<"correct" | "wrong" | "pass" | null>(null);
+  const [remaining, setRemaining]   = useState(60);
+  const [flash,     setFlash]       = useState<"correct" | "wrong" | "pass" | null>(null);
 
-  // ── refs (stale-closure safety) ───────────────────────────────────────────
-  // We mutate these synchronously in handlers so timer callback always reads fresh values.
-  const phaseRef         = useRef<Phase>("setup");
-  const qIndexRef        = useRef(0);
-  const scoreARef        = useRef(0);
-  const scoreBRef        = useRef(0);
+  // ── refs (stale-closure safety — mutated synchronously in event handlers) ─
+  const phaseRef          = useRef<Phase>("setup");
+  const queueRef          = useRef<Question[]>([]);
+  const correctCountRef   = useRef(0);
+  const scoreARef         = useRef(0);
+  const scoreBRef         = useRef(0);
   const timerStartedAtRef = useRef<number | null>(null);
-  const questionsRef     = useRef<Question[]>([]);
-  const teamARef         = useRef("Team A");
-  const teamBRef         = useRef("Team B");
-  const intervalRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const endedRef         = useRef(false);
+  const teamARef          = useRef("Team A");
+  const teamBRef          = useRef("Team B");
+  const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endedRef          = useRef(false);
 
-  // keep refs in sync with state
-  useEffect(() => { phaseRef.current  = phase;      }, [phase]);
-  useEffect(() => { qIndexRef.current = qIndex;     }, [qIndex]);
-  useEffect(() => { scoreARef.current = scoreA;     }, [scoreA]);
-  useEffect(() => { scoreBRef.current = scoreB;     }, [scoreB]);
-  useEffect(() => { teamARef.current  = teamAName;  }, [teamAName]);
-  useEffect(() => { teamBRef.current  = teamBName;  }, [teamBName]);
-  useEffect(() => { questionsRef.current = questions; }, [questions]);
+  useEffect(() => { phaseRef.current        = phase;        }, [phase]);
+  useEffect(() => { queueRef.current        = queue;        }, [queue]);
+  useEffect(() => { correctCountRef.current = correctCount; }, [correctCount]);
+  useEffect(() => { scoreARef.current       = scoreA;       }, [scoreA]);
+  useEffect(() => { scoreBRef.current       = scoreB;       }, [scoreB]);
+  useEffect(() => { teamARef.current        = teamAName;    }, [teamAName]);
+  useEffect(() => { teamBRef.current        = teamBName;    }, [teamBName]);
   useEffect(() => { timerStartedAtRef.current = timerStartedAt; }, [timerStartedAt]);
 
   // ── load questions ────────────────────────────────────────────────────────
@@ -138,9 +137,7 @@ export default function RapidFireAdminPage() {
     if (pq?.length) {
       const { data: qs } = await (supabase as any)
         .from("sc_questions").select("*").in("id", pq.map((r: any) => r.question_id));
-      const picked = shuffle((qs ?? []) as Question[]).slice(0, TOTAL_QS);
-      setQuestions(picked);
-      questionsRef.current = picked;
+      setAllQuestions(shuffle((qs ?? []) as Question[]).slice(0, TOTAL_QS));
     }
     setLoading(false);
   };
@@ -149,17 +146,14 @@ export default function RapidFireAdminPage() {
     setLoading(true);
     const { data } = await (supabase as any)
       .from("sc_questions").select("*").eq("round_type", "rapid_fire");
-    const picked = shuffle((data ?? []) as Question[]).slice(0, TOTAL_QS);
-    setQuestions(picked);
-    questionsRef.current = picked;
+    setAllQuestions(shuffle((data ?? []) as Question[]).slice(0, TOTAL_QS));
     setLoading(false);
   };
 
-  // ── write to display tab ──────────────────────────────────────────────────
+  // ── write display state to localStorage ───────────────────────────────────
   const writeDisplay = useCallback((
-    p: Phase, qi: number, sA: number, sB: number, tsa: number | null
+    p: Phase, q: Question[], correct: number, sA: number, sB: number, tsa: number | null
   ) => {
-    const q = questionsRef.current[qi];
     const state: RFDisplayState = {
       phase:           p,
       teamAName:       teamARef.current,
@@ -168,10 +162,10 @@ export default function RapidFireAdminPage() {
       scoreB:          sB,
       timerStartedAt:  tsa,
       timerDuration:   TIMER_MS,
-      currentQuestion: q?.question_text ?? "",
-      currentSubject:  q?.subject        ?? "",
-      questionIndex:   qi,
-      totalQuestions:  TOTAL_QS,
+      currentQuestion: q[0]?.question_text ?? "",
+      currentSubject:  q[0]?.subject        ?? "",
+      correctCount:    correct,
+      queueLength:     q.length,
     };
     localStorage.setItem(RF_LIVE_KEY, JSON.stringify(state));
   }, []);
@@ -181,8 +175,7 @@ export default function RapidFireAdminPage() {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
   }, []);
 
-  // Called when 60 s elapse; reads from refs so it's always fresh.
-  const endTurnByTimer = useCallback(() => {
+  const endTurn = useCallback(() => {
     if (endedRef.current) return;
     endedRef.current = true;
     stopTimer();
@@ -191,7 +184,7 @@ export default function RapidFireAdminPage() {
     setPhase(newPhase);
     setTimerStartedAt(null);
     timerStartedAtRef.current = null;
-    writeDisplay(newPhase, 0, scoreARef.current, scoreBRef.current, null);
+    writeDisplay(newPhase, [], correctCountRef.current, scoreARef.current, scoreBRef.current, null);
   }, [stopTimer, writeDisplay]);
 
   useEffect(() => {
@@ -201,57 +194,39 @@ export default function RapidFireAdminPage() {
       const elapsed = Date.now() - timerStartedAt;
       const rem = Math.max(0, Math.ceil((TIMER_MS - elapsed) / 1000));
       setRemaining(rem);
-      if (rem === 0) endTurnByTimer();
+      if (rem === 0) endTurn();
     }, 100);
     return () => stopTimer();
-  }, [timerStartedAt, stopTimer, endTurnByTimer]);
+  }, [timerStartedAt, stopTimer, endTurn]);
 
   // ── game actions ──────────────────────────────────────────────────────────
+  const freshQueue = () => shuffle([...allQuestions]).slice(0, TOTAL_QS);
+
   const startTeamA = () => {
     endedRef.current = false;
+    const q = freshQueue();
     const now = Date.now();
-    // reset everything
-    setScoreA(0);     scoreARef.current  = 0;
-    setScoreB(0);     scoreBRef.current  = 0;
-    setQIndex(0);     qIndexRef.current  = 0;
+    setQueue(q);          queueRef.current        = q;
+    setCorrectCount(0);   correctCountRef.current = 0;
+    setScoreA(0);         scoreARef.current       = 0;
+    setScoreB(0);         scoreBRef.current       = 0;
     setRemaining(60);
-    setPhase("playing-a"); phaseRef.current = "playing-a";
+    setPhase("playing-a"); phaseRef.current       = "playing-a";
     setTimerStartedAt(now); timerStartedAtRef.current = now;
-    writeDisplay("playing-a", 0, 0, 0, now);
+    writeDisplay("playing-a", q, 0, 0, 0, now);
   };
 
   const startTeamB = () => {
     endedRef.current = false;
+    const q = freshQueue();
     const now = Date.now();
-    // scoreA is already set; reset B-specific state
-    setScoreB(0);     scoreBRef.current  = 0;
-    setQIndex(0);     qIndexRef.current  = 0;
+    setQueue(q);          queueRef.current        = q;
+    setCorrectCount(0);   correctCountRef.current = 0;
+    setScoreB(0);         scoreBRef.current       = 0;
     setRemaining(60);
-    setPhase("playing-b"); phaseRef.current = "playing-b";
+    setPhase("playing-b"); phaseRef.current       = "playing-b";
     setTimerStartedAt(now); timerStartedAtRef.current = now;
-    writeDisplay("playing-b", 0, scoreARef.current, 0, now);
-  };
-
-  /** Move to the next question. If that was the last one, end the turn. */
-  const advance = (newSA: number, newSB: number) => {
-    const nextIdx = qIndexRef.current + 1;
-    qIndexRef.current = nextIdx;
-    setQIndex(nextIdx);
-
-    if (nextIdx >= TOTAL_QS) {
-      // All questions answered → end turn immediately
-      if (endedRef.current) return;
-      endedRef.current = true;
-      stopTimer();
-      const newPhase: Phase = phaseRef.current === "playing-a" ? "break" : "done";
-      phaseRef.current = newPhase;
-      setPhase(newPhase);
-      setTimerStartedAt(null);
-      timerStartedAtRef.current = null;
-      writeDisplay(newPhase, 0, newSA, newSB, null);
-    } else {
-      writeDisplay(phaseRef.current, nextIdx, newSA, newSB, timerStartedAtRef.current);
-    }
+    writeDisplay("playing-b", q, 0, scoreARef.current, 0, now);
   };
 
   const doFlash = (kind: "correct" | "wrong" | "pass") => {
@@ -262,36 +237,54 @@ export default function RapidFireAdminPage() {
   const handleCorrect = () => {
     if (endedRef.current) return;
     doFlash("correct");
-    const isA  = phaseRef.current === "playing-a";
+    const isA   = phaseRef.current === "playing-a";
     const newSA = isA ? scoreARef.current + PTS : scoreARef.current;
     const newSB = isA ? scoreBRef.current       : scoreBRef.current + PTS;
     if (isA) { setScoreA(newSA); scoreARef.current = newSA; }
     else      { setScoreB(newSB); scoreBRef.current = newSB; }
-    advance(newSA, newSB);
+
+    // Remove answered question from the front
+    const newQ = queueRef.current.slice(1);
+    const newCorrect = correctCountRef.current + 1;
+    queueRef.current        = newQ;
+    correctCountRef.current = newCorrect;
+    setQueue(newQ);
+    setCorrectCount(newCorrect);
+
+    if (newQ.length === 0) {
+      // All questions answered correctly — end turn immediately
+      endTurn();
+    } else {
+      writeDisplay(phaseRef.current, newQ, newCorrect, newSA, newSB, timerStartedAtRef.current);
+    }
   };
 
   const handleWrong = () => {
     if (endedRef.current) return;
     doFlash("wrong");
-    advance(scoreARef.current, scoreBRef.current);
+    // Move current question to the back — it will reappear
+    const cur = queueRef.current;
+    const newQ = cur.length > 1 ? [...cur.slice(1), cur[0]] : cur;
+    queueRef.current = newQ;
+    setQueue(newQ);
+    writeDisplay(
+      phaseRef.current, newQ, correctCountRef.current,
+      scoreARef.current, scoreBRef.current, timerStartedAtRef.current
+    );
   };
 
   const handlePass = () => {
     if (endedRef.current) return;
     doFlash("pass");
-    advance(scoreARef.current, scoreBRef.current);
-  };
-
-  const endEarly = () => {
-    if (endedRef.current) return;
-    endedRef.current = true;
-    stopTimer();
-    const newPhase: Phase = phaseRef.current === "playing-a" ? "break" : "done";
-    phaseRef.current = newPhase;
-    setPhase(newPhase);
-    setTimerStartedAt(null);
-    timerStartedAtRef.current = null;
-    writeDisplay(newPhase, 0, scoreARef.current, scoreBRef.current, null);
+    // Same as wrong — move to back
+    const cur = queueRef.current;
+    const newQ = cur.length > 1 ? [...cur.slice(1), cur[0]] : cur;
+    queueRef.current = newQ;
+    setQueue(newQ);
+    writeDisplay(
+      phaseRef.current, newQ, correctCountRef.current,
+      scoreARef.current, scoreBRef.current, timerStartedAtRef.current
+    );
   };
 
   const continueToMatch = () => {
@@ -306,7 +299,7 @@ export default function RapidFireAdminPage() {
 
   // ── derived ───────────────────────────────────────────────────────────────
   const isPlaying   = phase === "playing-a" || phase === "playing-b";
-  const currentQ    = questions[qIndex];
+  const currentQ    = queue[0];
   const activeTeam  = phase === "playing-b" ? teamBName : teamAName;
   const activeScore = phase === "playing-b" ? scoreB    : scoreA;
   const teamColor   = phase === "playing-b" ? "#60a5fa" : "#f5a623";
@@ -335,7 +328,7 @@ export default function RapidFireAdminPage() {
           <div>
             <h1 className="text-lg font-bold">Rapid Fire — Admin</h1>
             <p className="text-xs text-slate-400">
-              {questions.length} questions loaded · +{PTS} pts per correct answer
+              {allQuestions.length} questions · +{PTS} pts correct · wrong/pass recycles
             </p>
           </div>
         </div>
@@ -355,9 +348,9 @@ export default function RapidFireAdminPage() {
               <div className="text-center">
                 <h2 className="text-2xl font-bold">Rapid Fire Round</h2>
                 <p className="text-slate-400 text-sm mt-2 leading-relaxed">
-                  Each team answers <strong className="text-white">{TOTAL_QS} questions</strong> in{" "}
-                  <strong className="text-white">60 seconds</strong>.
-                  <br />+{PTS} pts for correct · wrong &amp; pass score nothing, question moves on.
+                  Each team has <strong className="text-white">60 seconds</strong> to answer as many of the{" "}
+                  <strong className="text-white">{TOTAL_QS} questions</strong> as possible.
+                  <br />+{PTS} pts for correct · wrong &amp; pass recycle back into the queue.
                 </p>
               </div>
 
@@ -376,14 +369,13 @@ export default function RapidFireAdminPage() {
                 </div>
               </div>
 
-              {questions.length < TOTAL_QS && (
+              {allQuestions.length < TOTAL_QS && (
                 <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-sm text-yellow-400">
-                  ⚠ Only {questions.length} question{questions.length !== 1 ? "s" : ""} loaded (need {TOTAL_QS}).
-                  Add more rapid-fire questions in the database.
+                  ⚠ Only {allQuestions.length} question{allQuestions.length !== 1 ? "s" : ""} loaded (need {TOTAL_QS}).
                 </div>
               )}
 
-              <button onClick={startTeamA} disabled={questions.length === 0}
+              <button onClick={startTeamA} disabled={allQuestions.length === 0}
                 className="w-full py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-2xl hover:bg-[#e0941a] disabled:opacity-50 flex items-center justify-center gap-2 text-lg transition-colors">
                 <Play size={20} /> Start — Team A Goes First
               </button>
@@ -393,9 +385,8 @@ export default function RapidFireAdminPage() {
           {/* ══ PLAYING ════════════════════════════════════════════════════ */}
           {isPlaying && currentQ && (
             <>
-              {/* Scoreboard row */}
+              {/* Scoreboard + timer row */}
               <div className="grid grid-cols-3 gap-3 items-stretch">
-                {/* Active team + score */}
                 <div className="col-span-2 bg-[#0d1f3c] border border-white/10 rounded-2xl p-4">
                   <p className="text-[10px] text-slate-500 uppercase tracking-widest">Now Answering</p>
                   <p className="text-xl font-black mt-0.5" style={{ color: teamColor }}>{activeTeam}</p>
@@ -408,7 +399,6 @@ export default function RapidFireAdminPage() {
                   )}
                 </div>
 
-                {/* Timer block */}
                 <div className="bg-[#0d1f3c] border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center">
                   <span className="text-5xl font-black tabular-nums leading-none"
                     style={{ color: timerColor }}>{remaining}</span>
@@ -420,16 +410,14 @@ export default function RapidFireAdminPage() {
                 </div>
               </div>
 
-              {/* Question progress */}
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-bold text-white">Question {qIndex + 1} <span className="text-slate-500">/ {TOTAL_QS}</span></span>
-                <div className="flex gap-1">
-                  {Array.from({ length: TOTAL_QS }, (_, i) => (
-                    <div key={i} className={`h-2 w-5 rounded-sm transition-colors ${
-                      i < qIndex ? "bg-[#f5a623]" : i === qIndex ? "bg-white" : "bg-white/15"
-                    }`} />
-                  ))}
-                </div>
+              {/* Correct count + queue status */}
+              <div className="flex items-center justify-between text-sm px-1">
+                <span className="text-green-400 font-bold">
+                  ✓ {correctCount} correct
+                </span>
+                <span className="text-slate-500">
+                  {queue.length} question{queue.length !== 1 ? "s" : ""} in queue
+                </span>
               </div>
 
               {/* Question card */}
@@ -463,17 +451,17 @@ export default function RapidFireAdminPage() {
                   className="py-5 bg-red-600/80 hover:bg-red-600 active:scale-95 text-white font-black rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all">
                   <XCircle size={26} />
                   <span className="text-base">WRONG</span>
-                  <span className="text-xs font-normal opacity-75">no points</span>
+                  <span className="text-xs font-normal opacity-75">recycles ↩</span>
                 </button>
                 <button onClick={handlePass}
                   className="py-5 bg-white/10 hover:bg-white/20 active:scale-95 text-slate-200 font-black rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all border border-white/10">
                   <SkipForward size={26} />
                   <span className="text-base">PASS</span>
-                  <span className="text-xs font-normal opacity-75">no points</span>
+                  <span className="text-xs font-normal opacity-75">recycles ↩</span>
                 </button>
               </div>
 
-              <button onClick={endEarly}
+              <button onClick={endTurn}
                 className="w-full py-2.5 bg-white/5 text-slate-500 hover:text-slate-300 rounded-xl hover:bg-white/10 text-sm border border-white/5 transition-colors">
                 End Turn Early
               </button>
@@ -494,7 +482,7 @@ export default function RapidFireAdminPage() {
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-5 text-center">
                 <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Next Up</p>
                 <p className="text-2xl font-black text-blue-400">{teamBName}</p>
-                <p className="text-slate-500 text-sm mt-1">10 questions · 60 seconds</p>
+                <p className="text-slate-500 text-sm mt-1">60 seconds · wrong &amp; pass recycle</p>
               </div>
 
               <button onClick={startTeamB}
@@ -519,7 +507,7 @@ export default function RapidFireAdminPage() {
                     <p className="text-4xl font-black">{scoreA}</p>
                     {scoreA > scoreB && <p className="text-xs text-[#f5a623] mt-1">🏆 Wins</p>}
                   </div>
-                  <div className="text-slate-500 font-bold text-center text-sm">FINAL<br/>SCORE</div>
+                  <div className="text-slate-500 font-bold text-center text-sm">FINAL<br />SCORE</div>
                   <div className={`p-4 rounded-xl text-center border-2 ${
                     scoreB > scoreA ? "bg-[#f5a623]/20 border-[#f5a623]" : "bg-white/5 border-transparent"
                   }`}>
@@ -542,7 +530,7 @@ export default function RapidFireAdminPage() {
                   Continue to Buzzer Round <ChevronRight size={20} />
                 </button>
               ) : (
-                <button onClick={() => { setPhase("setup"); setScoreA(0); setScoreB(0); setQIndex(0); }}
+                <button onClick={() => { setPhase("setup"); setScoreA(0); setScoreB(0); setQueue([]); setCorrectCount(0); }}
                   className="w-full py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 flex items-center justify-center gap-2 transition-colors">
                   <RotateCcw size={16} /> Play Again
                 </button>

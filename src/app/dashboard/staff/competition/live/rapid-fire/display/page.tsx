@@ -20,8 +20,8 @@ type RFDisplayState = {
   timerDuration:   number
   currentQuestion: string
   currentSubject:  string
-  questionIndex:   number
-  totalQuestions:  number
+  correctCount:    number   // answered correctly this turn
+  queueLength:     number   // questions still in play
 }
 
 const blank = (): RFDisplayState => ({
@@ -34,8 +34,8 @@ const blank = (): RFDisplayState => ({
   timerDuration:   TIMER_MS,
   currentQuestion: '',
   currentSubject:  '',
-  questionIndex:   0,
-  totalQuestions:  10,
+  correctCount:    0,
+  queueLength:     10,
 })
 
 export default function RapidFireDisplay() {
@@ -90,7 +90,7 @@ export default function RapidFireDisplay() {
   // ── Derived ──────────────────────────────────────────────────────
   const {
     phase, teamAName, teamBName, scoreA, scoreB,
-    currentQuestion, currentSubject, questionIndex, totalQuestions,
+    currentQuestion, currentSubject, correctCount, queueLength,
   } = ds
 
   const isPlayingA  = phase === 'playing-a'
@@ -193,23 +193,10 @@ export default function RapidFireDisplay() {
             </div>
           </div>
 
-          {/* ── Question progress bar ── */}
-          <div>
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
-              <span>Question <span className="text-white font-bold">{questionIndex + 1}</span> of {totalQuestions}</span>
-              <span style={{ color: teamColor }} className="font-bold">{activeTeam}</span>
-            </div>
-            <div className="flex gap-1.5">
-              {Array.from({ length: totalQuestions }, (_, i) => (
-                <div key={i} className="flex-1 h-2 rounded-sm transition-colors duration-300"
-                  style={{
-                    backgroundColor:
-                      i < questionIndex ? teamColor :
-                      i === questionIndex ? 'rgba(255,255,255,0.8)' :
-                      'rgba(255,255,255,0.1)',
-                  }} />
-              ))}
-            </div>
+          {/* ── Correct count + queue status ── */}
+          <div className="flex items-center justify-between text-sm px-1">
+            <span className="font-bold text-green-400">✓ {correctCount} correct</span>
+            <span className="text-slate-500">{queueLength} in queue</span>
           </div>
 
           {/* ── Timer progress bar ── */}
