@@ -2,16 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
 import {
   Zap, CheckCircle, XCircle, SkipForward, Trophy,
   Monitor, ArrowLeft, Loader2, Play, ChevronRight, RotateCcw,
 } from "lucide-react";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 // ─── constants ───────────────────────────────────────────────────────────────
 export const RF_LIVE_KEY = "sc_rf_live_v2";
@@ -98,6 +93,8 @@ export default function RapidFireAdminPage() {
   const teamBRef          = useRef("Team B");
   const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null);
   const endedRef          = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rfChannelRef      = useRef<any>(null);
 
   useEffect(() => { phaseRef.current        = phase;        }, [phase]);
   useEffect(() => { queueRef.current        = queue;        }, [queue]);
@@ -107,6 +104,14 @@ export default function RapidFireAdminPage() {
   useEffect(() => { teamARef.current        = teamAName;    }, [teamAName]);
   useEffect(() => { teamBRef.current        = teamBName;    }, [teamBName]);
   useEffect(() => { timerStartedAtRef.current = timerStartedAt; }, [timerStartedAt]);
+
+  // ── Supabase Realtime channel (cross-device display sync) ─────────────────
+  useEffect(() => {
+    const ch = supabase.channel(RF_LIVE_KEY)
+    ch.subscribe()
+    rfChannelRef.current = ch
+    return () => { supabase.removeChannel(ch) }
+  }, []);
 
   // ── load questions ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -150,7 +155,7 @@ export default function RapidFireAdminPage() {
     setLoading(false);
   };
 
-  // ── write display state to localStorage + BroadcastChannel ──────────────
+  // ── write display state — four-layer sync ────────────────────────────────
   const writeDisplay = useCallback((
     p: Phase, q: Question[], correct: number, sA: number, sB: number, tsa: number | null
   ) => {
@@ -168,13 +173,32 @@ export default function RapidFireAdminPage() {
       queueLength:     q.length,
     };
     const json = JSON.stringify(state);
+
+    // 1. localStorage — same-device fallback
     localStorage.setItem(RF_LIVE_KEY, json);
-    // Instant push to any open display tabs via BroadcastChannel
+
+    // 2. BroadcastChannel — instant same-browser sync
     try {
       const bc = new BroadcastChannel(RF_LIVE_KEY);
       bc.postMessage(json);
       bc.close();
-    } catch { /* not supported in this env */ }
+    } catch { /* not supported */ }
+
+    // 3. Supabase Realtime Broadcast — instant cross-device push
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (rfChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'state',
+      payload: state,
+    }) as any)?.catch?.(() => { /* ignore */ });
+
+    // 4. Supabase table upsert — persists state so display reads it on mount
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from('sc_rf_live')
+      .upsert({ id: 'main', state, updated_at: new Date().toISOString() })
+      .then(() => { /* fire-and-forget */ })
+      .catch(() => { /* ignore */ });
   }, []);
 
   // ── timer ─────────────────────────────────────────────────────────────────

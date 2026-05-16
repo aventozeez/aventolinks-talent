@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
 
 // Must stay in sync with the admin page constants
 const RF_LIVE_KEY   = 'sc_rf_live_v2'
@@ -58,11 +59,46 @@ export default function RapidFireDisplay() {
     } catch { /* ignore */ }
   }, [])
 
-  // ── Subscribe: BroadcastChannel (instant) + storage event (cross-tab) + poll (fallback) ─
+  // ── Layer 1: read persisted state from Supabase table on mount ──────────
+  // Covers the "display opened after match started on a different device" case.
   useEffect(() => {
-    syncFromStorage() // read on mount
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(supabase as any)
+      .from('sc_rf_live')
+      .select('state')
+      .eq('id', 'main')
+      .single()
+      .then(({ data }) => {
+        if (data?.state) {
+          const raw = JSON.stringify(data.state)
+          if (raw !== lastRawRef.current) {
+            lastRawRef.current = raw
+            setDs(data.state as RFDisplayState)
+          }
+        }
+      })
+      .catch(() => { /* ignore — falls back to localStorage */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-    // 1. BroadcastChannel — fires instantly in same browser, no polling needed
+  // ── Layers 2-5: real-time sync (BroadcastChannel, Realtime, storage, poll) ─
+  useEffect(() => {
+    syncFromStorage() // read localStorage on mount
+
+    // 2. Supabase Realtime Broadcast — instant cross-device push from admin
+    const rfChannel = supabase.channel(RF_LIVE_KEY)
+    rfChannel.on('broadcast', { event: 'state' }, ({ payload }) => {
+      try {
+        const raw = JSON.stringify(payload)
+        if (raw && raw !== lastRawRef.current) {
+          lastRawRef.current = raw
+          setDs(payload as RFDisplayState)
+        }
+      } catch { /* ignore */ }
+    })
+    rfChannel.subscribe()
+
+    // 3. BroadcastChannel — fires instantly in same browser, no polling needed
     let bc: BroadcastChannel | null = null
     try {
       bc = new BroadcastChannel(RF_LIVE_KEY)
@@ -77,16 +113,17 @@ export default function RapidFireDisplay() {
       }
     } catch { /* not supported */ }
 
-    // 2. Storage event — fires in other tabs of same origin when admin writes
+    // 4. Storage event — fires in other tabs of same origin when admin writes
     const handler = (e: StorageEvent) => {
       if (e.key === RF_LIVE_KEY) syncFromStorage()
     }
     window.addEventListener('storage', handler)
 
-    // 3. Polling fallback — catches any missed updates every 150ms
+    // 5. Polling fallback — catches any missed updates every 150ms
     pollIntervalRef.current = setInterval(syncFromStorage, 150)
 
     return () => {
+      supabase.removeChannel(rfChannel)
       if (bc) bc.close()
       window.removeEventListener('storage', handler)
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
