@@ -181,12 +181,12 @@ export default function CompetitionPage() {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex gap-1">
+          <div className="flex gap-1 overflow-x-auto scrollbar-none">
             {tabs.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
-                className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${
                   activeTab === key
                     ? "border-[#f5a623] text-[#f5a623]"
                     : "border-transparent text-slate-400 hover:text-white"
