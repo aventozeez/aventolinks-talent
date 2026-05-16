@@ -3,7 +3,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Star, Trophy, Shuffle, Monitor, User } from 'lucide-react'
+import { createClient } from '@supabase/supabase-js'
 import { DRAW_KEY, TournamentState } from '../DrawBracket'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 // Storage keys — live display listens to these
 export const MENTORS_REVEAL_KEY      = 'sc_mentors_reveal_v1'
@@ -19,26 +25,47 @@ export default function MentorsPage() {
   const [allRevealed,   setAllRevealed]   = useState(false)
   const [revealingAll,  setRevealingAll]  = useState(false)
   const [showNameInput, setShowNameInput] = useState(false)
+  const [dbLoaded,      setDbLoaded]      = useState(false) // true if names came from Supabase
 
   // ── Load state ────────────────────────────────────────────────────────
   useEffect(() => {
-    try {
-      const draw = localStorage.getItem(DRAW_KEY)
-      if (draw) setTs(JSON.parse(draw) as TournamentState)
+    ;(async () => {
+      try {
+        const draw = localStorage.getItem(DRAW_KEY)
+        if (draw) setTs(JSON.parse(draw) as TournamentState)
 
-      const names = localStorage.getItem(MENTORS_NAMES_KEY)
-      if (names) setMentorNames(JSON.parse(names))
+        const assign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
+        if (assign) setAssignments(JSON.parse(assign))
 
-      const assign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
-      if (assign) setAssignments(JSON.parse(assign))
+        const rev = localStorage.getItem(MENTORS_REVEAL_KEY)
+        if (rev) {
+          const arr: boolean[] = JSON.parse(rev)
+          setRevealed(arr)
+          if (arr.every(Boolean)) setAllRevealed(true)
+        }
 
-      const rev = localStorage.getItem(MENTORS_REVEAL_KEY)
-      if (rev) {
-        const arr: boolean[] = JSON.parse(rev)
-        setRevealed(arr)
-        if (arr.every(Boolean)) setAllRevealed(true)
-      }
-    } catch {}
+        // Try to load mentor names from Supabase sc_mentors table
+        const savedNames = localStorage.getItem(MENTORS_NAMES_KEY)
+        if (savedNames) {
+          setMentorNames(JSON.parse(savedNames))
+        } else {
+          // Attempt to auto-load from database
+          const { data, error } = await supabase
+            .from('sc_mentors')
+            .select('name')
+            .order('name', { ascending: true })
+            .limit(16)
+          if (!error && data && data.length > 0) {
+            const names = data.map((r: { name: string }) => r.name)
+            // Pad to 16 if fewer than 16 mentors registered
+            while (names.length < 16) names.push('')
+            setMentorNames(names)
+            localStorage.setItem(MENTORS_NAMES_KEY, JSON.stringify(names))
+            setDbLoaded(true)
+          }
+        }
+      } catch {}
+    })()
   }, [])
 
   // ── Save mentor name inputs ───────────────────────────────────────────
@@ -144,7 +171,9 @@ export default function MentorsPage() {
             </h1>
             <p className="text-slate-400 text-sm mt-1">
               {!isAssigned
-                ? 'Enter mentor names and assign them to teams before revealing'
+                ? dbLoaded
+                  ? '✓ Mentor names loaded — assign randomly to teams before revealing'
+                  : 'Enter mentor names and assign them to teams before revealing'
                 : allRevealed
                 ? 'All 16 mentors revealed!'
                 : `${revealedCount} of 16 revealed — click a card to unveil`}
@@ -158,7 +187,7 @@ export default function MentorsPage() {
             </button>
             <button onClick={() => setShowNameInput(p => !p)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border transition-colors ${showNameInput ? 'bg-white/10 border-white/20 text-white' : 'bg-[#f5a623]/10 border-[#f5a623]/30 text-[#f5a623] hover:bg-[#f5a623]/20'}`}>
-              <User size={15} /> {showNameInput ? 'Hide Names' : 'Enter Mentor Names'}
+              <User size={15} /> {showNameInput ? 'Hide Names' : dbLoaded ? 'View / Edit Names' : 'Enter Mentor Names'}
             </button>
             {isAssigned && !allRevealed && (
               <button onClick={revealAll} disabled={revealingAll}
@@ -197,9 +226,13 @@ export default function MentorsPage() {
           <div className="bg-[#0a1628] border border-[#f5a623]/20 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
               <div>
-                <h2 className="text-sm font-bold text-[#f5a623]">Enter Mentor Names</h2>
+                <h2 className="text-sm font-bold text-[#f5a623]">
+                  {dbLoaded ? '✓ Mentor Names (loaded from database)' : 'Enter Mentor Names'}
+                </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Fill all 16 names, then click <strong>Assign Randomly</strong> to pair them with teams.
+                  {dbLoaded
+                    ? 'Names auto-loaded from the registered mentors list. Edit if needed, then click Assign Randomly.'
+                    : <>Fill all 16 names, then click <strong>Assign Randomly</strong> to pair them with teams.</>}
                 </p>
               </div>
               <button
