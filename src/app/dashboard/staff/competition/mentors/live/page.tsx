@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { DRAW_KEY, TournamentState, blankState } from '../../DrawBracket'
-import { MENTORS_REVEAL_KEY } from '../page'
+import { MENTORS_REVEAL_KEY, MENTORS_ASSIGNMENT_KEY } from '../page'
 
 export default function LiveMentorsPage() {
   const [ts,          setTs]          = useState<TournamentState>(blankState())
   const [revealed,    setRevealed]    = useState<boolean[]>(Array(16).fill(false))
+  const [assignments, setAssignments] = useState<string[]>(Array(16).fill(''))
   const [lastFlipped, setLastFlipped] = useState(-1)
   const [spotlight,   setSpotlight]   = useState<{ name: string; team: string } | null>(null)
 
@@ -18,6 +19,8 @@ export default function LiveMentorsPage() {
       if (draw) setTs(JSON.parse(draw))
       const rev = localStorage.getItem(MENTORS_REVEAL_KEY)
       if (rev) setRevealed(JSON.parse(rev))
+      const assign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
+      if (assign) setAssignments(JSON.parse(assign))
     } catch {}
 
     // Real-time sync
@@ -25,11 +28,13 @@ export default function LiveMentorsPage() {
       if (e.key === DRAW_KEY && e.newValue) {
         try { setTs(JSON.parse(e.newValue)) } catch {}
       }
+      if (e.key === MENTORS_ASSIGNMENT_KEY && e.newValue) {
+        try { setAssignments(JSON.parse(e.newValue)) } catch {}
+      }
       if (e.key === MENTORS_REVEAL_KEY && e.newValue) {
         try {
           const next: boolean[] = JSON.parse(e.newValue)
           setRevealed(prev => {
-            // Find which index just got revealed
             const newIdx = next.findIndex((v, i) => v && !prev[i])
             if (newIdx >= 0) {
               setLastFlipped(newIdx)
@@ -48,11 +53,12 @@ export default function LiveMentorsPage() {
   useEffect(() => {
     if (lastFlipped >= 0 && ts.slots[lastFlipped]) {
       const s = ts.slots[lastFlipped]
-      setSpotlight({ name: s.mentorName, team: s.teamName })
+      const mentor = assignments[lastFlipped] || `Mentor ${lastFlipped + 1}`
+      setSpotlight({ name: mentor, team: s.teamName })
       const t = setTimeout(() => setSpotlight(null), 2800)
       return () => clearTimeout(t)
     }
-  }, [lastFlipped, ts.slots])
+  }, [lastFlipped, ts.slots, assignments])
 
   const slots        = ts.slots
   const revealedCount = revealed.filter(Boolean).length
@@ -188,7 +194,7 @@ export default function LiveMentorsPage() {
                           <span className="text-sm">🎓</span>
                         </div>
                         <p className={`font-black text-sm leading-tight ${isJustFlipped ? 'text-[#f5a623]' : 'text-[#f5a623]/90'}`}>
-                          {slot.mentorName}
+                          {assignments[i] || `Mentor ${i + 1}`}
                         </p>
                         <div className="h-px bg-[#f5a623]/20 w-full" />
                         <p className="text-[10px] text-slate-500 uppercase tracking-wider">Team</p>

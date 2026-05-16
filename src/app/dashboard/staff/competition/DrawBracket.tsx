@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { Shuffle, Trophy, RotateCcw, X, Check, User, Users, Monitor } from 'lucide-react'
+import { Shuffle, Trophy, RotateCcw, X, Check, Users, Monitor } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 const supabase = createClient(
@@ -98,18 +98,13 @@ export default function DrawBracket({
     localStorage.setItem(DRAW_KEY, JSON.stringify(next))
   }, [])
 
-  const setMentor = (i: number, val: string) => {
-    const m = [...ts.mentors]; m[i] = val
-    persist({ ...ts, mentors: m })
-  }
-
   // ── Draw animation ────────────────────────────────────────────────────
   const runDraw = () => {
     if (teams.length < 16) { toast(`Need 16 teams — currently ${teams.length}`, 'err'); return }
     const shuffled = [...teams].sort(() => Math.random() - 0.5).slice(0, 16)
     const slots: DrawSlot[] = shuffled.map((t, i) => ({
       position: i + 1, teamId: t.id, teamName: t.team_name,
-      mentorName: ts.mentors[i]?.trim() || `Mentor ${i + 1}`,
+      mentorName: '', // assigned separately on the Unveil Mentors page
     }))
     const draft: TournamentState = { ...ts, phase: 'drawing', slots, r16: Array(8).fill(null), qf: Array(4).fill(null), sf: Array(2).fill(null), bestLoserSFIdx: null, final3ThirdIdx: null, gfWinnerIdx: null }
     persist(draft)
@@ -237,20 +232,26 @@ export default function DrawBracket({
       {ts.phase==='setup' && (
         <div className="overflow-y-auto flex-1">
           <div className="bg-[#0a1628] border border-white/10 rounded-xl p-4 mb-4">
-            <p className="text-xs font-semibold text-[#f5a623] mb-3 flex items-center gap-2"><User size={13}/> Mentor Names <span className="text-slate-500 font-normal">(optional)</span></p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {Array.from({length:16},(_,i)=>(
-                <div key={i}>
-                  <label className="text-[10px] text-slate-500 block mb-1">Mentor {i+1}</label>
-                  <input value={ts.mentors[i]||''} onChange={e=>setMentor(i,e.target.value)} placeholder={`Mentor ${i+1}`}
-                    className="w-full bg-[#0d1f3c] border border-white/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#f5a623] placeholder-slate-600"/>
-                </div>
-              ))}
-            </div>
+            <p className="text-xs font-semibold text-[#f5a623] mb-3 flex items-center gap-2">
+              <Users size={13}/> Registered Teams
+              <span className="text-slate-500 font-normal">({teams.length}/16)</span>
+            </p>
+            {teams.length === 0 ? (
+              <p className="text-xs text-slate-500">No teams registered yet. Go to the Teams tab to add them.</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {teams.slice(0, 16).map((team, i) => (
+                  <div key={team.id} className="bg-[#0d1f3c] border border-white/10 rounded-lg px-3 py-2.5 flex items-center gap-2">
+                    <span className="text-[10px] text-slate-600 font-mono shrink-0">#{i+1}</span>
+                    <span className="text-sm text-white font-semibold truncate">{team.team_name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          {teams.length<16
+          {teams.length < 16
             ? <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-xs text-yellow-300">⚠ {16-teams.length} more team{16-teams.length!==1?'s':''} needed. Register them in the Teams tab.</div>
-            : <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-xs text-green-300">✓ All 16 teams ready. Click Run Draw to begin.</div>
+            : <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-xs text-green-300">✓ All 16 teams ready. Click <strong>Run Draw</strong> to randomly assign them to bracket positions.</div>
           }
         </div>
       )}
