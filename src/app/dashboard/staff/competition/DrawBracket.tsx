@@ -193,7 +193,7 @@ export default function DrawBracket({
         <div>
           <h2 className="text-lg font-bold text-white">🎯 Tournament Draw & Bracket</h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            {ts.phase==='setup'   && `${teams.length}/16 teams · Set mentor names then run the draw`}
+            {ts.phase==='setup'   && `${teams.length}/16 teams registered · Click Run Draw to assign teams to bracket positions`}
             {ts.phase==='drawing' && 'Drawing teams to bracket positions…'}
             {ts.phase==='bracket' && 'Click any match to enter result'}
           </p>
