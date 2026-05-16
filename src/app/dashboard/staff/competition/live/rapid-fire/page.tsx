@@ -1,17 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import {
-  Zap,
-  ChevronRight,
-  RotateCcw,
-  Trophy,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  ArrowLeft,
+  Zap, CheckCircle, XCircle, SkipForward, Trophy,
+  Monitor, ArrowLeft, Loader2, Play, ChevronRight, RotateCcw,
 } from "lucide-react";
 
 const supabase = createClient(
@@ -19,13 +13,14 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-type GameState = "pool-select" | "round-setup" | "playing" | "session-done";
+// ─── constants ───────────────────────────────────────────────────────────────
+export const RF_LIVE_KEY = "sc_rf_live_v2";
+const TIMER_MS   = 60_000;   // 60 seconds
+const TOTAL_QS   = 10;       // questions per team
+const PTS        = 10;       // points per correct answer
 
-type Pool = {
-  id: string;
-  name: string;
-  pool_number: number;
-};
+// ─── types ───────────────────────────────────────────────────────────────────
+type Phase = "setup" | "playing-a" | "break" | "playing-b" | "done";
 
 type Question = {
   id: string;
@@ -47,33 +42,74 @@ type MatchData = {
   spSetId: string;
 };
 
-export default function RapidFirePage() {
-  const router = useRouter();
-  const [gameState, setGameState] = useState<GameState>("pool-select");
-  const [pools, setPools] = useState<Pool[]>([]);
-  const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [loadingPools, setLoadingPools] = useState(true);
-  const [loadingQ, setLoadingQ] = useState(false);
+export type RFDisplayState = {
+  phase: Phase;
+  teamAName: string;
+  teamBName: string;
+  scoreA: number;
+  scoreB: number;
+  timerStartedAt: number | null;
+  timerDuration: number;
+  currentQuestion: string;
+  currentSubject: string;
+  questionIndex: number;    // 0-based — which question is on screen
+  totalQuestions: number;   // always 10
+};
 
-  // Round setup
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+export default function RapidFireAdminPage() {
+  const router = useRouter();
+
+  // ── data ──────────────────────────────────────────────────────────────────
+  const [loading,    setLoading]    = useState(true);
+  const [matchData,  setMatchData]  = useState<MatchData | null>(null);
+  const [matchMode,  setMatchMode]  = useState(false);
+  const [questions,  setQuestions]  = useState<Question[]>([]);   // exactly TOTAL_QS items
+
+  // ── game state ────────────────────────────────────────────────────────────
   const [teamAName, setTeamAName] = useState("Team A");
   const [teamBName, setTeamBName] = useState("Team B");
-  const [questionsPerTeam, setQuestionsPerTeam] = useState(10);
-  const [matchMode, setMatchMode] = useState(false);
-  const [matchData, setMatchData] = useState<MatchData | null>(null);
+  const [phase,     setPhase]     = useState<Phase>("setup");
+  const [qIndex,    setQIndex]    = useState(0);   // 0–9, which question is showing
+  const [scoreA,    setScoreA]    = useState(0);
+  const [scoreB,    setScoreB]    = useState(0);
+  const [timerStartedAt, setTimerStartedAt] = useState<number | null>(null);
+  const [remaining, setRemaining] = useState(60);
+  const [flash,     setFlash]     = useState<"correct" | "wrong" | "pass" | null>(null);
 
-  // Playing
-  const [currentQIndex, setCurrentQIndex] = useState(0);
-  const [scoreA, setScoreA] = useState(0);
-  const [scoreB, setScoreB] = useState(0);
-  const [currentTeam, setCurrentTeam] = useState<"A" | "B">("A");
-  const [teamACount, setTeamACount] = useState(0);
-  const [teamBCount, setTeamBCount] = useState(0);
-  const [answered, setAnswered] = useState<("correct" | "skip" | null)[]>([]);
-  const [showFeedback, setShowFeedback] = useState<"correct" | "skip" | null>(null);
+  // ── refs (stale-closure safety) ───────────────────────────────────────────
+  // We mutate these synchronously in handlers so timer callback always reads fresh values.
+  const phaseRef         = useRef<Phase>("setup");
+  const qIndexRef        = useRef(0);
+  const scoreARef        = useRef(0);
+  const scoreBRef        = useRef(0);
+  const timerStartedAtRef = useRef<number | null>(null);
+  const questionsRef     = useRef<Question[]>([]);
+  const teamARef         = useRef("Team A");
+  const teamBRef         = useRef("Team B");
+  const intervalRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endedRef         = useRef(false);
 
-  // Load pools and check for match session
+  // keep refs in sync with state
+  useEffect(() => { phaseRef.current  = phase;      }, [phase]);
+  useEffect(() => { qIndexRef.current = qIndex;     }, [qIndex]);
+  useEffect(() => { scoreARef.current = scoreA;     }, [scoreA]);
+  useEffect(() => { scoreBRef.current = scoreB;     }, [scoreB]);
+  useEffect(() => { teamARef.current  = teamAName;  }, [teamAName]);
+  useEffect(() => { teamBRef.current  = teamBName;  }, [teamBName]);
+  useEffect(() => { questionsRef.current = questions; }, [questions]);
+  useEffect(() => { timerStartedAtRef.current = timerStartedAt; }, [timerStartedAt]);
+
+  // ── load questions ────────────────────────────────────────────────────────
   useEffect(() => {
     const raw = sessionStorage.getItem("sc_match");
     if (raw) {
@@ -84,128 +120,178 @@ export default function RapidFirePage() {
           setMatchMode(true);
           setTeamAName(md.teamA.team_name);
           setTeamBName(md.teamB.team_name);
-          // fetch pools by rfPoolIds and all their questions
+          teamARef.current = md.teamA.team_name;
+          teamBRef.current = md.teamB.team_name;
           loadMatchPools(md.rfPoolIds);
           return;
         }
       } catch { /* ignore */ }
     }
-    fetchPools();
-  }, []);
-
-  const fetchPools = useCallback(async () => {
-    setLoadingPools(true);
-    const { data } = await (supabase as any)
-      .from("sc_question_pools")
-      .select("id, name, pool_number")
-      .eq("pool_type", "rapid_fire")
-      .order("pool_number");
-    setPools(data || []);
-    setLoadingPools(false);
+    loadAllRF();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadMatchPools = async (poolIds: string[]) => {
-    setLoadingPools(true);
-    const { data: poolData } = await (supabase as any)
-      .from("sc_question_pools")
-      .select("id, name, pool_number")
-      .in("id", poolIds);
-    setPools(poolData || []);
-
-    // Get all questions from all pools
-    const { data: pqData } = await (supabase as any)
-      .from("sc_pool_questions")
-      .select("question_id")
-      .in("pool_id", poolIds);
-
-    if (pqData && pqData.length > 0) {
-      const qids = pqData.map((r: { question_id: string }) => r.question_id);
-      const { data: qData } = await (supabase as any)
-        .from("sc_questions")
-        .select("*")
-        .in("id", qids);
-      setQuestions(shuffle(qData || []));
+    setLoading(true);
+    const { data: pq } = await (supabase as any)
+      .from("sc_pool_questions").select("question_id").in("pool_id", poolIds);
+    if (pq?.length) {
+      const { data: qs } = await (supabase as any)
+        .from("sc_questions").select("*").in("id", pq.map((r: any) => r.question_id));
+      const picked = shuffle((qs ?? []) as Question[]).slice(0, TOTAL_QS);
+      setQuestions(picked);
+      questionsRef.current = picked;
     }
-
-    setLoadingPools(false);
-    setGameState("round-setup");
+    setLoading(false);
   };
 
-  const fetchPoolQuestions = useCallback(async (pool: Pool) => {
-    setLoadingQ(true);
-    const { data: pqData } = await (supabase as any)
-      .from("sc_pool_questions")
-      .select("question_id, order_index")
-      .eq("pool_id", pool.id)
-      .order("order_index");
+  const loadAllRF = async () => {
+    setLoading(true);
+    const { data } = await (supabase as any)
+      .from("sc_questions").select("*").eq("round_type", "rapid_fire");
+    const picked = shuffle((data ?? []) as Question[]).slice(0, TOTAL_QS);
+    setQuestions(picked);
+    questionsRef.current = picked;
+    setLoading(false);
+  };
 
-    if (!pqData || pqData.length === 0) {
-      setQuestions([]);
-      setLoadingQ(false);
-      return;
-    }
-    const qids = pqData.map((r: { question_id: string }) => r.question_id);
-    const { data: qData } = await (supabase as any)
-      .from("sc_questions")
-      .select("*")
-      .in("id", qids);
-    setQuestions(qData || []);
-    setLoadingQ(false);
+  // ── write to display tab ──────────────────────────────────────────────────
+  const writeDisplay = useCallback((
+    p: Phase, qi: number, sA: number, sB: number, tsa: number | null
+  ) => {
+    const q = questionsRef.current[qi];
+    const state: RFDisplayState = {
+      phase:           p,
+      teamAName:       teamARef.current,
+      teamBName:       teamBRef.current,
+      scoreA:          sA,
+      scoreB:          sB,
+      timerStartedAt:  tsa,
+      timerDuration:   TIMER_MS,
+      currentQuestion: q?.question_text ?? "",
+      currentSubject:  q?.subject        ?? "",
+      questionIndex:   qi,
+      totalQuestions:  TOTAL_QS,
+    };
+    localStorage.setItem(RF_LIVE_KEY, JSON.stringify(state));
   }, []);
 
-  const selectPool = async (pool: Pool) => {
-    setSelectedPool(pool);
-    await fetchPoolQuestions(pool);
-    setGameState("round-setup");
+  // ── timer ─────────────────────────────────────────────────────────────────
+  const stopTimer = useCallback(() => {
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+  }, []);
+
+  // Called when 60 s elapse; reads from refs so it's always fresh.
+  const endTurnByTimer = useCallback(() => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    stopTimer();
+    const newPhase: Phase = phaseRef.current === "playing-a" ? "break" : "done";
+    phaseRef.current = newPhase;
+    setPhase(newPhase);
+    setTimerStartedAt(null);
+    timerStartedAtRef.current = null;
+    writeDisplay(newPhase, 0, scoreARef.current, scoreBRef.current, null);
+  }, [stopTimer, writeDisplay]);
+
+  useEffect(() => {
+    stopTimer();
+    if (!timerStartedAt) { setRemaining(60); return; }
+    intervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - timerStartedAt;
+      const rem = Math.max(0, Math.ceil((TIMER_MS - elapsed) / 1000));
+      setRemaining(rem);
+      if (rem === 0) endTurnByTimer();
+    }, 100);
+    return () => stopTimer();
+  }, [timerStartedAt, stopTimer, endTurnByTimer]);
+
+  // ── game actions ──────────────────────────────────────────────────────────
+  const startTeamA = () => {
+    endedRef.current = false;
+    const now = Date.now();
+    // reset everything
+    setScoreA(0);     scoreARef.current  = 0;
+    setScoreB(0);     scoreBRef.current  = 0;
+    setQIndex(0);     qIndexRef.current  = 0;
+    setRemaining(60);
+    setPhase("playing-a"); phaseRef.current = "playing-a";
+    setTimerStartedAt(now); timerStartedAtRef.current = now;
+    writeDisplay("playing-a", 0, 0, 0, now);
   };
 
-  const beginRound = () => {
-    const total = questionsPerTeam * 2;
-    const qs = questions.slice(0, total);
-    setQuestions(qs);
-    setAnswered(new Array(qs.length).fill(null));
-    setCurrentQIndex(0);
-    setScoreA(0);
-    setScoreB(0);
-    setCurrentTeam("A");
-    setTeamACount(0);
-    setTeamBCount(0);
-    setShowFeedback(null);
-    setGameState("playing");
+  const startTeamB = () => {
+    endedRef.current = false;
+    const now = Date.now();
+    // scoreA is already set; reset B-specific state
+    setScoreB(0);     scoreBRef.current  = 0;
+    setQIndex(0);     qIndexRef.current  = 0;
+    setRemaining(60);
+    setPhase("playing-b"); phaseRef.current = "playing-b";
+    setTimerStartedAt(now); timerStartedAtRef.current = now;
+    writeDisplay("playing-b", 0, scoreARef.current, 0, now);
   };
 
-  const handleAnswer = (result: "correct" | "skip") => {
-    if (result === "correct") {
-      if (currentTeam === "A") setScoreA((p) => p + 1);
-      else setScoreB((p) => p + 1);
+  /** Move to the next question. If that was the last one, end the turn. */
+  const advance = (newSA: number, newSB: number) => {
+    const nextIdx = qIndexRef.current + 1;
+    qIndexRef.current = nextIdx;
+    setQIndex(nextIdx);
+
+    if (nextIdx >= TOTAL_QS) {
+      // All questions answered → end turn immediately
+      if (endedRef.current) return;
+      endedRef.current = true;
+      stopTimer();
+      const newPhase: Phase = phaseRef.current === "playing-a" ? "break" : "done";
+      phaseRef.current = newPhase;
+      setPhase(newPhase);
+      setTimerStartedAt(null);
+      timerStartedAtRef.current = null;
+      writeDisplay(newPhase, 0, newSA, newSB, null);
+    } else {
+      writeDisplay(phaseRef.current, nextIdx, newSA, newSB, timerStartedAtRef.current);
     }
-    setAnswered((p) => p.map((v, i) => (i === currentQIndex ? result : v)));
-    setShowFeedback(result);
-    setTimeout(() => {
-      setShowFeedback(null);
-      advanceQuestion();
-    }, 800);
   };
 
-  const advanceQuestion = () => {
-    const nextIndex = currentQIndex + 1;
-    if (nextIndex >= questions.length) {
-      setGameState("session-done");
-      return;
-    }
-    // determine next team
-    const aCount = currentTeam === "A" ? teamACount + 1 : teamACount;
-    const bCount = currentTeam === "B" ? teamBCount + 1 : teamBCount;
-    setTeamACount(aCount);
-    setTeamBCount(bCount);
+  const doFlash = (kind: "correct" | "wrong" | "pass") => {
+    setFlash(kind);
+    setTimeout(() => setFlash(null), 280);
+  };
 
-    let nextTeam: "A" | "B" = "A";
-    if (aCount >= questionsPerTeam) nextTeam = "B";
-    else if (bCount >= questionsPerTeam) nextTeam = "A";
-    else nextTeam = currentTeam === "A" ? "B" : "A";
+  const handleCorrect = () => {
+    if (endedRef.current) return;
+    doFlash("correct");
+    const isA  = phaseRef.current === "playing-a";
+    const newSA = isA ? scoreARef.current + PTS : scoreARef.current;
+    const newSB = isA ? scoreBRef.current       : scoreBRef.current + PTS;
+    if (isA) { setScoreA(newSA); scoreARef.current = newSA; }
+    else      { setScoreB(newSB); scoreBRef.current = newSB; }
+    advance(newSA, newSB);
+  };
 
-    setCurrentTeam(nextTeam);
-    setCurrentQIndex(nextIndex);
+  const handleWrong = () => {
+    if (endedRef.current) return;
+    doFlash("wrong");
+    advance(scoreARef.current, scoreBRef.current);
+  };
+
+  const handlePass = () => {
+    if (endedRef.current) return;
+    doFlash("pass");
+    advance(scoreARef.current, scoreBRef.current);
+  };
+
+  const endEarly = () => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    stopTimer();
+    const newPhase: Phase = phaseRef.current === "playing-a" ? "break" : "done";
+    phaseRef.current = newPhase;
+    setPhase(newPhase);
+    setTimerStartedAt(null);
+    timerStartedAtRef.current = null;
+    writeDisplay(newPhase, 0, scoreARef.current, scoreBRef.current, null);
   };
 
   const continueToMatch = () => {
@@ -215,266 +301,257 @@ export default function RapidFirePage() {
     router.push("/dashboard/staff/competition/live/match");
   };
 
-  const totalQ = questions.length;
-  const currentQ = questions[currentQIndex];
-  const progressPct = totalQ > 0 ? ((currentQIndex) / totalQ) * 100 : 0;
+  const openDisplay = () =>
+    window.open("/dashboard/staff/competition/live/rapid-fire/display", "_blank", "noopener");
 
-  // ── Render ──
+  // ── derived ───────────────────────────────────────────────────────────────
+  const isPlaying   = phase === "playing-a" || phase === "playing-b";
+  const currentQ    = questions[qIndex];
+  const activeTeam  = phase === "playing-b" ? teamBName : teamAName;
+  const activeScore = phase === "playing-b" ? scoreB    : scoreA;
+  const teamColor   = phase === "playing-b" ? "#60a5fa" : "#f5a623";
+  const timerPct    = remaining / 60;
+  const timerColor  = remaining > 20 ? "#22c55e" : remaining > 10 ? "#f5a623" : "#ef4444";
 
-  if (loadingPools) {
-    return (
-      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
-        <Loader2 className="animate-spin text-[#f5a623]" size={40} />
-      </div>
-    );
-  }
+  // ─── loading ──────────────────────────────────────────────────────────────
+  if (loading) return (
+    <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
+      <Loader2 className="animate-spin text-[#f5a623]" size={40} />
+    </div>
+  );
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#0a1628] text-white flex flex-col">
-      {/* Header */}
-      <div className="bg-[#060f1e] border-b border-[#f5a623]/20 px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push("/dashboard/staff/competition")} className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-          <ArrowLeft size={18} />
-        </button>
-        <Zap className="text-[#f5a623]" size={22} />
-        <div>
-          <h1 className="text-lg font-bold">Rapid Fire Round</h1>
-          {selectedPool && <p className="text-xs text-slate-400">Pool {selectedPool.pool_number}: {selectedPool.name}</p>}
+
+      {/* ── Header ── */}
+      <div className="bg-[#060f1e] border-b border-[#f5a623]/20 px-6 py-4 flex items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push("/dashboard/staff/competition")}
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+            <ArrowLeft size={18} />
+          </button>
+          <Zap className="text-[#f5a623]" size={22} />
+          <div>
+            <h1 className="text-lg font-bold">Rapid Fire — Admin</h1>
+            <p className="text-xs text-slate-400">
+              {questions.length} questions loaded · +{PTS} pts per correct answer
+            </p>
+          </div>
         </div>
+        <button onClick={openDisplay}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-lg text-sm hover:bg-blue-600/30 transition-colors font-semibold">
+          <Monitor size={14} /> Open Participant Display
+        </button>
       </div>
 
+      {/* ── Main ── */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-xl space-y-5">
 
-        {/* ── Pool Select ── */}
-        {gameState === "pool-select" && (
-          <div className="w-full max-w-2xl">
-            <h2 className="text-2xl font-bold text-center mb-2">Select a Pool</h2>
-            <p className="text-slate-400 text-center text-sm mb-8">Choose the question pool for this Rapid Fire round</p>
-            {pools.length === 0 ? (
-              <div className="text-center text-slate-500 py-12">No rapid fire pools available. Create pools in the Competition Manager.</div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {pools.map((pool) => (
-                  <button
-                    key={pool.id}
-                    onClick={() => selectPool(pool)}
-                    disabled={loadingQ}
-                    className="bg-[#0d1f3c] border border-white/10 rounded-2xl p-6 text-left hover:border-[#f5a623]/40 hover:bg-[#0d1f3c]/80 transition-all group"
-                  >
-                    <div className="w-12 h-12 rounded-xl bg-[#f5a623]/20 flex items-center justify-center mb-3 group-hover:bg-[#f5a623]/30 transition-colors">
-                      <span className="text-[#f5a623] font-black text-lg">{pool.pool_number}</span>
-                    </div>
-                    <p className="font-bold text-white">{pool.name}</p>
-                    <div className="flex items-center gap-1 mt-2 text-[#f5a623] text-sm">
-                      <span>Select</span>
-                      <ChevronRight size={14} />
-                    </div>
-                  </button>
-                ))}
+          {/* ══ SETUP ══════════════════════════════════════════════════════ */}
+          {phase === "setup" && (
+            <>
+              <div className="text-center">
+                <h2 className="text-2xl font-bold">Rapid Fire Round</h2>
+                <p className="text-slate-400 text-sm mt-2 leading-relaxed">
+                  Each team answers <strong className="text-white">{TOTAL_QS} questions</strong> in{" "}
+                  <strong className="text-white">60 seconds</strong>.
+                  <br />+{PTS} pts for correct · wrong &amp; pass score nothing, question moves on.
+                </p>
               </div>
-            )}
-          </div>
-        )}
 
-        {/* ── Round Setup ── */}
-        {gameState === "round-setup" && (
-          <div className="w-full max-w-lg">
-            <div className="bg-[#0d1f3c] border border-white/10 rounded-2xl p-8">
-              {selectedPool && (
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#f5a623]/20 rounded-full text-[#f5a623] font-semibold text-sm mb-2">
-                    <Zap size={14} />
-                    Pool {selectedPool.pool_number}: {selectedPool.name}
-                  </div>
-                  <p className="text-sm text-slate-400">{questions.length} questions available</p>
-                </div>
-              )}
-              {matchMode && (
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#f5a623]/20 rounded-full text-[#f5a623] font-semibold text-sm">
-                    <Trophy size={14} />
-                    Match Mode: {matchData?.teamA.team_name} vs {matchData?.teamB.team_name}
-                  </div>
-                </div>
-              )}
-
-              <h2 className="text-xl font-bold text-center mb-6">Round Setup</h2>
-
-              <div className="space-y-4">
+              <div className="bg-[#0d1f3c] border border-white/10 rounded-2xl p-6 space-y-4">
                 <div>
                   <label className="text-xs text-slate-400 block mb-1">Team A Name</label>
-                  <input
-                    value={teamAName}
-                    onChange={(e) => setTeamAName(e.target.value)}
-                    className="w-full bg-[#060f1e] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#f5a623]"
+                  <input value={teamAName} onChange={e => setTeamAName(e.target.value)}
                     disabled={matchMode}
-                  />
+                    className="w-full bg-[#060f1e] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#f5a623] disabled:opacity-60" />
                 </div>
                 <div>
                   <label className="text-xs text-slate-400 block mb-1">Team B Name</label>
-                  <input
-                    value={teamBName}
-                    onChange={(e) => setTeamBName(e.target.value)}
-                    className="w-full bg-[#060f1e] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#f5a623]"
+                  <input value={teamBName} onChange={e => setTeamBName(e.target.value)}
                     disabled={matchMode}
-                  />
+                    className="w-full bg-[#060f1e] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#f5a623] disabled:opacity-60" />
                 </div>
-                <div>
-                  <label className="text-xs text-slate-400 block mb-1">Questions Per Team ({questionsPerTeam})</label>
-                  <input
-                    type="range"
-                    min={5}
-                    max={15}
-                    value={questionsPerTeam}
-                    onChange={(e) => setQuestionsPerTeam(Number(e.target.value))}
-                    className="w-full accent-[#f5a623]"
-                  />
-                  <div className="flex justify-between text-xs text-slate-500 mt-1">
-                    <span>5</span><span>10</span><span>15</span>
+              </div>
+
+              {questions.length < TOTAL_QS && (
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-sm text-yellow-400">
+                  ⚠ Only {questions.length} question{questions.length !== 1 ? "s" : ""} loaded (need {TOTAL_QS}).
+                  Add more rapid-fire questions in the database.
+                </div>
+              )}
+
+              <button onClick={startTeamA} disabled={questions.length === 0}
+                className="w-full py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-2xl hover:bg-[#e0941a] disabled:opacity-50 flex items-center justify-center gap-2 text-lg transition-colors">
+                <Play size={20} /> Start — Team A Goes First
+              </button>
+            </>
+          )}
+
+          {/* ══ PLAYING ════════════════════════════════════════════════════ */}
+          {isPlaying && currentQ && (
+            <>
+              {/* Scoreboard row */}
+              <div className="grid grid-cols-3 gap-3 items-stretch">
+                {/* Active team + score */}
+                <div className="col-span-2 bg-[#0d1f3c] border border-white/10 rounded-2xl p-4">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-widest">Now Answering</p>
+                  <p className="text-xl font-black mt-0.5" style={{ color: teamColor }}>{activeTeam}</p>
+                  <p className="text-5xl font-black text-white leading-none mt-1">
+                    {activeScore}
+                    <span className="text-base font-normal text-slate-400 ml-1.5">pts</span>
+                  </p>
+                  {phase === "playing-b" && (
+                    <p className="text-xs text-slate-600 mt-1">{teamAName}: {scoreA} pts</p>
+                  )}
+                </div>
+
+                {/* Timer block */}
+                <div className="bg-[#0d1f3c] border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center">
+                  <span className="text-5xl font-black tabular-nums leading-none"
+                    style={{ color: timerColor }}>{remaining}</span>
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">secs</span>
+                  <div className="w-full mt-2 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-200"
+                      style={{ width: `${timerPct * 100}%`, backgroundColor: timerColor }} />
                   </div>
                 </div>
               </div>
 
-              {questions.length < questionsPerTeam * 2 && (
-                <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-sm text-yellow-400">
-                  Only {questions.length} questions available. Adjust count or add more questions.
+              {/* Question progress */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-bold text-white">Question {qIndex + 1} <span className="text-slate-500">/ {TOTAL_QS}</span></span>
+                <div className="flex gap-1">
+                  {Array.from({ length: TOTAL_QS }, (_, i) => (
+                    <div key={i} className={`h-2 w-5 rounded-sm transition-colors ${
+                      i < qIndex ? "bg-[#f5a623]" : i === qIndex ? "bg-white" : "bg-white/15"
+                    }`} />
+                  ))}
                 </div>
-              )}
+              </div>
 
-              <button
-                onClick={beginRound}
-                disabled={questions.length === 0}
-                className="w-full mt-6 py-3 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl hover:bg-[#e0941a] disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <Zap size={18} /> Begin Round →
-              </button>
+              {/* Question card */}
+              <div className={`bg-[#0d1f3c] border-2 rounded-2xl p-6 transition-all duration-150 ${
+                flash === "correct" ? "border-green-500 bg-green-900/20 scale-[1.01]" :
+                flash === "wrong"   ? "border-red-500/60 bg-red-900/10 scale-[0.99]"  :
+                flash === "pass"    ? "border-yellow-500/40"                            :
+                "border-white/10"
+              }`}>
+                {currentQ.subject && (
+                  <p className="text-xs text-[#f5a623]/60 uppercase tracking-wider mb-3">{currentQ.subject}</p>
+                )}
+                <p className="text-xl font-semibold text-white leading-relaxed">{currentQ.question_text}</p>
 
-              {!matchMode && (
-                <button onClick={() => setGameState("pool-select")} className="w-full mt-3 py-2.5 bg-white/5 text-slate-400 rounded-xl hover:bg-white/10 text-sm">
-                  ← Back to Pool Select
+                {/* Answer — admin only */}
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-1">Answer (admin only)</p>
+                  <p className="text-lg font-bold text-[#f5a623]">{currentQ.answer_key}</p>
+                </div>
+              </div>
+
+              {/* Control buttons */}
+              <div className="grid grid-cols-3 gap-3">
+                <button onClick={handleCorrect}
+                  className="py-5 bg-green-600 hover:bg-green-500 active:scale-95 text-white font-black rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all shadow-lg shadow-green-500/20">
+                  <CheckCircle size={26} />
+                  <span className="text-base">CORRECT</span>
+                  <span className="text-xs font-normal opacity-75">+{PTS} pts</span>
                 </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── Playing ── */}
-        {gameState === "playing" && currentQ && (
-          <div className="w-full max-w-2xl flex flex-col gap-5">
-            {/* Progress */}
-            <div>
-              <div className="flex justify-between text-xs text-slate-400 mb-1">
-                <span>Q {currentQIndex + 1} of {totalQ}</span>
-                <span>{Math.round(progressPct)}% complete</span>
+                <button onClick={handleWrong}
+                  className="py-5 bg-red-600/80 hover:bg-red-600 active:scale-95 text-white font-black rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all">
+                  <XCircle size={26} />
+                  <span className="text-base">WRONG</span>
+                  <span className="text-xs font-normal opacity-75">no points</span>
+                </button>
+                <button onClick={handlePass}
+                  className="py-5 bg-white/10 hover:bg-white/20 active:scale-95 text-slate-200 font-black rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all border border-white/10">
+                  <SkipForward size={26} />
+                  <span className="text-base">PASS</span>
+                  <span className="text-xs font-normal opacity-75">no points</span>
+                </button>
               </div>
-              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-[#f5a623] transition-all duration-300" style={{ width: `${progressPct}%` }} />
-              </div>
-            </div>
 
-            {/* Whose turn */}
-            <div className={`text-center py-2.5 rounded-xl text-sm font-semibold ${currentTeam === "A" ? "bg-blue-500/20 text-blue-300 border border-blue-500/30" : "bg-purple-500/20 text-purple-300 border border-purple-500/30"}`}>
-              {currentTeam === "A" ? teamAName : teamBName}&apos;s Turn
-            </div>
-
-            {/* Question Card */}
-            <div className={`relative bg-[#0d1f3c] border-2 rounded-2xl p-8 text-center transition-colors ${showFeedback === "correct" ? "border-green-500 bg-green-900/20" : showFeedback === "skip" ? "border-red-500/50 bg-red-900/10" : "border-white/10"}`}>
-              {showFeedback && (
-                <div className={`absolute inset-0 flex items-center justify-center rounded-2xl ${showFeedback === "correct" ? "bg-green-500/20" : "bg-red-500/10"}`}>
-                  {showFeedback === "correct" ? <CheckCircle className="text-green-400" size={64} /> : <XCircle className="text-red-400" size={64} />}
-                </div>
-              )}
-              {currentQ.subject && <p className="text-xs text-[#f5a623]/70 uppercase tracking-wider mb-3">{currentQ.subject}</p>}
-              <p className="text-xl font-semibold text-white leading-relaxed">{currentQ.question_text}</p>
-              <p className="mt-4 text-sm text-slate-500 italic">Answer: {currentQ.answer_key}</p>
-            </div>
-
-            {/* Action buttons */}
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => handleAnswer("correct")}
-                disabled={showFeedback !== null}
-                className="py-4 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white font-bold rounded-xl text-lg flex items-center justify-center gap-2 transition-colors"
-              >
-                <CheckCircle size={20} /> Correct (+1)
+              <button onClick={endEarly}
+                className="w-full py-2.5 bg-white/5 text-slate-500 hover:text-slate-300 rounded-xl hover:bg-white/10 text-sm border border-white/5 transition-colors">
+                End Turn Early
               </button>
-              <button
-                onClick={() => handleAnswer("skip")}
-                disabled={showFeedback !== null}
-                className="py-4 bg-white/10 hover:bg-white/20 disabled:opacity-40 text-slate-300 font-bold rounded-xl text-lg flex items-center justify-center gap-2 transition-colors"
-              >
-                <XCircle size={20} /> Skip
+            </>
+          )}
+
+          {/* ══ BREAK — Team A done, Team B about to start ══════════════════ */}
+          {phase === "break" && (
+            <>
+              <div className="bg-[#0d1f3c] border border-white/10 rounded-2xl p-8 text-center">
+                <div className="text-5xl mb-3">⏱️</div>
+                <p className="text-slate-400 text-lg">Time&apos;s Up —</p>
+                <p className="text-2xl font-black text-[#f5a623] mb-4">{teamAName}</p>
+                <p className="text-8xl font-black text-white leading-none">{scoreA}</p>
+                <p className="text-slate-500 mt-2">points scored</p>
+              </div>
+
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-5 text-center">
+                <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Next Up</p>
+                <p className="text-2xl font-black text-blue-400">{teamBName}</p>
+                <p className="text-slate-500 text-sm mt-1">10 questions · 60 seconds</p>
+              </div>
+
+              <button onClick={startTeamB}
+                className="w-full py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-2xl hover:bg-[#e0941a] text-lg flex items-center justify-center gap-2 transition-colors">
+                Start — {teamBName} <ChevronRight size={20} />
               </button>
-            </div>
+            </>
+          )}
 
-            {/* Scoreboard */}
-            <div className="bg-[#060f1e] border border-white/10 rounded-2xl p-5">
-              <h3 className="text-xs text-slate-400 uppercase tracking-wider text-center mb-4">Live Score</h3>
-              <div className="grid grid-cols-3 gap-4 items-center">
-                <div className={`text-center p-3 rounded-xl ${currentTeam === "A" ? "bg-blue-500/20 border border-blue-500/30" : "bg-white/5"}`}>
-                  <p className="text-xs text-slate-400 truncate">{teamAName}</p>
-                  <p className="text-4xl font-black text-white mt-1">{scoreA}</p>
-                </div>
-                <div className="text-center text-slate-500 font-bold text-lg">VS</div>
-                <div className={`text-center p-3 rounded-xl ${currentTeam === "B" ? "bg-purple-500/20 border border-purple-500/30" : "bg-white/5"}`}>
-                  <p className="text-xs text-slate-400 truncate">{teamBName}</p>
-                  <p className="text-4xl font-black text-white mt-1">{scoreB}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+          {/* ══ DONE ════════════════════════════════════════════════════════ */}
+          {phase === "done" && (
+            <>
+              <div className="bg-gradient-to-b from-[#f5a623]/20 to-[#0d1f3c] border border-[#f5a623]/30 rounded-2xl p-8 text-center">
+                <Trophy className="text-[#f5a623] mx-auto mb-4" size={48} />
+                <h2 className="text-2xl font-bold mb-6">Rapid Fire Complete!</h2>
 
-        {/* ── Session Done ── */}
-        {gameState === "session-done" && (
-          <div className="w-full max-w-lg text-center">
-            <div className="bg-[#0d1f3c] border border-white/10 rounded-2xl p-8">
-              <Trophy className="text-[#f5a623] mx-auto mb-4" size={56} />
-              <h2 className="text-2xl font-bold mb-6">Round Complete!</h2>
-
-              <div className="grid grid-cols-3 gap-4 mb-6 items-center">
-                <div className={`p-4 rounded-xl ${scoreA > scoreB ? "bg-[#f5a623]/20 border-2 border-[#f5a623]" : "bg-white/5"}`}>
-                  <p className="text-xs text-slate-400 mb-1 truncate">{teamAName}</p>
-                  <p className="text-4xl font-black">{scoreA}</p>
+                <div className="grid grid-cols-3 gap-4 items-center mb-6">
+                  <div className={`p-4 rounded-xl text-center border-2 ${
+                    scoreA > scoreB ? "bg-[#f5a623]/20 border-[#f5a623]" : "bg-white/5 border-transparent"
+                  }`}>
+                    <p className="text-xs text-slate-400 truncate mb-1">{teamAName}</p>
+                    <p className="text-4xl font-black">{scoreA}</p>
+                    {scoreA > scoreB && <p className="text-xs text-[#f5a623] mt-1">🏆 Wins</p>}
+                  </div>
+                  <div className="text-slate-500 font-bold text-center text-sm">FINAL<br/>SCORE</div>
+                  <div className={`p-4 rounded-xl text-center border-2 ${
+                    scoreB > scoreA ? "bg-[#f5a623]/20 border-[#f5a623]" : "bg-white/5 border-transparent"
+                  }`}>
+                    <p className="text-xs text-slate-400 truncate mb-1">{teamBName}</p>
+                    <p className="text-4xl font-black">{scoreB}</p>
+                    {scoreB > scoreA && <p className="text-xs text-[#f5a623] mt-1">🏆 Wins</p>}
+                  </div>
                 </div>
-                <div className="text-slate-500 font-bold">FINAL</div>
-                <div className={`p-4 rounded-xl ${scoreB > scoreA ? "bg-[#f5a623]/20 border-2 border-[#f5a623]" : "bg-white/5"}`}>
-                  <p className="text-xs text-slate-400 mb-1 truncate">{teamBName}</p>
-                  <p className="text-4xl font-black">{scoreB}</p>
-                </div>
-              </div>
 
-              <div className={`py-3 px-5 rounded-xl text-sm font-semibold mb-6 ${scoreA > scoreB ? "bg-blue-500/20 text-blue-300" : scoreB > scoreA ? "bg-purple-500/20 text-purple-300" : "bg-white/10 text-slate-300"}`}>
-                {scoreA === scoreB ? "🤝 It's a Tie!" : `🏆 ${scoreA > scoreB ? teamAName : teamBName} Wins!`}
+                <p className="font-semibold text-[#f5a623] text-lg">
+                  {scoreA === scoreB
+                    ? "🤝 It's a Tie!"
+                    : `🏆 ${scoreA > scoreB ? teamAName : teamBName} Wins the Rapid Fire Round!`}
+                </p>
               </div>
 
               {matchMode ? (
-                <button onClick={continueToMatch} className="w-full py-3 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl hover:bg-[#e0941a] flex items-center justify-center gap-2">
-                  Continue Match → <ChevronRight size={18} />
+                <button onClick={continueToMatch}
+                  className="w-full py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-2xl hover:bg-[#e0941a] flex items-center justify-center gap-2 text-lg transition-colors">
+                  Continue to Buzzer Round <ChevronRight size={20} />
                 </button>
               ) : (
-                <div className="flex flex-col gap-3">
-                  <button onClick={() => { setGameState("round-setup"); }} className="w-full py-3 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl hover:bg-[#e0941a] flex items-center justify-center gap-2">
-                    <RotateCcw size={16} /> Play Again
-                  </button>
-                  <button onClick={() => { setSelectedPool(null); setGameState("pool-select"); }} className="w-full py-2.5 bg-white/10 text-slate-300 rounded-xl hover:bg-white/20 text-sm">
-                    ← Back to Pool Select
-                  </button>
-                </div>
+                <button onClick={() => { setPhase("setup"); setScoreA(0); setScoreB(0); setQIndex(0); }}
+                  className="w-full py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 flex items-center justify-center gap-2 transition-colors">
+                  <RotateCcw size={16} /> Play Again
+                </button>
               )}
-            </div>
-          </div>
-        )}
+            </>
+          )}
+
+        </div>
       </div>
     </div>
   );
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
 }
