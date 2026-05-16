@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { Shuffle, Trophy, RotateCcw, X, Check, User, Users } from 'lucide-react'
+import { Shuffle, Trophy, RotateCcw, X, Check, User, Users, Monitor } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 const supabase = createClient(
@@ -10,7 +10,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-export const DRAW_KEY = 'sc_draw_v1'
+export const DRAW_KEY   = 'sc_draw_v1'
+export const REVEAL_KEY = 'sc_draw_reveal_v1'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -113,11 +114,18 @@ export default function DrawBracket({
     const draft: TournamentState = { ...ts, phase: 'drawing', slots, r16: Array(8).fill(null), qf: Array(4).fill(null), sf: Array(2).fill(null), bestLoserSFIdx: null, final3ThirdIdx: null, gfWinnerIdx: null }
     persist(draft)
     setRevealCount(0)
+    localStorage.setItem(REVEAL_KEY, '0')
     let count = 0
     const tick = () => {
-      count++; setRevealCount(count)
+      count++
+      setRevealCount(count)
+      localStorage.setItem(REVEAL_KEY, String(count))
       if (count < 16) setTimeout(tick, 380)
-      else setTimeout(() => { persist({ ...draft, phase: 'bracket' }); setRevealCount(0) }, 900)
+      else setTimeout(() => {
+        persist({ ...draft, phase: 'bracket' })
+        setRevealCount(0)
+        localStorage.removeItem(REVEAL_KEY)
+      }, 900)
     }
     setTimeout(tick, 300)
   }
@@ -126,6 +134,11 @@ export default function DrawBracket({
     if (!confirm('Reset the entire tournament? All results will be cleared.')) return
     const next = blankState(); next.mentors = ts.mentors
     persist(next); setRevealCount(0)
+    localStorage.removeItem(REVEAL_KEY)
+  }
+
+  const openLiveDisplay = () => {
+    window.open('/dashboard/staff/competition/live-draw', '_blank', 'noopener')
   }
 
   // ── Bracket helpers ───────────────────────────────────────────────────
@@ -191,6 +204,14 @@ export default function DrawBracket({
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {/* Live display — always available */}
+          <button
+            onClick={openLiveDisplay}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-lg text-sm hover:bg-blue-600/30 transition-colors font-semibold"
+          >
+            <Monitor size={14} /> Open Live Display
+          </button>
+
           {ts.phase==='bracket' && (
             <button
               onClick={() => router.push('/dashboard/staff/competition/mentors')}
