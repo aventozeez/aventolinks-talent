@@ -44,25 +44,30 @@ export default function MentorsPage() {
           if (arr.every(Boolean)) setAllRevealed(true)
         }
 
-        // Try to load mentor names from Supabase sc_mentors table
-        const savedNames = localStorage.getItem(MENTORS_NAMES_KEY)
-        if (savedNames) {
-          setMentorNames(JSON.parse(savedNames))
-        } else {
-          // Attempt to auto-load from database
-          const { data, error } = await supabase
-            .from('sc_mentors')
-            .select('name')
-            .order('name', { ascending: true })
-            .limit(16)
-          if (!error && data && data.length > 0) {
-            const names = data.map((r: { name: string }) => r.name)
-            // Pad to 16 if fewer than 16 mentors registered
-            while (names.length < 16) names.push('')
-            setMentorNames(names)
-            localStorage.setItem(MENTORS_NAMES_KEY, JSON.stringify(names))
-            setDbLoaded(true)
+        // Always reload mentor names fresh from Supabase
+        const { data, error } = await supabase
+          .from('sc_mentors')
+          .select('name')
+          .order('created_at', { ascending: true })
+          .limit(16)
+
+        if (!error && data && data.length >= 16) {
+          const names = data.map((r: { name: string }) => r.name)
+          setMentorNames(names)
+          localStorage.setItem(MENTORS_NAMES_KEY, JSON.stringify(names))
+          setDbLoaded(true)
+
+          // Auto-assign if no existing assignment yet
+          const existingAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
+          if (!existingAssign) {
+            const shuffled = [...names].sort(() => Math.random() - 0.5)
+            setAssignments(shuffled)
+            localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(shuffled))
           }
+        } else {
+          // Fallback: use locally saved names
+          const savedNames = localStorage.getItem(MENTORS_NAMES_KEY)
+          if (savedNames) setMentorNames(JSON.parse(savedNames))
         }
       } catch {}
     })()
@@ -190,10 +195,16 @@ export default function MentorsPage() {
               <User size={15} /> {showNameInput ? 'Hide Names' : dbLoaded ? 'View / Edit Names' : 'Enter Mentor Names'}
             </button>
             {isAssigned && !allRevealed && (
-              <button onClick={revealAll} disabled={revealingAll}
-                className="flex items-center gap-2 px-4 py-2.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl hover:bg-[#e0941a] disabled:opacity-60 text-sm transition-colors">
-                <Shuffle size={15} /> {revealingAll ? 'Revealing…' : 'Reveal All'}
-              </button>
+              <>
+                <button onClick={randomizeAssignment}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white/10 text-slate-300 border border-white/20 rounded-xl hover:bg-white/20 text-sm font-semibold transition-colors">
+                  <Shuffle size={15} /> Re-assign
+                </button>
+                <button onClick={revealAll} disabled={revealingAll}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl hover:bg-[#e0941a] disabled:opacity-60 text-sm transition-colors">
+                  <Shuffle size={15} /> {revealingAll ? 'Revealing…' : 'Reveal All'}
+                </button>
+              </>
             )}
             {allRevealed && (
               <button onClick={reset}
@@ -263,10 +274,10 @@ export default function MentorsPage() {
           </div>
         )}
 
-        {/* ── Not yet assigned notice ── */}
-        {!isAssigned && !showNameInput && (
+        {/* ── Not yet assigned notice (only if no db names) ── */}
+        {!isAssigned && !showNameInput && !dbLoaded && (
           <div className="bg-[#f5a623]/5 border border-[#f5a623]/20 rounded-xl p-4 text-sm text-[#f5a623]/80 text-center">
-            Click <strong>Enter Mentor Names</strong> above to add mentors and assign them to teams before revealing.
+            Click <strong>View / Edit Names</strong> above to add mentor names, then click <strong>Assign Randomly</strong> to pair them with teams.
           </div>
         )}
 
