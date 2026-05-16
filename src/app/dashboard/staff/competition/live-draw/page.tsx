@@ -160,13 +160,7 @@ export default function LiveDrawPage() {
                           }`}>
                             {s.teamName}
                           </p>
-                          {s.mentorName && (
-                            <p className={`text-[11px] mt-1.5 font-medium ${
-                              isActive ? 'text-[#0a1628]/70' : 'text-[#f5a623]/80'
-                            }`}>
-                              🎓 {s.mentorName}
-                            </p>
-                          )}
+                          {/* mentor names hidden during draw — revealed separately */}
                         </>
                       ) : (
                         <p className="text-3xl font-black text-white/10">?</p>

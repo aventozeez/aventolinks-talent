@@ -269,10 +269,9 @@ export default function DrawBracket({
                 <div key={i} className={`rounded-xl p-3 border transition-all duration-300 ${isActive?'bg-[#f5a623]/20 border-[#f5a623] shadow-lg shadow-[#f5a623]/20':revealed?'bg-[#0a1628] border-white/20':'bg-[#0a1628]/40 border-white/5'}`}
                   style={{transform:isActive?'scale(1.05)':'scale(1)',transition:'all 0.3s ease'}}>
                   <div className="text-[10px] text-slate-500 mb-0.5">#{i+1} · M{Math.floor(i/2)+1}{i%2===0?'A':'B'}</div>
-                  {revealed&&s ? <>
+                  {revealed&&s ? (
                     <p className={`font-bold text-sm leading-tight ${isActive?'text-[#f5a623]':'text-white'}`}>{s.teamName}</p>
-                    {s.mentorName&&<p className="text-[10px] text-slate-400 mt-0.5">🎓 {s.mentorName}</p>}
-                  </> : <p className="text-slate-600 text-lg font-black">?</p>}
+                  ) : <p className="text-slate-600 text-lg font-black">?</p>}
                 </div>
               )
             })}
@@ -379,7 +378,7 @@ export default function DrawBracket({
                         <div className="text-3xl mb-1">🏆</div>
                         <p className="font-black text-[#f5a623] text-sm leading-tight">{champ.teamName}</p>
                         <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-0.5">Champion</p>
-                        {champ.mentorName&&<p className="text-[9px] text-slate-500 mt-0.5">🎓 {champ.mentorName}</p>}
+                        {/* mentor name intentionally hidden until Unveil Mentors */}
                         <button onClick={()=>{if(a&&b)openModal('gf',0)}} className="mt-1.5 text-[9px] text-slate-600 hover:text-slate-400">↩ Change</button>
                       </div>
                     ) : (
