@@ -150,7 +150,7 @@ export default function RapidFireAdminPage() {
     setLoading(false);
   };
 
-  // ── write display state to localStorage ───────────────────────────────────
+  // ── write display state to localStorage + BroadcastChannel ──────────────
   const writeDisplay = useCallback((
     p: Phase, q: Question[], correct: number, sA: number, sB: number, tsa: number | null
   ) => {
@@ -167,7 +167,14 @@ export default function RapidFireAdminPage() {
       correctCount:    correct,
       queueLength:     q.length,
     };
-    localStorage.setItem(RF_LIVE_KEY, JSON.stringify(state));
+    const json = JSON.stringify(state);
+    localStorage.setItem(RF_LIVE_KEY, json);
+    // Instant push to any open display tabs via BroadcastChannel
+    try {
+      const bc = new BroadcastChannel(RF_LIVE_KEY);
+      bc.postMessage(json);
+      bc.close();
+    } catch { /* not supported in this env */ }
   }, []);
 
   // ── timer ─────────────────────────────────────────────────────────────────
@@ -295,7 +302,7 @@ export default function RapidFireAdminPage() {
   };
 
   const openDisplay = () =>
-    window.open("/dashboard/staff/competition/live/rapid-fire/display", "_blank", "noopener");
+    window.open("/dashboard/staff/competition/live/rapid-fire/display/", "_blank", "noopener");
 
   // ── derived ───────────────────────────────────────────────────────────────
   const isPlaying   = phase === "playing-a" || phase === "playing-b";

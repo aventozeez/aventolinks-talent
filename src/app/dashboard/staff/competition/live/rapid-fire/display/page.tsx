@@ -58,21 +58,36 @@ export default function RapidFireDisplay() {
     } catch { /* ignore */ }
   }, [])
 
-  // ── Subscribe: storage event (cross-tab) + 300ms poll (fallback) ─
+  // ── Subscribe: BroadcastChannel (instant) + storage event (cross-tab) + poll (fallback) ─
   useEffect(() => {
     syncFromStorage() // read on mount
 
-    // Primary: fires instantly in other tabs when admin writes
+    // 1. BroadcastChannel — fires instantly in same browser, no polling needed
+    let bc: BroadcastChannel | null = null
+    try {
+      bc = new BroadcastChannel(RF_LIVE_KEY)
+      bc.onmessage = (e: MessageEvent) => {
+        try {
+          const raw: string = typeof e.data === 'string' ? e.data : JSON.stringify(e.data)
+          if (raw && raw !== lastRawRef.current) {
+            lastRawRef.current = raw
+            setDs(JSON.parse(raw))
+          }
+        } catch { /* ignore */ }
+      }
+    } catch { /* not supported */ }
+
+    // 2. Storage event — fires in other tabs of same origin when admin writes
     const handler = (e: StorageEvent) => {
       if (e.key === RF_LIVE_KEY) syncFromStorage()
     }
     window.addEventListener('storage', handler)
 
-    // Fallback: catches cases where storage event doesn't fire
-    // (e.g. same browsing context, certain hosting configurations)
-    pollIntervalRef.current = setInterval(syncFromStorage, 300)
+    // 3. Polling fallback — catches any missed updates every 150ms
+    pollIntervalRef.current = setInterval(syncFromStorage, 150)
 
     return () => {
+      if (bc) bc.close()
       window.removeEventListener('storage', handler)
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
     }
