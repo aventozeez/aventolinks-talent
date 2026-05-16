@@ -34,9 +34,6 @@ export default function MentorsPage() {
         const draw = localStorage.getItem(DRAW_KEY)
         if (draw) setTs(JSON.parse(draw) as TournamentState)
 
-        const assign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
-        if (assign) setAssignments(JSON.parse(assign))
-
         const rev = localStorage.getItem(MENTORS_REVEAL_KEY)
         if (rev) {
           const arr: boolean[] = JSON.parse(rev)
@@ -44,30 +41,40 @@ export default function MentorsPage() {
           if (arr.every(Boolean)) setAllRevealed(true)
         }
 
-        // Always reload mentor names fresh from Supabase
+        // Always load mentor names fresh from Supabase (any count)
         const { data, error } = await supabase
           .from('sc_mentors')
           .select('name')
           .order('created_at', { ascending: true })
           .limit(16)
 
-        if (!error && data && data.length >= 16) {
+        if (!error && data && data.length > 0) {
           const names = data.map((r: { name: string }) => r.name)
           setMentorNames(names)
           localStorage.setItem(MENTORS_NAMES_KEY, JSON.stringify(names))
           setDbLoaded(true)
 
-          // Auto-assign if no existing assignment yet
-          const existingAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
-          if (!existingAssign) {
-            const shuffled = [...names].sort(() => Math.random() - 0.5)
-            setAssignments(shuffled)
-            localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(shuffled))
+          // Auto-assign only when all 16 are present
+          if (data.length >= 16) {
+            const existingAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
+            const existingParsed: string[] = existingAssign ? JSON.parse(existingAssign) : []
+            const hasValidAssign = existingParsed.some(a => a.trim())
+
+            if (!hasValidAssign) {
+              // No valid assignment yet — shuffle and assign now
+              const shuffled = [...names].sort(() => Math.random() - 0.5)
+              setAssignments(shuffled)
+              localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(shuffled))
+            } else {
+              setAssignments(existingParsed)
+            }
           }
         } else {
-          // Fallback: use locally saved names
+          // DB empty or error — fall back to any locally saved names/assignments
           const savedNames = localStorage.getItem(MENTORS_NAMES_KEY)
           if (savedNames) setMentorNames(JSON.parse(savedNames))
+          const savedAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
+          if (savedAssign) setAssignments(JSON.parse(savedAssign))
         }
       } catch {}
     })()
@@ -274,10 +281,23 @@ export default function MentorsPage() {
           </div>
         )}
 
-        {/* ── Not yet assigned notice (only if no db names) ── */}
-        {!isAssigned && !showNameInput && !dbLoaded && (
-          <div className="bg-[#f5a623]/5 border border-[#f5a623]/20 rounded-xl p-4 text-sm text-[#f5a623]/80 text-center">
-            Click <strong>View / Edit Names</strong> above to add mentor names, then click <strong>Assign Randomly</strong> to pair them with teams.
+        {/* ── Not yet assigned notice ── */}
+        {!isAssigned && !showNameInput && (
+          <div className="bg-[#f5a623]/5 border border-[#f5a623]/20 rounded-xl p-4 text-sm text-center space-y-1">
+            {dbLoaded ? (
+              // DB has some names but not enough
+              <p className="text-yellow-400">
+                ⚠ Only <strong>{mentorNames.filter(n => n.trim()).length} of 16</strong> mentors registered.
+                Go to <strong>Competition Manager → Mentors tab</strong> to register the remaining{' '}
+                {16 - mentorNames.filter(n => n.trim()).length}.
+              </p>
+            ) : (
+              // No DB data at all
+              <p className="text-[#f5a623]/80">
+                No mentors registered yet. Go to{' '}
+                <strong>Competition Manager → Mentors tab</strong> to register all 16 mentors first.
+              </p>
+            )}
           </div>
         )}
 
