@@ -28,7 +28,9 @@ import {
   X,
   AlertCircle,
   Loader2,
+  Shuffle,
 } from "lucide-react";
+import DrawBracket from "./DrawBracket";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -112,7 +114,7 @@ function Toasts({ toasts, remove }: { toasts: Toast[]; remove: (id: number) => v
 export default function CompetitionPage() {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
-  const [activeTab, setActiveTab] = useState<"teams" | "questions" | "sets" | "match">("teams");
+  const [activeTab, setActiveTab] = useState<"teams" | "questions" | "sets" | "match" | "draw">("teams");
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const toast = useCallback((msg: string, type: "ok" | "err" = "ok") => {
@@ -158,10 +160,11 @@ export default function CompetitionPage() {
   }
 
   const tabs = [
-    { key: "teams", label: "Teams", icon: Users },
-    { key: "questions", label: "Questions", icon: HelpCircle },
-    { key: "sets", label: "Question Sets", icon: Layers },
-    { key: "match", label: "Match Setup", icon: Play },
+    { key: "teams",     label: "Teams",         icon: Users    },
+    { key: "questions", label: "Questions",      icon: HelpCircle },
+    { key: "sets",      label: "Question Sets",  icon: Layers   },
+    { key: "match",     label: "Match Setup",    icon: Play     },
+    { key: "draw",      label: "Draw & Bracket", icon: Shuffle  },
   ] as const;
 
   return (
@@ -199,10 +202,11 @@ export default function CompetitionPage() {
 
       {/* Tab Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {activeTab === "teams" && <TeamsTab toast={toast} />}
+        {activeTab === "teams"     && <TeamsTab toast={toast} />}
         {activeTab === "questions" && <QuestionsTab toast={toast} />}
-        {activeTab === "sets" && <SetsTab toast={toast} />}
-        {activeTab === "match" && <MatchSetupTab toast={toast} router={router} />}
+        {activeTab === "sets"      && <SetsTab toast={toast} />}
+        {activeTab === "match"     && <MatchSetupTab toast={toast} router={router} />}
+        {activeTab === "draw"      && <DrawBracket toast={toast} />}
       </div>
     </div>
   );
