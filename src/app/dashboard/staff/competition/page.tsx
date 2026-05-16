@@ -29,6 +29,7 @@ import {
   AlertCircle,
   Loader2,
   Shuffle,
+  GraduationCap,
 } from "lucide-react";
 import DrawBracket from "./DrawBracket";
 
@@ -44,6 +45,12 @@ type Team = {
   team_name: string;
   status: "pending" | "active" | "eliminated" | "winner";
   total_score: number;
+  created_at: string;
+};
+
+type Mentor = {
+  id: string;
+  name: string;
   created_at: string;
 };
 
@@ -114,7 +121,7 @@ function Toasts({ toasts, remove }: { toasts: Toast[]; remove: (id: number) => v
 export default function CompetitionPage() {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
-  const [activeTab, setActiveTab] = useState<"teams" | "questions" | "sets" | "match" | "draw">("teams");
+  const [activeTab, setActiveTab] = useState<"teams" | "mentors" | "questions" | "sets" | "match" | "draw">("teams");
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const toast = useCallback((msg: string, type: "ok" | "err" = "ok") => {
@@ -160,11 +167,12 @@ export default function CompetitionPage() {
   }
 
   const tabs = [
-    { key: "teams",     label: "Teams",         icon: Users    },
-    { key: "questions", label: "Questions",      icon: HelpCircle },
-    { key: "sets",      label: "Question Sets",  icon: Layers   },
-    { key: "match",     label: "Match Setup",    icon: Play     },
-    { key: "draw",      label: "Draw & Bracket", icon: Shuffle  },
+    { key: "teams",     label: "Teams",         icon: Users          },
+    { key: "mentors",   label: "Mentors",        icon: GraduationCap  },
+    { key: "questions", label: "Questions",      icon: HelpCircle     },
+    { key: "sets",      label: "Question Sets",  icon: Layers         },
+    { key: "match",     label: "Match Setup",    icon: Play           },
+    { key: "draw",      label: "Draw & Bracket", icon: Shuffle        },
   ] as const;
 
   return (
@@ -203,6 +211,7 @@ export default function CompetitionPage() {
       {/* Tab Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
         {activeTab === "teams"     && <TeamsTab toast={toast} />}
+        {activeTab === "mentors"   && <MentorsTab toast={toast} />}
         {activeTab === "questions" && <QuestionsTab toast={toast} />}
         {activeTab === "sets"      && <SetsTab toast={toast} />}
         {activeTab === "match"     && <MatchSetupTab toast={toast} router={router} />}
@@ -468,6 +477,226 @@ function StatusBadge({ status }: { status: string }) {
     >
       {status}
     </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MENTORS TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function MentorsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
+  const [mentors,   setMentors]   = useState<Mentor[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [showForm,  setShowForm]  = useState(false);
+  const [mentorName, setMentorName] = useState("");
+  const [saving,    setSaving]    = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName,  setEditName]  = useState("");
+
+  const fetchMentors = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await (supabase as any)
+      .from("sc_mentors")
+      .select("id, name, created_at")
+      .order("created_at", { ascending: true });
+    if (error) toast(error.message, "err");
+    else setMentors(data || []);
+    setLoading(false);
+  }, [toast]);
+
+  useEffect(() => { fetchMentors(); }, [fetchMentors]);
+
+  const registerMentor = async () => {
+    if (!mentorName.trim()) { toast("Mentor name is required", "err"); return; }
+    setSaving(true);
+    const { error } = await (supabase as any)
+      .from("sc_mentors")
+      .insert({ name: mentorName.trim() });
+    if (error) toast(error.message, "err");
+    else {
+      toast("Mentor registered!");
+      setMentorName("");
+      setShowForm(false);
+      fetchMentors();
+    }
+    setSaving(false);
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!editName.trim()) { toast("Name cannot be empty", "err"); return; }
+    const { error } = await (supabase as any)
+      .from("sc_mentors")
+      .update({ name: editName.trim() })
+      .eq("id", id);
+    if (error) toast(error.message, "err");
+    else { toast("Updated!"); setEditingId(null); fetchMentors(); }
+  };
+
+  const deleteMentor = async (id: string) => {
+    if (!confirm("Remove this mentor?")) return;
+    const { error } = await (supabase as any).from("sc_mentors").delete().eq("id", id);
+    if (error) toast(error.message, "err");
+    else { toast("Mentor removed"); fetchMentors(); }
+  };
+
+  const count = mentors.length;
+  const ready = count >= 16;
+
+  return (
+    <div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+        <div className="bg-[#0a1628] rounded-xl p-4 border border-white/10">
+          <p className="text-xs text-slate-400 uppercase tracking-wider">Registered</p>
+          <p className="text-3xl font-bold mt-1 text-white">{count}</p>
+        </div>
+        <div className="bg-[#0a1628] rounded-xl p-4 border border-white/10">
+          <p className="text-xs text-slate-400 uppercase tracking-wider">Target</p>
+          <p className="text-3xl font-bold mt-1 text-[#f5a623]">16</p>
+        </div>
+        <div className="bg-[#0a1628] rounded-xl p-4 border border-white/10 col-span-2 sm:col-span-1">
+          <p className="text-xs text-slate-400 uppercase tracking-wider">Status</p>
+          <p className={`text-lg font-bold mt-1 ${ready ? "text-green-400" : "text-yellow-400"}`}>
+            {ready ? "✓ Ready for draw" : `${16 - count} more needed`}
+          </p>
+        </div>
+      </div>
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-white">
+          Registered Mentors{" "}
+          <span className="text-sm text-slate-400 font-normal">({count} / 16)</span>
+        </h2>
+        <button
+          onClick={() => { setShowForm((p) => !p); setMentorName(""); }}
+          className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] text-[#0a1628] font-semibold rounded-lg hover:bg-[#e0941a] transition-colors text-sm"
+        >
+          <Plus size={16} /> Register Mentor
+        </button>
+      </div>
+
+      {/* Inline form */}
+      {showForm && (
+        <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-xl p-5 mb-5">
+          <h3 className="text-sm font-semibold text-[#f5a623] mb-4">Register New Mentor</h3>
+          <div className="flex gap-4 items-end">
+            <div className="flex-1">
+              <label className="text-xs text-slate-400 block mb-1">Full Name *</label>
+              <input
+                value={mentorName}
+                onChange={(e) => setMentorName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && registerMentor()}
+                placeholder="e.g. Dr. Amara Osei, Prof. Ngozi Adeyemi…"
+                className="w-full bg-[#0d1f3c] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+              />
+            </div>
+            <button
+              onClick={registerMentor}
+              disabled={saving}
+              className="px-5 py-2 bg-[#f5a623] text-[#0a1628] font-semibold rounded-lg hover:bg-[#e0941a] disabled:opacity-50 text-sm flex items-center gap-2"
+            >
+              {saving && <Loader2 size={14} className="animate-spin" />} Register
+            </button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-white/10 rounded-lg text-sm hover:bg-white/20">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Not enough warning */}
+      {!ready && count > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-xs text-yellow-300 mb-4">
+          ⚠ {16 - count} more mentor{16 - count !== 1 ? "s" : ""} needed before the draw can auto-assign names.
+        </div>
+      )}
+      {ready && (
+        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-xs text-green-300 mb-4">
+          ✓ All 16 mentors registered. Head to <strong>Draw &amp; Bracket</strong> to run the draw, then <strong>Unveil Mentors</strong> to reveal assignments.
+        </div>
+      )}
+
+      {/* List */}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="animate-spin text-[#f5a623]" size={32} />
+        </div>
+      ) : mentors.length === 0 ? (
+        <div className="text-center py-16 text-slate-500">
+          <GraduationCap size={48} className="mx-auto mb-3 opacity-30" />
+          <p>No mentors registered yet.</p>
+          <p className="text-sm mt-1">Click &ldquo;Register Mentor&rdquo; to add the first mentor.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {mentors.map((mentor, idx) => (
+            <div
+              key={mentor.id}
+              className="bg-[#0a1628] border border-white/10 rounded-xl px-5 py-4 flex items-center justify-between hover:border-white/20 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full bg-[#f5a623]/20 border border-[#f5a623]/30 flex items-center justify-center font-bold text-sm text-[#f5a623]">
+                  {idx + 1}
+                </div>
+                <div>
+                  {editingId === mentor.id ? (
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveEdit(mentor.id); if (e.key === "Escape") setEditingId(null); }}
+                      autoFocus
+                      className="bg-[#0d1f3c] border border-[#f5a623] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none w-64"
+                    />
+                  ) : (
+                    <p className="font-semibold text-white">{mentor.name}</p>
+                  )}
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Added {new Date(mentor.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {editingId === mentor.id ? (
+                  <>
+                    <button
+                      onClick={() => saveEdit(mentor.id)}
+                      className="px-3 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors flex items-center gap-1"
+                    >
+                      <Check size={12} /> Save
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="px-3 py-1 text-xs bg-white/10 text-slate-300 rounded-lg hover:bg-white/20 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => { setEditingId(mentor.id); setEditName(mentor.name); }}
+                      className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+                      title="Edit name"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button
+                      onClick={() => deleteMentor(mentor.id)}
+                      className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                      title="Remove mentor"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
