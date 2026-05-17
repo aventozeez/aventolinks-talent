@@ -23,14 +23,21 @@ const BASE = '/dashboard/staff/competition/live'
 
 const ROUNDS: RoundSection[] = [
   {
+    title: 'Team Screens',
+    emoji: '📱',
+    accent: 'border-slate-500/30 bg-slate-500/5',
+    links: [
+      { label: 'Team A — all rounds', sublabel: 'Buzzer button · Sprint drag-and-drop · auto-switches', path: `${BASE}/team-a/`, icon: '🔵', color: 'blue' },
+      { label: 'Team B — all rounds', sublabel: 'Buzzer button · Sprint drag-and-drop · auto-switches', path: `${BASE}/team-b/`, icon: '🟣', color: 'purple' },
+    ],
+  },
+  {
     title: 'Rapid Fire Round',
     emoji: '⚡',
     accent: 'border-yellow-500/30 bg-yellow-500/5',
     links: [
-      { label: 'Admin Control', sublabel: 'Manage questions — keep on this device', path: `${BASE}/rapid-fire/`, icon: '🎛️', color: 'slate' },
-      { label: 'Audience Display', sublabel: 'Projector / big screen', path: `${BASE}/rapid-fire/display/`, icon: '📺', color: 'slate' },
-      { label: 'Team A Screen', sublabel: 'Same view as Audience — open on Team A laptop', path: `${BASE}/rapid-fire/display/`, icon: '🔵', color: 'blue' },
-      { label: 'Team B Screen', sublabel: 'Same view as Audience — open on Team B laptop', path: `${BASE}/rapid-fire/display/`, icon: '🟣', color: 'purple' },
+      { label: 'Admin Control',    sublabel: 'Manage questions — keep on this device', path: `${BASE}/rapid-fire/`,         icon: '🎛️', color: 'slate' },
+      { label: 'Audience Display', sublabel: 'Projector / big screen',                 path: `${BASE}/rapid-fire/display/`, icon: '📺', color: 'slate' },
     ],
   },
   {
@@ -38,10 +45,8 @@ const ROUNDS: RoundSection[] = [
     emoji: '🔔',
     accent: 'border-blue-500/30 bg-blue-500/5',
     links: [
-      { label: 'Admin Control', sublabel: 'Manage buzzes & scoring', path: `${BASE}/buzzer/`, icon: '🎛️', color: 'slate' },
-      { label: 'Audience Display', sublabel: 'Projector / big screen', path: `${BASE}/buzzer/display/`, icon: '📺', color: 'slate' },
-      { label: 'Team A Screen', sublabel: 'Team A buzzer laptop', path: `${BASE}/buzzer/team-a/`, icon: '🔵', color: 'blue' },
-      { label: 'Team B Screen', sublabel: 'Team B buzzer laptop', path: `${BASE}/buzzer/team-b/`, icon: '🟣', color: 'purple' },
+      { label: 'Admin Control',    sublabel: 'Manage buzzes & scoring', path: `${BASE}/buzzer/`,         icon: '🎛️', color: 'slate' },
+      { label: 'Audience Display', sublabel: 'Projector / big screen',  path: `${BASE}/buzzer/display/`, icon: '📺', color: 'slate' },
     ],
   },
   {
@@ -49,10 +54,8 @@ const ROUNDS: RoundSection[] = [
     emoji: '💡',
     accent: 'border-purple-500/30 bg-purple-500/5',
     links: [
-      { label: 'Admin Control', sublabel: 'Manage problems & reveal', path: `${BASE}/sprint/`, icon: '🎛️', color: 'slate' },
-      { label: 'Audience Display', sublabel: 'Projector / big screen', path: `${BASE}/sprint/display/`, icon: '📺', color: 'slate' },
-      { label: 'Team A Screen', sublabel: 'Team A drag-and-drop laptop', path: `${BASE}/sprint/team-a/`, icon: '🔵', color: 'blue' },
-      { label: 'Team B Screen', sublabel: 'Team B drag-and-drop laptop', path: `${BASE}/sprint/team-b/`, icon: '🟣', color: 'purple' },
+      { label: 'Admin Control',    sublabel: 'Manage problems & reveal', path: `${BASE}/sprint/`,         icon: '🎛️', color: 'slate' },
+      { label: 'Audience Display', sublabel: 'Projector / big screen',   path: `${BASE}/sprint/display/`, icon: '📺', color: 'slate' },
     ],
   },
 ]
@@ -150,9 +153,9 @@ export default function ScreenHubPage() {
           </div>
         ))}
 
-        {/* Note about RF team screens */}
+        {/* Note about unified team screens */}
         <p className="text-xs text-slate-600 text-center pb-4">
-          In Rapid Fire, all team screens show the same audience display — teams watch together while the admin controls the questions.
+          Team screens are one link per team — they auto-switch: buzzer button during Buzzer Round, drag-and-drop during Sprint, watching screen otherwise.
         </p>
       </div>
     </div>

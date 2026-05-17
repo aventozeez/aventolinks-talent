@@ -1590,30 +1590,31 @@ function PoolManager({
 const _BASE = '/dashboard/staff/competition/live'
 const SCREEN_ROUNDS = [
   {
+    title: 'Team Screens', emoji: '📱',
+    links: [
+      { label: 'Team A — all rounds', icon: '🔵', path: `${_BASE}/team-a/`, color: 'blue'   },
+      { label: 'Team B — all rounds', icon: '🟣', path: `${_BASE}/team-b/`, color: 'purple' },
+    ],
+  },
+  {
     title: 'Rapid Fire Round', emoji: '⚡',
     links: [
-      { label: 'Admin Control',    icon: '🎛️', path: `${_BASE}/rapid-fire/`,         color: 'slate'  },
-      { label: 'Audience Display', icon: '📺', path: `${_BASE}/rapid-fire/display/`, color: 'slate'  },
-      { label: 'Team A Screen',    icon: '🔵', path: `${_BASE}/rapid-fire/display/`, color: 'blue'   },
-      { label: 'Team B Screen',    icon: '🟣', path: `${_BASE}/rapid-fire/display/`, color: 'purple' },
+      { label: 'Admin Control',    icon: '🎛️', path: `${_BASE}/rapid-fire/`,         color: 'slate' },
+      { label: 'Audience Display', icon: '📺', path: `${_BASE}/rapid-fire/display/`, color: 'slate' },
     ],
   },
   {
     title: 'Buzzer Round', emoji: '🔔',
     links: [
-      { label: 'Admin Control',    icon: '🎛️', path: `${_BASE}/buzzer/`,          color: 'slate'  },
-      { label: 'Audience Display', icon: '📺', path: `${_BASE}/buzzer/display/`,   color: 'slate'  },
-      { label: 'Team A Screen',    icon: '🔵', path: `${_BASE}/buzzer/team-a/`,    color: 'blue'   },
-      { label: 'Team B Screen',    icon: '🟣', path: `${_BASE}/buzzer/team-b/`,    color: 'purple' },
+      { label: 'Admin Control',    icon: '🎛️', path: `${_BASE}/buzzer/`,         color: 'slate' },
+      { label: 'Audience Display', icon: '📺', path: `${_BASE}/buzzer/display/`,  color: 'slate' },
     ],
   },
   {
     title: 'Innovation Sprint', emoji: '💡',
     links: [
-      { label: 'Admin Control',    icon: '🎛️', path: `${_BASE}/sprint/`,          color: 'slate'  },
-      { label: 'Audience Display', icon: '📺', path: `${_BASE}/sprint/display/`,   color: 'slate'  },
-      { label: 'Team A Screen',    icon: '🔵', path: `${_BASE}/sprint/team-a/`,    color: 'blue'   },
-      { label: 'Team B Screen',    icon: '🟣', path: `${_BASE}/sprint/team-b/`,    color: 'purple' },
+      { label: 'Admin Control',    icon: '🎛️', path: `${_BASE}/sprint/`,         color: 'slate' },
+      { label: 'Audience Display', icon: '📺', path: `${_BASE}/sprint/display/`,  color: 'slate' },
     ],
   },
 ]
@@ -1864,7 +1865,7 @@ function MatchSetupTab({
 
           <div className="px-5 py-2.5 bg-white/[0.02]">
             <p className="text-xs text-slate-600 text-center">
-              In Rapid Fire, Team A &amp; B screens show the same view as the Audience display
+              Team screens auto-switch: buzzer button in Buzzer Round, drag-and-drop in Sprint, watching screen otherwise
             </p>
           </div>
         </div>
