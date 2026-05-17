@@ -316,13 +316,31 @@ export default function SprintAdminPage() {
       }
     })
 
-    ch.subscribe()
+    // Any screen joining mid-round pings admin for current state
+    ch.on('broadcast', { event: 'ping' }, () => {
+      broadcast()
+    })
+
+    // On connect: push current state to all screens
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        setTimeout(() => broadcast(), 400)
+      }
+    })
 
     return () => {
       stopTimer()
       supabase.removeChannel(ch)
     }
   }, [broadcast, doReveal])
+
+  // ─── Heartbeat: re-broadcast every 4 s so late-joiners stay in sync ─────────
+  useEffect(() => {
+    const hb = setInterval(() => {
+      if (phaseRef.current !== 'setup') broadcast()
+    }, 4000)
+    return () => clearInterval(hb)
+  }, [broadcast])
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
   const handleStartProblem = (problem: SprintProblem) => {

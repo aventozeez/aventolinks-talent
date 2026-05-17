@@ -1876,7 +1876,17 @@ function MatchSetupTab({
             )}
           </div>
 
-          <div className="flex gap-3 pt-2">
+          {/* Screen links shortcut */}
+          <div className="pt-2 px-1">
+            <button
+              onClick={() => router.push('/dashboard/staff/competition/live/screens')}
+              className="w-full py-2.5 border border-white/15 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-slate-300 flex items-center justify-center gap-2 transition"
+            >
+              📺 View All Screen Links (set up devices first)
+            </button>
+          </div>
+
+          <div className="flex gap-3 pt-1">
             <button
               onClick={() => setStep(1)}
               className="px-5 py-2.5 bg-white/10 rounded-lg text-sm hover:bg-white/20"

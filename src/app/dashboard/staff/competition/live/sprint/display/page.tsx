@@ -58,20 +58,16 @@ export default function SprintDisplayPage() {
   }
 
   useEffect(() => {
-    ;(supabase as any)
-      .from('sc_sprint_session')
-      .select('*')
-      .eq('id', 'main')
-      .single()
-      .then(({ data }: { data: SpLiveState | null }) => {
-        if (data) applyState(data)
-      })
-
+    // Admin is source of truth — no DB read. Ping on subscribe for current state.
     const ch = supabase.channel(SP_CHANNEL)
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (payload) applyState(payload as SpLiveState)
     })
-    ch.subscribe()
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        ch.send({ type: 'broadcast', event: 'ping', payload: {} }).catch(() => {})
+      }
+    })
 
     pollRef.current = setInterval(() => {
       try {
