@@ -167,11 +167,7 @@ export default function BuzzerDisplayPage() {
         )}
 
         {/* Phase-specific overlays */}
-        {phase === 'ready' && (
-          <p className="text-xl text-slate-500 animate-pulse">Waiting for buzzer to open…</p>
-        )}
-
-        {phase === 'open' && (
+        {(phase === 'ready' || phase === 'open') && (
           <div className="flex flex-col items-center gap-4">
             <div className="relative">
               <div className="absolute inset-0 bg-green-500/20 rounded-full blur-3xl scale-150" />

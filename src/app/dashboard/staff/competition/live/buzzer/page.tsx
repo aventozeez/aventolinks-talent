@@ -158,8 +158,9 @@ export default function BuzzerAdminPage() {
       updateBuzzedTeam(null)
       updateBonusTeam(null)
       updateBuzzStartedAt(null)
-      updatePhase('ready')
-      broadcast({ phase: 'ready', scoreA: newA, scoreB: newB, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
+      setShowAnswer(false)
+      updatePhase('open')
+      broadcast({ phase: 'open', scoreA: newA, scoreB: newB, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
     } else if (buzzer !== null) {
       // Primary buzzer timed out — deduct, give bonus to other team
       const newA = buzzer === 'a' ? scoreARef.current - 5 : scoreARef.current
@@ -271,12 +272,6 @@ export default function BuzzerAdminPage() {
   }, [broadcast, startTimer])
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
-  const handleOpenBuzzer = () => {
-    updatePhase('open')
-    setShowAnswer(false)
-    broadcast({ phase: 'open' })
-  }
-
   const handleCorrect = () => {
     if (endedRef.current && phaseRef.current !== 'buzzed' && phaseRef.current !== 'bonus') return
     endedRef.current = true
@@ -299,9 +294,10 @@ export default function BuzzerAdminPage() {
     const nextIdx = questionIndexRef.current + 1
     const isDone = nextIdx >= questionsRef.current.length
 
-    updatePhase(isDone ? 'done' : 'ready')
-    broadcast({ phase: isDone ? 'done' : 'ready', scoreA: newA, scoreB: newB, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
+    updatePhase(isDone ? 'done' : 'open')
+    broadcast({ phase: isDone ? 'done' : 'open', scoreA: newA, scoreB: newB, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
     if (!isDone) {
+      setShowAnswer(false)
       updateQuestionIndex(nextIdx)
       questionIndexRef.current = nextIdx
     }
@@ -330,9 +326,9 @@ export default function BuzzerAdminPage() {
       updateBuzzStartedAt(null)
       const nextIdx = questionIndexRef.current + 1
       const isDone = nextIdx >= questionsRef.current.length
-      updatePhase(isDone ? 'done' : 'ready')
-      broadcast({ phase: isDone ? 'done' : 'ready', scoreA: newA, scoreB: newB, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
-      if (!isDone) { updateQuestionIndex(nextIdx); questionIndexRef.current = nextIdx }
+      updatePhase(isDone ? 'done' : 'open')
+      broadcast({ phase: isDone ? 'done' : 'open', scoreA: newA, scoreB: newB, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
+      if (!isDone) { setShowAnswer(false); updateQuestionIndex(nextIdx); questionIndexRef.current = nextIdx }
     } else {
       // Primary wrong — give bonus to opponent
       const opp: 'a' | 'b' = who === 'a' ? 'b' : 'a'
@@ -363,13 +359,13 @@ export default function BuzzerAdminPage() {
     } else {
       updateQuestionIndex(nextIdx)
       questionIndexRef.current = nextIdx
-      updatePhase('ready')
-      broadcast({ phase: 'ready', questionIndex: nextIdx, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
+      updatePhase('open')
+      broadcast({ phase: 'open', questionIndex: nextIdx, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
     }
   }
 
   const handleStartRound = () => {
-    updatePhase('ready')
+    updatePhase('open')
     updateQuestionIndex(0)
     questionIndexRef.current = 0
     updateScoreA(0)
@@ -379,7 +375,7 @@ export default function BuzzerAdminPage() {
     updateBuzzedTeam(null)
     updateBonusTeam(null)
     setShowAnswer(false)
-    broadcast({ phase: 'ready', questionIndex: 0, scoreA: 0, scoreB: 0, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
+    broadcast({ phase: 'open', questionIndex: 0, scoreA: 0, scoreB: 0, buzzedTeam: null, bonusTeam: null, buzzStartedAt: null })
   }
 
   const handleDone = () => {
@@ -590,8 +586,8 @@ export default function BuzzerAdminPage() {
           </div>
         )}
 
-        {/* ── READY / OPEN / BUZZED / BONUS ── */}
-        {(phase === 'ready' || phase === 'open' || phase === 'buzzed' || phase === 'bonus') && currentQ && (
+        {/* ── OPEN / BUZZED / BONUS ── */}
+        {(phase === 'open' || phase === 'buzzed' || phase === 'bonus') && currentQ && (
           <div className="w-full max-w-2xl flex flex-col gap-4">
             {/* Progress */}
             <div className="flex items-center justify-between text-sm text-slate-400">
@@ -599,8 +595,7 @@ export default function BuzzerAdminPage() {
               <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase ${
                 phase === 'open' ? 'bg-green-500/20 text-green-400' :
                 phase === 'buzzed' ? 'bg-yellow-500/20 text-yellow-400' :
-                phase === 'bonus' ? 'bg-orange-500/20 text-orange-400' :
-                'bg-white/10 text-slate-400'
+                'bg-orange-500/20 text-orange-400'
               }`}>{phase}</span>
             </div>
 
@@ -657,23 +652,6 @@ export default function BuzzerAdminPage() {
 
             {/* Control buttons */}
             <div className="grid grid-cols-3 gap-3">
-              {phase === 'ready' && (
-                <>
-                  <button
-                    onClick={handleOpenBuzzer}
-                    className="col-span-2 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition"
-                  >
-                    <Zap size={18} /> Open Buzzer
-                  </button>
-                  <button
-                    onClick={handleNext}
-                    className="py-3 bg-white/10 hover:bg-white/20 text-slate-300 font-semibold rounded-xl transition text-sm"
-                  >
-                    Skip →
-                  </button>
-                </>
-              )}
-
               {phase === 'open' && (
                 <button
                   onClick={handleNext}

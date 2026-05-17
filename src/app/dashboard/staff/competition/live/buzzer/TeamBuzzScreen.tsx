@@ -46,7 +46,7 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
     setGameState(s)
 
     // Reset buzz status when a new question starts
-    if (s.phase === 'ready' || s.phase === 'open') {
+    if (s.phase === 'open') {
       setBuzzStatus('idle')
     }
 
@@ -246,13 +246,17 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
           </div>
         )}
 
-        {/* ── READY: pulsing "get ready" ── */}
+        {/* ── READY (stale state fallback) — treat same as open ── */}
         {phase === 'ready' && (
-          <div className="flex flex-col items-center gap-3">
-            <div className={`w-24 h-24 rounded-full border-4 ${accentBorder} flex items-center justify-center opacity-50 animate-pulse`}>
-              <span className="text-4xl">⚡</span>
-            </div>
-            <p className="text-slate-400 text-lg">Get ready to buzz!</p>
+          <div className="w-full max-w-sm flex flex-col items-center gap-4">
+            <button
+              onClick={handleBuzz}
+              className={`w-full py-28 ${accentBg} hover:brightness-110 active:scale-95 text-white font-black text-5xl rounded-3xl transition-all select-none`}
+              style={{ boxShadow: accentGlow }}
+            >
+              ⚡<br />
+              <span className="text-3xl mt-2 block">BUZZ!</span>
+            </button>
           </div>
         )}
 
