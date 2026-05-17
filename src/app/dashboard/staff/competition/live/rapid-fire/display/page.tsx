@@ -68,7 +68,8 @@ export default function RapidFireDisplay() {
       .select('state')
       .eq('id', 'main')
       .single()
-      .then(({ data }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(({ data }: { data: any }) => {
         if (data?.state) {
           const raw = JSON.stringify(data.state)
           if (raw !== lastRawRef.current) {
