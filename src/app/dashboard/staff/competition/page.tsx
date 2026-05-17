@@ -1765,6 +1765,7 @@ function MatchSetupTab({
 
       {/* Step 1 — Team Selection */}
       {step === 1 && (
+        <>
         <div className="bg-[#0a1628] border border-white/10 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-5">Select Competing Teams</h2>
 
@@ -1867,6 +1868,7 @@ function MatchSetupTab({
             </p>
           </div>
         </div>
+        </>
       )}
 
       {/* Step 2 — Configure Rounds */}
