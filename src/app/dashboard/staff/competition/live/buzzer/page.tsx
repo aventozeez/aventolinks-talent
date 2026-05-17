@@ -418,15 +418,21 @@ export default function BuzzerAdminPage() {
         <h1 className="text-base font-bold flex-1">Buzzer Round — Admin</h1>
         <button
           onClick={() => window.open('/dashboard/staff/competition/live/buzzer/display/', '_blank')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs font-semibold rounded-lg hover:bg-blue-600/40 transition"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600/20 border border-slate-500/30 text-slate-300 text-xs font-semibold rounded-lg hover:bg-slate-600/40 transition"
         >
-          <Monitor size={13} /> Open Display
+          <Monitor size={13} /> Audience
         </button>
         <button
-          onClick={() => window.open('/dashboard/staff/competition/live/buzzer/buzz/', '_blank')}
+          onClick={() => window.open('/dashboard/staff/competition/live/buzzer/team-a/', '_blank')}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs font-semibold rounded-lg hover:bg-blue-600/40 transition"
+        >
+          <Zap size={13} /> Team A
+        </button>
+        <button
+          onClick={() => window.open('/dashboard/staff/competition/live/buzzer/team-b/', '_blank')}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600/20 border border-purple-500/30 text-purple-300 text-xs font-semibold rounded-lg hover:bg-purple-600/40 transition"
         >
-          <Zap size={13} /> Buzz Page
+          <Zap size={13} /> Team B
         </button>
       </div>
 
