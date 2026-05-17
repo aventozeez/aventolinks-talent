@@ -101,22 +101,48 @@ export default function SprintPlayScreen({ team }: { team: 'a' | 'b' }) {
   }
 
   useEffect(() => {
-    // Admin is source of truth — no DB read. Ping admin for current state on connect.
+    // ── 1. Initial DB load ────────────────────────────────────────────────────────
+    ;(supabase as any).from('sc_sprint_session').select('*').eq('id', 'main').single()
+      .then(({ data }: { data: SpLiveState | null }) => {
+        if (data && data.phase && data.phase !== 'setup') applyState(data)
+      }).catch(() => {})
+
+    // ── 2. Broadcast — fast path ──────────────────────────────────────────────────
     const ch = supabase.channel(SP_CHANNEL)
     channelRef.current = ch
-
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (payload) applyState(payload as SpLiveState)
     })
-
     ch.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         ch.send({ type: 'broadcast', event: 'ping', payload: {} }).catch(() => {})
       }
     })
 
-    // localStorage fallback (same-browser / same-device)
-    const poll = setInterval(() => {
+    // ── 3. Postgres Changes — DB push ─────────────────────────────────────────────
+    const pgCh = (supabase as any)
+      .channel('sc_sp_team_db')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sc_sprint_session', filter: 'id=eq.main' },
+        (payload: { new: SpLiveState }) => { if (payload.new) applyState(payload.new) })
+      .subscribe()
+
+    // ── 4. DB poll every 2 s — cross-device fallback ──────────────────────────────
+    const dbPoll = setInterval(async () => {
+      try {
+        const { data } = await (supabase as any)
+          .from('sc_sprint_session').select('*').eq('id', 'main').single()
+        if (data && data.phase) {
+          const cur = stateRef.current
+          if (data.phase !== cur.phase || data.problemTitle !== cur.problemTitle ||
+              data.teamASubmitted !== cur.teamASubmitted || data.teamBSubmitted !== cur.teamBSubmitted) {
+            applyState(data as SpLiveState)
+          }
+        }
+      } catch { /* ignore */ }
+    }, 2000)
+
+    // ── 5. localStorage fallback — same-device ────────────────────────────────────
+    const localPoll = setInterval(() => {
       try {
         const raw = localStorage.getItem('sc_sp_state')
         if (!raw) return
@@ -131,7 +157,9 @@ export default function SprintPlayScreen({ team }: { team: 'a' | 'b' }) {
 
     return () => {
       supabase.removeChannel(ch)
-      clearInterval(poll)
+      supabase.removeChannel(pgCh)
+      clearInterval(dbPoll)
+      clearInterval(localPoll)
       clearInterval(dotsInt)
       if (timerRef.current) clearInterval(timerRef.current)
     }

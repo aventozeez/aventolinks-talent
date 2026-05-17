@@ -197,7 +197,22 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
 
   // ── Effects ────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Buzzer channel
+    // ── 1. Initial DB load — immediately shows current state when opening mid-round
+    const loadFromDB = async () => {
+      try {
+        const { data } = await (supabase as any)
+          .from('sc_buzzer_session').select('*').eq('id', 'main').single()
+        if (data && data.phase && data.phase !== 'setup') applyBzState(data as BzLiveState)
+      } catch { /* table may not exist yet */ }
+      try {
+        const { data } = await (supabase as any)
+          .from('sc_sprint_session').select('*').eq('id', 'main').single()
+        if (data && data.phase && data.phase !== 'setup') applySpState(data as SpLiveState)
+      } catch { /* table may not exist yet */ }
+    }
+    loadFromDB()
+
+    // ── 2. Broadcast channels — fast path (sub-second) ──────────────────────────
     const bzCh = supabase.channel(BZ_CHANNEL)
     bzChannelRef.current = bzCh
     bzCh.on('broadcast', { event: 'state' }, ({ payload }) => {
@@ -207,7 +222,6 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
       if (status === 'SUBSCRIBED') bzCh.send({ type: 'broadcast', event: 'ping', payload: {} }).catch(() => {})
     })
 
-    // Sprint channel
     const spCh = supabase.channel(SP_CHANNEL)
     spChannelRef.current = spCh
     spCh.on('broadcast', { event: 'state' }, ({ payload }) => {
@@ -217,8 +231,43 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
       if (status === 'SUBSCRIBED') spCh.send({ type: 'broadcast', event: 'ping', payload: {} }).catch(() => {})
     })
 
-    // localStorage fallback polling (same-device / same-browser)
-    const poll = setInterval(() => {
+    // ── 3. Postgres Changes — reliable DB push (works even if broadcast drops) ──
+    const pgCh = (supabase as any)
+      .channel('sc_team_db_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sc_buzzer_session', filter: 'id=eq.main' },
+        (payload: { new: BzLiveState }) => { if (payload.new) applyBzState(payload.new) })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sc_sprint_session', filter: 'id=eq.main' },
+        (payload: { new: SpLiveState }) => { if (payload.new) applySpState(payload.new) })
+      .subscribe()
+
+    // ── 4. DB poll every 2 s — cross-device fallback if Realtime isn't enabled ──
+    const dbPoll = setInterval(async () => {
+      try {
+        const { data: bz } = await (supabase as any)
+          .from('sc_buzzer_session').select('*').eq('id', 'main').single()
+        if (bz && bz.phase) {
+          const cur = bzStateRef.current
+          if (bz.phase !== cur.phase || bz.questionIndex !== cur.questionIndex ||
+              bz.buzzedTeam !== cur.buzzedTeam || bz.bonusTeam !== cur.bonusTeam) {
+            applyBzState(bz as BzLiveState)
+          }
+        }
+      } catch { /* ignore */ }
+      try {
+        const { data: sp } = await (supabase as any)
+          .from('sc_sprint_session').select('*').eq('id', 'main').single()
+        if (sp && sp.phase) {
+          const cur = spStateRef.current
+          if (sp.phase !== cur.phase || sp.problemTitle !== cur.problemTitle ||
+              sp.teamASubmitted !== cur.teamASubmitted || sp.teamBSubmitted !== cur.teamBSubmitted) {
+            applySpState(sp as SpLiveState)
+          }
+        }
+      } catch { /* ignore */ }
+    }, 2000)
+
+    // ── 5. localStorage polling — same-device / same-browser fallback ───────────
+    const localPoll = setInterval(() => {
       try {
         const bzRaw = localStorage.getItem('sc_bz_state')
         if (bzRaw) {
@@ -245,7 +294,9 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
     return () => {
       supabase.removeChannel(bzCh)
       supabase.removeChannel(spCh)
-      clearInterval(poll)
+      supabase.removeChannel(pgCh)
+      clearInterval(dbPoll)
+      clearInterval(localPoll)
       clearInterval(dotsInt)
       if (bzTimerRef.current) clearInterval(bzTimerRef.current)
       if (spTimerRef.current) clearInterval(spTimerRef.current)

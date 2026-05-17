@@ -62,23 +62,48 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
   }
 
   useEffect(() => {
-    // Realtime — same channel as admin (required for cross-device sync)
+    // ── 1. Initial DB load ────────────────────────────────────────────────────────
+    ;(supabase as any).from('sc_buzzer_session').select('*').eq('id', 'main').single()
+      .then(({ data }: { data: BzLiveState | null }) => {
+        if (data && data.phase && data.phase !== 'setup') applyState(data)
+      }).catch(() => {})
+
+    // ── 2. Broadcast — fast path ──────────────────────────────────────────────────
     const ch = supabase.channel(BZ_CHANNEL)
     channelRef.current = ch
-
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (payload) applyState(payload as BzLiveState)
     })
-
-    // On connect: ping admin so it immediately re-sends current state
     ch.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         ch.send({ type: 'broadcast', event: 'ping', payload: {} }).catch(() => {})
       }
     })
 
-    // localStorage fallback (same-browser / same-device only)
-    const poll = setInterval(() => {
+    // ── 3. Postgres Changes — DB push ─────────────────────────────────────────────
+    const pgCh = (supabase as any)
+      .channel('sc_bz_team_db')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sc_buzzer_session', filter: 'id=eq.main' },
+        (payload: { new: BzLiveState }) => { if (payload.new) applyState(payload.new) })
+      .subscribe()
+
+    // ── 4. DB poll every 2 s — cross-device fallback ──────────────────────────────
+    const dbPoll = setInterval(async () => {
+      try {
+        const { data } = await (supabase as any)
+          .from('sc_buzzer_session').select('*').eq('id', 'main').single()
+        if (data && data.phase) {
+          const cur = stateRef.current
+          if (data.phase !== cur.phase || data.questionIndex !== cur.questionIndex ||
+              data.buzzedTeam !== cur.buzzedTeam || data.bonusTeam !== cur.bonusTeam) {
+            applyState(data as BzLiveState)
+          }
+        }
+      } catch { /* ignore */ }
+    }, 2000)
+
+    // ── 5. localStorage fallback — same-device ────────────────────────────────────
+    const localPoll = setInterval(() => {
       try {
         const raw = localStorage.getItem('sc_bz_state')
         if (!raw) return
@@ -94,12 +119,13 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
       } catch { /* ignore */ }
     }, 150)
 
-    // Animated dots for waiting screen
     const dotsInt = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 500)
 
     return () => {
       supabase.removeChannel(ch)
-      clearInterval(poll)
+      supabase.removeChannel(pgCh)
+      clearInterval(dbPoll)
+      clearInterval(localPoll)
       clearInterval(dotsInt)
       if (timerRef.current) clearInterval(timerRef.current)
     }

@@ -58,7 +58,13 @@ export default function SprintDisplayPage() {
   }
 
   useEffect(() => {
-    // Admin is source of truth — no DB read. Ping on subscribe for current state.
+    // ── 1. Initial DB load ────────────────────────────────────────────────────────
+    ;(supabase as any).from('sc_sprint_session').select('*').eq('id', 'main').single()
+      .then(({ data }: { data: SpLiveState | null }) => {
+        if (data && data.phase && data.phase !== 'setup') applyState(data)
+      }).catch(() => {})
+
+    // ── 2. Broadcast — fast path ──────────────────────────────────────────────────
     const ch = supabase.channel(SP_CHANNEL)
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (payload) applyState(payload as SpLiveState)
@@ -69,6 +75,29 @@ export default function SprintDisplayPage() {
       }
     })
 
+    // ── 3. Postgres Changes — DB push ─────────────────────────────────────────────
+    const pgCh = (supabase as any)
+      .channel('sc_sp_display_db')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sc_sprint_session', filter: 'id=eq.main' },
+        (payload: { new: SpLiveState }) => { if (payload.new) applyState(payload.new) })
+      .subscribe()
+
+    // ── 4. DB poll every 2 s — reliable cross-device fallback ─────────────────────
+    const dbPollRef = setInterval(async () => {
+      try {
+        const { data } = await (supabase as any)
+          .from('sc_sprint_session').select('*').eq('id', 'main').single()
+        if (data && data.phase) {
+          const cur = stateRef.current
+          if (data.phase !== cur.phase || data.problemTitle !== cur.problemTitle ||
+              data.teamASubmitted !== cur.teamASubmitted || data.teamBSubmitted !== cur.teamBSubmitted) {
+            applyState(data as SpLiveState)
+          }
+        }
+      } catch { /* ignore */ }
+    }, 2000)
+
+    // ── 5. localStorage fallback — same-device ────────────────────────────────────
     pollRef.current = setInterval(() => {
       try {
         const raw = localStorage.getItem('sc_sp_state')
@@ -84,6 +113,8 @@ export default function SprintDisplayPage() {
 
     return () => {
       supabase.removeChannel(ch)
+      supabase.removeChannel(pgCh)
+      clearInterval(dbPollRef)
       if (timerRef.current) clearInterval(timerRef.current)
       if (pollRef.current) clearInterval(pollRef.current)
       if (dotsRef.current) clearInterval(dotsRef.current)
