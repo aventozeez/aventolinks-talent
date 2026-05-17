@@ -53,37 +53,34 @@ export default function BuzzerDisplayPage() {
   }
 
   useEffect(() => {
-    // Load initial state from DB
-    ;(supabase as any)
-      .from('sc_buzzer_session')
-      .select('*')
-      .eq('id', 'main')
-      .single()
-      .then(({ data }: { data: BzLiveState | null }) => {
-        if (data) applyState(data)
-      })
-
-    // Subscribe to Realtime
+    // Admin is the single source of truth — no DB read on mount.
+    // Subscribe to the same Realtime channel as admin.
     const ch = supabase.channel(BZ_CHANNEL)
+
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (payload) applyState(payload as BzLiveState)
     })
-    ch.subscribe()
 
-    // Poll localStorage every 150ms as fallback
+    // On connect: ping admin so it immediately re-sends current state
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        ch.send({ type: 'broadcast', event: 'ping', payload: {} }).catch(() => {})
+      }
+    })
+
+    // localStorage fallback (same-browser / same-device)
     pollRef.current = setInterval(() => {
       try {
         const raw = localStorage.getItem('sc_bz_state')
         if (!raw) return
         const parsed: BzLiveState = JSON.parse(raw)
-        // Only apply if newer or phase changed
         if (parsed.phase !== stateRef.current.phase || parsed.questionIndex !== stateRef.current.questionIndex) {
           applyState(parsed)
         }
       } catch { /* ignore */ }
     }, 150)
 
-    // Animated dots for setup
+    // Animated dots for setup/waiting screen
     dotsRef.current = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 500)
 
     return () => {

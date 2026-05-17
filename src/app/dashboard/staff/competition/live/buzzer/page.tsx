@@ -252,6 +252,7 @@ export default function BuzzerAdminPage() {
     const ch = supabase.channel(BZ_CHANNEL)
     channelRef.current = ch
 
+    // Team buzz-in events
     ch.on('broadcast', { event: 'buzzed' }, ({ payload }) => {
       if (phaseRef.current !== 'open') return
       const t = payload?.team as 'a' | 'b'
@@ -263,13 +264,31 @@ export default function BuzzerAdminPage() {
       broadcast({ phase: 'buzzed', buzzedTeam: t })
     })
 
-    ch.subscribe()
+    // Any screen joining mid-round pings admin for current state
+    ch.on('broadcast', { event: 'ping' }, () => {
+      broadcast() // re-send current state immediately
+    })
+
+    // On connect: push current state to all screens (resets stale views)
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        setTimeout(() => broadcast(), 400)
+      }
+    })
 
     return () => {
       stopTimer()
       supabase.removeChannel(ch)
     }
   }, [broadcast, startTimer])
+
+  // ─── Heartbeat: re-broadcast every 4 s so late-joiners stay in sync ─────────
+  useEffect(() => {
+    const hb = setInterval(() => {
+      if (phaseRef.current !== 'setup') broadcast()
+    }, 4000)
+    return () => clearInterval(hb)
+  }, [broadcast])
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
   const handleCorrect = () => {

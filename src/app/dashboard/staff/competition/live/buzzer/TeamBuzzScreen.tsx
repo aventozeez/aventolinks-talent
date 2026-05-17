@@ -62,25 +62,22 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
   }
 
   useEffect(() => {
-    // Load state from DB on mount (cross-device late join)
-    ;(supabase as any)
-      .from('sc_buzzer_session')
-      .select('*')
-      .eq('id', 'main')
-      .single()
-      .then(({ data }: { data: BzLiveState | null }) => {
-        if (data) applyState(data)
-      })
-
-    // Realtime broadcast — MUST use the same channel name as admin
+    // Realtime — same channel as admin (required for cross-device sync)
     const ch = supabase.channel(BZ_CHANNEL)
     channelRef.current = ch
+
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (payload) applyState(payload as BzLiveState)
     })
-    ch.subscribe()
 
-    // localStorage polling fallback
+    // On connect: ping admin so it immediately re-sends current state
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        ch.send({ type: 'broadcast', event: 'ping', payload: {} }).catch(() => {})
+      }
+    })
+
+    // localStorage fallback (same-browser / same-device only)
     const poll = setInterval(() => {
       try {
         const raw = localStorage.getItem('sc_bz_state')
@@ -97,7 +94,7 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
       } catch { /* ignore */ }
     }, 150)
 
-    // Animated dots
+    // Animated dots for waiting screen
     const dotsInt = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 500)
 
     return () => {
