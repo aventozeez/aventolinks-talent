@@ -74,8 +74,8 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
         if (data) applyState(data)
       })
 
-    // Realtime broadcast
-    const ch = supabase.channel(BZ_CHANNEL + '_team_' + team + '_' + Math.random().toString(36).slice(2))
+    // Realtime broadcast — MUST use the same channel name as admin
+    const ch = supabase.channel(BZ_CHANNEL)
     channelRef.current = ch
     ch.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (payload) applyState(payload as BzLiveState)
