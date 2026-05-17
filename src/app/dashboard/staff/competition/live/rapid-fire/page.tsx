@@ -319,10 +319,12 @@ export default function RapidFireAdminPage() {
   };
 
   const continueToMatch = () => {
-    if (!matchData) return;
-    const updated = { ...matchData, rfScores: [scoreA, scoreB], phase: "after-rf" };
+    // Skip the Match Hub intermediate screen — go straight to Buzzer Round
+    const updated = matchData
+      ? { ...matchData, rfScores: [scoreA, scoreB], phase: "bz" }
+      : { teamA: { id: "", team_name: teamAName }, teamB: { id: "", team_name: teamBName }, phase: "bz", rfScores: [scoreA, scoreB], bzScores: [0, 0], spScores: [0, 0], rfPoolIds: [], bzSetId: "", spSetId: "" };
     sessionStorage.setItem("sc_match", JSON.stringify(updated));
-    router.push("/dashboard/staff/competition/live/match");
+    router.push("/dashboard/staff/competition/live/buzzer");
   };
 
   const openDisplay = () =>
