@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Radio, Trophy, ArrowLeft, Loader2, CheckCircle, XCircle, ChevronRight, Monitor, Zap } from 'lucide-react'
+import { Radio, Trophy, ArrowLeft, Loader2, CheckCircle, XCircle, ChevronRight, Monitor, Zap, Copy, ExternalLink } from 'lucide-react'
 
 // ─── Shared types (re-exported from types.ts) ───────────────────────────────
 export { BZ_CHANNEL, type BzPhase, type BzLiveState } from './types'
@@ -54,6 +54,7 @@ export default function BuzzerAdminPage() {
   const [buzzStartedAt, setBuzzStartedAt] = useState<number | null>(null)
   const [countdown, setCountdown] = useState(10)
   const [showAnswer, setShowAnswer] = useState(false)
+  const [copiedLink, setCopiedLink] = useState<string | null>(null)
 
   // Stale-closure-safe refs
   const phaseRef = useRef<BzPhase>('setup')
@@ -452,57 +453,140 @@ export default function BuzzerAdminPage() {
 
         {/* ── SETUP ── */}
         {phase === 'setup' && (
-          <div className="w-full max-w-lg bg-[#0d1f3c] border border-blue-500/20 rounded-2xl p-8">
-            <div className="flex items-center justify-center gap-2 mb-6">
-              <Radio className="text-blue-400" size={24} />
-              <h2 className="text-2xl font-black">Buzzer Round Setup</h2>
+          <div className="w-full max-w-lg flex flex-col gap-5">
+
+            {/* Config card */}
+            <div className="bg-[#0d1f3c] border border-blue-500/20 rounded-2xl p-8">
+              <div className="flex items-center justify-center gap-2 mb-6">
+                <Radio className="text-blue-400" size={24} />
+                <h2 className="text-2xl font-black">Buzzer Round Setup</h2>
+              </div>
+
+              {matchMode && matchData && (
+                <div className="mb-5 p-3 bg-[#f5a623]/10 border border-[#f5a623]/20 rounded-xl text-sm text-center">
+                  <span className="text-[#f5a623] font-semibold">RF Carry-Over:</span>
+                  <span className="ml-2 text-blue-300">{matchData.teamA.team_name}: {rfA}</span>
+                  <span className="mx-2 text-slate-500">|</span>
+                  <span className="text-purple-300">{matchData.teamB.team_name}: {rfB}</span>
+                </div>
+              )}
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Team A Name</label>
+                  <input
+                    value={teamAName}
+                    onChange={e => { setTeamAName(e.target.value); teamANameRef.current = e.target.value }}
+                    disabled={matchMode}
+                    className="w-full bg-[#060f1e] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400 disabled:opacity-60"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Team B Name</label>
+                  <input
+                    value={teamBName}
+                    onChange={e => { setTeamBName(e.target.value); teamBNameRef.current = e.target.value }}
+                    disabled={matchMode}
+                    className="w-full bg-[#060f1e] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400 disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              <p className="text-sm text-slate-400 text-center mb-5">{questions.length} question{questions.length !== 1 ? 's' : ''} loaded</p>
+
+              {questions.length === 0 && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400 text-center">
+                  No questions found. Add questions with round_type=&apos;buzzer&apos;.
+                </div>
+              )}
+
+              <button
+                onClick={handleStartRound}
+                disabled={questions.length === 0}
+                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 disabled:opacity-40 transition flex items-center justify-center gap-2"
+              >
+                <Radio size={18} /> Start Buzzer Round
+              </button>
             </div>
 
-            {matchMode && matchData && (
-              <div className="mb-5 p-3 bg-[#f5a623]/10 border border-[#f5a623]/20 rounded-xl text-sm text-center">
-                <span className="text-[#f5a623] font-semibold">RF Carry-Over:</span>
-                <span className="ml-2 text-blue-300">{matchData.teamA.team_name}: {rfA}</span>
-                <span className="mx-2 text-slate-500">|</span>
-                <span className="text-purple-300">{matchData.teamB.team_name}: {rfB}</span>
-              </div>
-            )}
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Team A Name</label>
-                <input
-                  value={teamAName}
-                  onChange={e => { setTeamAName(e.target.value); teamANameRef.current = e.target.value }}
-                  disabled={matchMode}
-                  className="w-full bg-[#060f1e] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400 disabled:opacity-60"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Team B Name</label>
-                <input
-                  value={teamBName}
-                  onChange={e => { setTeamBName(e.target.value); teamBNameRef.current = e.target.value }}
-                  disabled={matchMode}
-                  className="w-full bg-[#060f1e] border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-400 disabled:opacity-60"
-                />
+            {/* Quick links card */}
+            <div className="bg-[#0d1f3c] border border-white/10 rounded-2xl p-6">
+              <p className="text-xs text-slate-400 uppercase tracking-widest mb-4 text-center">Open Each Screen</p>
+              <div className="space-y-3">
+                {[
+                  {
+                    label: 'Admin Control',
+                    sublabel: 'This page — keep it here',
+                    path: '/dashboard/staff/competition/live/buzzer/',
+                    color: 'text-slate-300',
+                    border: 'border-white/20',
+                    bg: 'bg-white/5',
+                    icon: '🎛️',
+                  },
+                  {
+                    label: 'Audience Display',
+                    sublabel: 'Projector / big screen',
+                    path: '/dashboard/staff/competition/live/buzzer/display/',
+                    color: 'text-slate-300',
+                    border: 'border-white/20',
+                    bg: 'bg-white/5',
+                    icon: '📺',
+                  },
+                  {
+                    label: teamAName,
+                    sublabel: 'Team A laptop',
+                    path: '/dashboard/staff/competition/live/buzzer/team-a/',
+                    color: 'text-blue-300',
+                    border: 'border-blue-500/30',
+                    bg: 'bg-blue-500/10',
+                    icon: '🔵',
+                  },
+                  {
+                    label: teamBName,
+                    sublabel: 'Team B laptop',
+                    path: '/dashboard/staff/competition/live/buzzer/team-b/',
+                    color: 'text-purple-300',
+                    border: 'border-purple-500/30',
+                    bg: 'bg-purple-500/10',
+                    icon: '🟣',
+                  },
+                ].map(({ label, sublabel, path, color, border, bg, icon }) => {
+                  const fullUrl = typeof window !== 'undefined' ? window.location.origin + path : path
+                  const isCopied = copiedLink === path
+                  return (
+                    <div key={path} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${border} ${bg}`}>
+                      <span className="text-xl flex-shrink-0">{icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-bold ${color} truncate`}>{label}</p>
+                        <p className="text-xs text-slate-500">{sublabel}</p>
+                      </div>
+                      <button
+                        onClick={() => window.open(path, '_blank')}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-slate-300 text-xs font-semibold rounded-lg transition flex-shrink-0"
+                      >
+                        <ExternalLink size={11} /> Open
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(fullUrl).then(() => {
+                            setCopiedLink(path)
+                            setTimeout(() => setCopiedLink(null), 2000)
+                          })
+                        }}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg transition flex-shrink-0 ${
+                          isCopied
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/40'
+                            : 'bg-white/10 hover:bg-white/20 text-slate-300'
+                        }`}
+                      >
+                        <Copy size={11} /> {isCopied ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
-            <p className="text-sm text-slate-400 text-center mb-5">{questions.length} question{questions.length !== 1 ? 's' : ''} loaded</p>
-
-            {questions.length === 0 && (
-              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-400 text-center">
-                No questions found. Add questions with round_type='buzzer'.
-              </div>
-            )}
-
-            <button
-              onClick={handleStartRound}
-              disabled={questions.length === 0}
-              className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 disabled:opacity-40 transition flex items-center justify-center gap-2"
-            >
-              <Radio size={18} /> Start Buzzer Round
-            </button>
           </div>
         )}
 
