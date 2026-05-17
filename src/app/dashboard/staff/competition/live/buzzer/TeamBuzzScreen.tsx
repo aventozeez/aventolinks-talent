@@ -26,7 +26,7 @@ function defaultState(): BzLiveState {
 
 export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
   const [gameState, setGameState] = useState<BzLiveState>(defaultState())
-  const [buzzStatus, setBuzzStatus] = useState<'idle' | 'won' | 'lost'>('idle')
+  const [buzzStatus, setBuzzStatus] = useState<'idle' | 'sent'>('idle')
   const [countdown, setCountdown] = useState(10)
   const [dots, setDots] = useState('')
 
@@ -45,10 +45,8 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
     stateRef.current = s
     setGameState(s)
 
-    // Reset buzz status when a new question starts
-    if (s.phase === 'open') {
-      setBuzzStatus('idle')
-    }
+    // Reset buzz button when a new question starts
+    if (s.phase === 'open') setBuzzStatus('idle')
 
     // Timer
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
@@ -112,30 +110,15 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
 
   const handleBuzz = async () => {
     if (!channelRef.current || buzzStatus !== 'idle') return
-
+    // Mark immediately so button can't be double-tapped
+    setBuzzStatus('sent')
     try {
-      const { data } = await (supabase as any).rpc('sc_buzz_in', { p_team: team })
-      if (data === true) {
-        // Won the race — notify admin
-        await channelRef.current.send({
-          type: 'broadcast',
-          event: 'buzzed',
-          payload: { team },
-        })
-        setBuzzStatus('won')
-      } else {
-        setBuzzStatus('lost')
-        setTimeout(() => setBuzzStatus('idle'), 2000)
-      }
-    } catch {
-      // RPC not set up — broadcast anyway as fallback
       await channelRef.current.send({
         type: 'broadcast',
         event: 'buzzed',
         payload: { team },
       })
-      setBuzzStatus('won')
-    }
+    } catch { /* ignore — admin will handle via state */ }
   }
 
   const {
@@ -251,11 +234,15 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
           <div className="w-full max-w-sm flex flex-col items-center gap-4">
             <button
               onClick={handleBuzz}
-              className={`w-full py-28 ${accentBg} hover:brightness-110 active:scale-95 text-white font-black text-5xl rounded-3xl transition-all select-none`}
-              style={{ boxShadow: accentGlow }}
+              disabled={buzzStatus === 'sent'}
+              className={`w-full py-28 text-white font-black text-5xl rounded-3xl transition-all select-none
+                ${buzzStatus === 'sent'
+                  ? 'opacity-60 scale-95 cursor-not-allowed ' + accentBg
+                  : `${accentBg} hover:brightness-110 active:scale-95`}`}
+              style={{ boxShadow: buzzStatus === 'sent' ? 'none' : accentGlow }}
             >
               ⚡<br />
-              <span className="text-3xl mt-2 block">BUZZ!</span>
+              <span className="text-3xl mt-2 block">{buzzStatus === 'sent' ? 'Buzzing…' : 'BUZZ!'}</span>
             </button>
           </div>
         )}
@@ -263,27 +250,18 @@ export default function TeamBuzzScreen({ team }: { team: 'a' | 'b' }) {
         {/* ── OPEN: big buzz button ── */}
         {phase === 'open' && (
           <div className="w-full max-w-sm flex flex-col items-center gap-4">
-            {buzzStatus === 'won' ? (
-              <div className={`w-full py-20 rounded-3xl border-4 ${accentBorder} ${accentBgLight} text-center`}>
-                <div className="text-6xl mb-4">⚡</div>
-                <p className={`text-4xl font-black ${accentText}`}>YOU BUZZED IN!</p>
-                <p className="text-slate-300 mt-2 text-lg">Speak your answer now</p>
-              </div>
-            ) : buzzStatus === 'lost' ? (
-              <div className="w-full py-20 rounded-3xl border-2 border-red-400/40 bg-red-500/10 text-center">
-                <div className="text-5xl mb-3">😅</div>
-                <p className="text-3xl font-bold text-red-400">Too slow!</p>
-              </div>
-            ) : (
-              <button
-                onClick={handleBuzz}
-                className={`w-full py-28 ${accentBg} hover:brightness-110 active:scale-95 text-white font-black text-5xl rounded-3xl transition-all select-none`}
-                style={{ boxShadow: accentGlow }}
-              >
-                ⚡<br />
-                <span className="text-3xl mt-2 block">BUZZ!</span>
-              </button>
-            )}
+            <button
+              onClick={handleBuzz}
+              disabled={buzzStatus === 'sent'}
+              className={`w-full py-28 text-white font-black text-5xl rounded-3xl transition-all select-none
+                ${buzzStatus === 'sent'
+                  ? 'opacity-60 scale-95 cursor-not-allowed ' + accentBg
+                  : `${accentBg} hover:brightness-110 active:scale-95`}`}
+              style={{ boxShadow: buzzStatus === 'sent' ? 'none' : accentGlow }}
+            >
+              ⚡<br />
+              <span className="text-3xl mt-2 block">{buzzStatus === 'sent' ? 'Buzzing…' : 'BUZZ!'}</span>
+            </button>
           </div>
         )}
 
