@@ -30,6 +30,7 @@ import {
   Loader2,
   Shuffle,
   GraduationCap,
+  Copy,
 } from "lucide-react";
 import DrawBracket from "./DrawBracket";
 
@@ -1586,6 +1587,37 @@ function PoolManager({
 // MATCH SETUP TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const _BASE = '/dashboard/staff/competition/live'
+const SCREEN_ROUNDS = [
+  {
+    title: 'Rapid Fire Round', emoji: '⚡',
+    links: [
+      { label: 'Admin Control',    icon: '🎛️', path: `${_BASE}/rapid-fire/`,         color: 'slate'  },
+      { label: 'Audience Display', icon: '📺', path: `${_BASE}/rapid-fire/display/`, color: 'slate'  },
+      { label: 'Team A Screen',    icon: '🔵', path: `${_BASE}/rapid-fire/display/`, color: 'blue'   },
+      { label: 'Team B Screen',    icon: '🟣', path: `${_BASE}/rapid-fire/display/`, color: 'purple' },
+    ],
+  },
+  {
+    title: 'Buzzer Round', emoji: '🔔',
+    links: [
+      { label: 'Admin Control',    icon: '🎛️', path: `${_BASE}/buzzer/`,          color: 'slate'  },
+      { label: 'Audience Display', icon: '📺', path: `${_BASE}/buzzer/display/`,   color: 'slate'  },
+      { label: 'Team A Screen',    icon: '🔵', path: `${_BASE}/buzzer/team-a/`,    color: 'blue'   },
+      { label: 'Team B Screen',    icon: '🟣', path: `${_BASE}/buzzer/team-b/`,    color: 'purple' },
+    ],
+  },
+  {
+    title: 'Innovation Sprint', emoji: '💡',
+    links: [
+      { label: 'Admin Control',    icon: '🎛️', path: `${_BASE}/sprint/`,          color: 'slate'  },
+      { label: 'Audience Display', icon: '📺', path: `${_BASE}/sprint/display/`,   color: 'slate'  },
+      { label: 'Team A Screen',    icon: '🔵', path: `${_BASE}/sprint/team-a/`,    color: 'blue'   },
+      { label: 'Team B Screen',    icon: '🟣', path: `${_BASE}/sprint/team-b/`,    color: 'purple' },
+    ],
+  },
+]
+
 function MatchSetupTab({
   toast,
   router,
@@ -1606,6 +1638,15 @@ function MatchSetupTab({
   const [bzSetId, setBzSetId] = useState("");
   const [spSetId, setSpSetId] = useState("");
   const [launching, setLaunching] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copyLink = (path: string, key: string) => {
+    const url = typeof window !== 'undefined' ? window.location.origin + path : path;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    });
+  };
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -1774,6 +1815,58 @@ function MatchSetupTab({
             Next →
           </button>
         </div>
+
+        {/* ── Screen Links Panel ── */}
+        <div className="mt-5 bg-[#0a1628] border border-white/10 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/10 flex items-center gap-2">
+            <span className="text-base">📺</span>
+            <div>
+              <p className="text-sm font-semibold text-white">Screen Links</p>
+              <p className="text-xs text-slate-500">Copy each link and open on the correct device before starting</p>
+            </div>
+          </div>
+
+          {SCREEN_ROUNDS.map((round) => (
+            <div key={round.title} className="px-5 py-3 border-b border-white/5 last:border-0">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                {round.emoji} {round.title}
+              </p>
+              <div className="space-y-1.5">
+                {round.links.map((link) => {
+                  const key = round.title + link.label;
+                  const isCopied = copiedKey === key;
+                  const tc =
+                    link.color === 'blue'   ? 'text-blue-300'   :
+                    link.color === 'purple' ? 'text-purple-300' : 'text-slate-300';
+                  return (
+                    <div key={link.label} className="flex items-center gap-2.5 bg-white/5 rounded-lg px-3 py-2">
+                      <span className="text-sm w-5 text-center flex-shrink-0">{link.icon}</span>
+                      <span className={`flex-1 text-xs font-medium truncate ${tc}`}>{link.label}</span>
+                      <button
+                        onClick={() => copyLink(link.path, key)}
+                        className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg transition flex-shrink-0 ${
+                          isCopied
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/40'
+                            : 'bg-white/10 hover:bg-white/20 text-slate-300'
+                        }`}
+                      >
+                        {isCopied
+                          ? <><Check size={10} /> Copied!</>
+                          : <><Copy size={10} /> Copy</>}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <div className="px-5 py-2.5 bg-white/[0.02]">
+            <p className="text-xs text-slate-600 text-center">
+              In Rapid Fire, Team A &amp; B screens show the same view as the Audience display
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Step 2 — Configure Rounds */}
@@ -1874,16 +1967,6 @@ function MatchSetupTab({
                 ))}
               </select>
             )}
-          </div>
-
-          {/* Screen links shortcut */}
-          <div className="pt-2 px-1">
-            <button
-              onClick={() => router.push('/dashboard/staff/competition/live/screens')}
-              className="w-full py-2.5 border border-white/15 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-slate-300 flex items-center justify-center gap-2 transition"
-            >
-              📺 View All Screen Links (set up devices first)
-            </button>
           </div>
 
           <div className="flex gap-3 pt-1">
