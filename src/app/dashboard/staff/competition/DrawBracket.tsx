@@ -42,6 +42,18 @@ export type TournamentState = {
   gfWinnerIdx:   number | null
 }
 
+// ── 8 distinct match colours (same palette as live-draw display) ──────────────
+const MATCH_COLORS = [
+  { solid: '#ef4444', bg: 'rgba(239,68,68,0.13)',   border: 'rgba(239,68,68,0.45)',   glow: 'rgba(239,68,68,0.35)'   },
+  { solid: '#f97316', bg: 'rgba(249,115,22,0.13)',  border: 'rgba(249,115,22,0.45)',  glow: 'rgba(249,115,22,0.35)'  },
+  { solid: '#eab308', bg: 'rgba(234,179,8,0.13)',   border: 'rgba(234,179,8,0.45)',   glow: 'rgba(234,179,8,0.35)'   },
+  { solid: '#22c55e', bg: 'rgba(34,197,94,0.13)',   border: 'rgba(34,197,94,0.45)',   glow: 'rgba(34,197,94,0.35)'   },
+  { solid: '#14b8a6', bg: 'rgba(20,184,166,0.13)',  border: 'rgba(20,184,166,0.45)',  glow: 'rgba(20,184,166,0.35)'  },
+  { solid: '#3b82f6', bg: 'rgba(59,130,246,0.13)',  border: 'rgba(59,130,246,0.45)',  glow: 'rgba(59,130,246,0.35)'  },
+  { solid: '#a855f7', bg: 'rgba(168,85,247,0.13)',  border: 'rgba(168,85,247,0.45)',  glow: 'rgba(168,85,247,0.35)'  },
+  { solid: '#ec4899', bg: 'rgba(236,72,153,0.13)',  border: 'rgba(236,72,153,0.45)',  glow: 'rgba(236,72,153,0.35)'  },
+]
+
 export function blankState(): TournamentState {
   return {
     phase: 'setup',
@@ -266,13 +278,22 @@ export default function DrawBracket({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {Array.from({length:16},(_,i)=>{
               const s=ts.slots[i]; const revealed=i<revealCount; const isActive=i===revealCount-1
+              const dmc = MATCH_COLORS[Math.floor(i/2)]
               return (
-                <div key={i} className={`rounded-xl p-3 border transition-all duration-300 ${isActive?'bg-[#f5a623]/20 border-[#f5a623] shadow-lg shadow-[#f5a623]/20':revealed?'bg-[#0a1628] border-white/20':'bg-[#0a1628]/40 border-white/5'}`}
-                  style={{transform:isActive?'scale(1.05)':'scale(1)',transition:'all 0.3s ease'}}>
-                  <div className="text-[10px] text-slate-500 mb-0.5">#{i+1} · M{Math.floor(i/2)+1}{i%2===0?'A':'B'}</div>
+                <div key={i} className="rounded-xl p-3 border transition-all duration-300"
+                  style={{
+                    transform: isActive ? 'scale(1.05)' : 'scale(1)',
+                    transition: 'all 0.3s ease',
+                    background: isActive ? dmc.bg : revealed ? 'rgba(10,22,40,0.9)' : 'rgba(10,22,40,0.4)',
+                    borderColor: isActive ? dmc.solid : revealed ? dmc.border : 'rgba(255,255,255,0.05)',
+                    boxShadow: isActive ? `0 0 20px ${dmc.glow}` : revealed ? `0 0 4px ${dmc.glow}` : 'none',
+                  }}>
+                  <div className="text-[10px] font-bold mb-0.5" style={{ color: dmc.solid }}>
+                    #{i+1} · M{Math.floor(i/2)+1}{i%2===0?'A':'B'}
+                  </div>
                   {revealed&&s ? (
-                    <p className={`font-bold text-sm leading-tight ${isActive?'text-[#f5a623]':'text-white'}`}>{s.teamName}</p>
-                  ) : <p className="text-slate-600 text-lg font-black">?</p>}
+                    <p className="font-bold text-sm leading-tight text-white">{s.teamName}</p>
+                  ) : <p className="text-lg font-black" style={{ color: dmc.border }}>?</p>}
                 </div>
               )
             })}
@@ -297,7 +318,7 @@ export default function DrawBracket({
             <div className="grid gap-1" style={{gridTemplateRows:'repeat(8,1fr)'}}>
               {Array.from({length:8},(_,m)=>{
                 const [a,b]=r16p(m)
-                return <MCard key={m} label={`M${m+1}`} teamA={a} teamB={b} result={ts.r16[m]} onClick={()=>openModal('r16',m)} canClick={!!a&&!!b}/>
+                return <MCard key={m} label={`M${m+1}`} teamA={a} teamB={b} result={ts.r16[m]} onClick={()=>openModal('r16',m)} canClick={!!a&&!!b} colorIdx={m}/>
               })}
             </div>
 
@@ -432,20 +453,28 @@ export default function DrawBracket({
 
 // ─── Compact Match Card ───────────────────────────────────────────────────────
 
-function MCard({ label, teamA, teamB, result, onClick, canClick }: {
+function MCard({ label, teamA, teamB, result, onClick, canClick, colorIdx }: {
   label: string; teamA: DrawSlot|null; teamB: DrawSlot|null
   result: MatchResult|null; onClick: ()=>void; canClick: boolean
+  colorIdx?: number
 }) {
+  const mc = colorIdx !== undefined ? MATCH_COLORS[colorIdx] : null
   const winA=result?.winnerIdx===0, winB=result?.winnerIdx===1
   return (
     <button onClick={canClick?onClick:undefined} disabled={!canClick}
+      style={mc ? {
+        borderColor: mc.border,
+        background: result ? mc.bg : 'rgba(10,22,40,0.85)',
+        boxShadow: `0 0 6px ${mc.glow}`,
+      } : {}}
       className={`w-full h-full text-left rounded-lg border px-2 py-1.5 flex flex-col justify-center transition-all ${
-        result?'border-[#f5a623]/30 bg-[#f5a623]/5 hover:bg-[#f5a623]/10 cursor-pointer'
-        :canClick?'border-white/15 bg-[#0a1628] hover:border-[#f5a623]/40 cursor-pointer'
+        mc ? (canClick ? 'cursor-pointer hover:brightness-110' : 'cursor-default')
+        : result?'border-[#f5a623]/30 bg-[#f5a623]/5 hover:bg-[#f5a623]/10 cursor-pointer'
+        : canClick?'border-white/15 bg-[#0a1628] hover:border-[#f5a623]/40 cursor-pointer'
         :'border-white/5 bg-[#0a1628]/50 cursor-default'}`}>
-      <p className="text-[8px] text-slate-600 font-mono font-bold mb-1">{label}</p>
+      <p className="text-[8px] font-mono font-bold mb-1" style={{ color: mc ? mc.solid : 'rgb(71,85,105)' }}>{label}</p>
       <TRow team={teamA} isWinner={winA} isLoser={winB} score={result?.scoreA}/>
-      <div className="h-px bg-white/5 my-0.5"/>
+      <div className="h-px my-0.5" style={{ background: mc ? mc.border : 'rgba(255,255,255,0.05)' }}/>
       <TRow team={teamB} isWinner={winB} isLoser={winA} score={result?.scoreB}/>
     </button>
   )
