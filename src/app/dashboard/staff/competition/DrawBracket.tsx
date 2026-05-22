@@ -496,9 +496,9 @@ function MCard({ label, teamA, teamB, result, onClick, canClick, colorIdx }: {
       } : {}}
       className={`w-full h-full text-left rounded-lg border px-2 py-1.5 flex flex-col justify-center transition-all ${
         mc ? (canClick ? 'cursor-pointer hover:brightness-125' : 'cursor-default')
-        : result?'border-[#f5a623]/40 bg-[#f5a623]/8 hover:bg-[#f5a623]/12 cursor-pointer'
-        : canClick?'border-slate-500/50 bg-slate-800/25 hover:border-[#f5a623]/50 cursor-pointer'
-        :'border-slate-600/30 bg-slate-800/15 cursor-default'}`}>
+        : result?'border-[#f5a623]/50 bg-[#131e30] hover:bg-[#1a2840] cursor-pointer'
+        : canClick?'border-slate-400/50 bg-[#0d1a2e] hover:border-[#f5a623]/60 cursor-pointer'
+        :'border-slate-600/35 bg-[#0b1625] cursor-default'}`}>
       <p className="text-[8px] font-bold mb-1 uppercase tracking-wider" style={{ color: mc ? mc.solid : 'rgb(148,163,184)' }}>{label}</p>
       <TRow team={teamA} isWinner={winA} isLoser={winB} score={result?.scoreA}/>
       <div className="h-px my-0.5" style={{ background: mc ? mc.solid : 'rgba(255,255,255,0.12)', opacity: mc ? 0.3 : 1 }}/>
