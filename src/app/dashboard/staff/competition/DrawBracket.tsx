@@ -314,24 +314,50 @@ export default function DrawBracket({
           {/* The bracket grid — all columns share the same height so rows align */}
           <div className="grid gap-1.5 h-full" style={{gridTemplateColumns:'1fr 1fr 1fr 175px 170px'}}>
 
-            {/* R16 — 8 equal rows */}
-            <div className="grid gap-1" style={{gridTemplateRows:'repeat(8,1fr)'}}>
-              {Array.from({length:8},(_,m)=>{
-                const [a,b]=r16p(m)
-                return <MCard key={m} label={`M${m+1}`} teamA={a} teamB={b} result={ts.r16[m]} onClick={()=>openModal('r16',m)} canClick={!!a&&!!b} colorIdx={m}/>
+            {/* R16 — 4 pair groups, each pair connected by a bracket arm */}
+            <div className="flex flex-col gap-1 h-full">
+              {Array.from({length:4},(_,g)=>{
+                const m1=g*2, m2=g*2+1
+                const [a1,b1]=r16p(m1); const [a2,b2]=r16p(m2)
+                return (
+                  <div key={g} className="flex flex-1" style={{minHeight:0}}>
+                    <div className="flex flex-col flex-1 gap-0.5" style={{minHeight:0}}>
+                      <MCard label={`M${m1+1}`} teamA={a1} teamB={b1} result={ts.r16[m1]} onClick={()=>openModal('r16',m1)} canClick={!!a1&&!!b1} colorIdx={m1}/>
+                      <MCard label={`M${m2+1}`} teamA={a2} teamB={b2} result={ts.r16[m2]} onClick={()=>openModal('r16',m2)} canClick={!!a2&&!!b2} colorIdx={m2}/>
+                    </div>
+                    {/* Bracket arm: vertical bar + horizontal tick at midpoint */}
+                    <div className="relative" style={{width:8,flexShrink:0}}>
+                      <div className="absolute" style={{top:'25%',bottom:'25%',left:0,width:'1.5px',background:'rgba(255,255,255,0.2)'}}/>
+                      <div className="absolute" style={{top:'50%',left:0,right:0,height:'1.5px',background:'rgba(255,255,255,0.2)',transform:'translateY(-50%)'}}/>
+                    </div>
+                  </div>
+                )
               })}
             </div>
 
-            {/* QF — 4 equal rows */}
-            <div className="grid gap-1" style={{gridTemplateRows:'repeat(4,1fr)'}}>
-              {Array.from({length:4},(_,m)=>{
-                const [a,b]=qfp(m)
-                return <MCard key={m} label={`QF${m+1}`} teamA={a} teamB={b} result={ts.qf[m]} onClick={()=>openModal('qf',m)} canClick={!!a&&!!b}/>
+            {/* QF — 2 pair groups, each pair connected by a bracket arm */}
+            <div className="flex flex-col gap-1 h-full">
+              {Array.from({length:2},(_,g)=>{
+                const m1=g*2, m2=g*2+1
+                const [a1,b1]=qfp(m1); const [a2,b2]=qfp(m2)
+                return (
+                  <div key={g} className="flex flex-1" style={{minHeight:0}}>
+                    <div className="flex flex-col flex-1 gap-0.5" style={{minHeight:0}}>
+                      <MCard label={`QF${m1+1}`} teamA={a1} teamB={b1} result={ts.qf[m1]} onClick={()=>openModal('qf',m1)} canClick={!!a1&&!!b1}/>
+                      <MCard label={`QF${m2+1}`} teamA={a2} teamB={b2} result={ts.qf[m2]} onClick={()=>openModal('qf',m2)} canClick={!!a2&&!!b2}/>
+                    </div>
+                    {/* Bracket arm */}
+                    <div className="relative" style={{width:8,flexShrink:0}}>
+                      <div className="absolute" style={{top:'25%',bottom:'25%',left:0,width:'1.5px',background:'rgba(255,255,255,0.18)'}}/>
+                      <div className="absolute" style={{top:'50%',left:0,right:0,height:'1.5px',background:'rgba(255,255,255,0.18)',transform:'translateY(-50%)'}}/>
+                    </div>
+                  </div>
+                )
               })}
             </div>
 
             {/* SF — 2 equal rows */}
-            <div className="grid gap-1" style={{gridTemplateRows:'repeat(2,1fr)'}}>
+            <div className="flex flex-col gap-1 h-full">
               {[0,1].map(m=>{
                 const [a,b]=sfp(m)
                 return <MCard key={m} label={`SF${m+1}`} teamA={a} teamB={b} result={ts.sf[m]} onClick={()=>openModal('sf',m)} canClick={!!a&&!!b}/>
@@ -470,12 +496,12 @@ function MCard({ label, teamA, teamB, result, onClick, canClick, colorIdx }: {
       } : {}}
       className={`w-full h-full text-left rounded-lg border px-2 py-1.5 flex flex-col justify-center transition-all ${
         mc ? (canClick ? 'cursor-pointer hover:brightness-125' : 'cursor-default')
-        : result?'border-[#f5a623]/30 bg-[#f5a623]/5 hover:bg-[#f5a623]/10 cursor-pointer'
-        : canClick?'border-white/15 bg-[#0a1628] hover:border-[#f5a623]/40 cursor-pointer'
-        :'border-white/5 bg-[#0a1628]/50 cursor-default'}`}>
-      <p className="text-[8px] font-bold mb-1 uppercase tracking-wider" style={{ color: mc ? mc.solid : 'rgb(71,85,105)' }}>{label}</p>
+        : result?'border-[#f5a623]/40 bg-[#f5a623]/8 hover:bg-[#f5a623]/12 cursor-pointer'
+        : canClick?'border-slate-500/50 bg-slate-800/25 hover:border-[#f5a623]/50 cursor-pointer'
+        :'border-slate-600/30 bg-slate-800/15 cursor-default'}`}>
+      <p className="text-[8px] font-bold mb-1 uppercase tracking-wider" style={{ color: mc ? mc.solid : 'rgb(148,163,184)' }}>{label}</p>
       <TRow team={teamA} isWinner={winA} isLoser={winB} score={result?.scoreA}/>
-      <div className="h-px my-0.5" style={{ background: mc ? mc.solid : 'rgba(255,255,255,0.05)', opacity: mc ? 0.3 : 1 }}/>
+      <div className="h-px my-0.5" style={{ background: mc ? mc.solid : 'rgba(255,255,255,0.12)', opacity: mc ? 0.3 : 1 }}/>
       <TRow team={teamB} isWinner={winB} isLoser={winA} score={result?.scoreB}/>
     </button>
   )
@@ -484,8 +510,8 @@ function MCard({ label, teamA, teamB, result, onClick, canClick, colorIdx }: {
 function TRow({ team, isWinner, isLoser, score }: { team: DrawSlot|null; isWinner: boolean; isLoser: boolean; score?: string }) {
   return (
     <div className={`flex items-center justify-between px-0.5 rounded-sm ${isWinner?'bg-[#f5a623]/15':''}`}>
-      <p className={`text-[11px] font-semibold truncate max-w-[85px] ${isWinner?'text-[#f5a623]':isLoser?'text-slate-600 line-through':team?'text-slate-200':'text-slate-700 italic'}`}>
-        {team?.teamName??'—'}
+      <p className={`text-[11px] font-semibold truncate max-w-[85px] ${isWinner?'text-[#f5a623]':isLoser?'text-slate-600 line-through':team?'text-slate-200':'text-slate-500 italic'}`}>
+        {team?.teamName??'TBD'}
       </p>
       <div className="flex items-center gap-0.5 shrink-0 ml-0.5">
         {score&&<span className="text-[9px] text-slate-500">{score}</span>}
