@@ -302,143 +302,164 @@ export default function DrawBracket({
       )}
 
       {/* ══════════════════ BRACKET ══════════════════ */}
-      {ts.phase==='bracket' && (
-        <div className="flex-1 min-h-0">
-          {/* Column labels */}
-          <div className="grid gap-1.5 mb-1.5 shrink-0" style={{gridTemplateColumns:'1fr 1fr 1fr 175px 170px'}}>
-            {['Round of 16','Quarter Finals','Semi Finals','3-Team Final','Grand Final'].map(l=>(
-              <div key={l} className="text-center"><span className="text-[10px] font-bold text-[#f5a623] uppercase tracking-widest">{l}</span></div>
-            ))}
-          </div>
+      {ts.phase==='bracket' && (()=>{
+        // ── Layout constants (mirrors the presentation HTML) ──────────────────
+        const STP=76, CH=64, BH=8*STP  // step, card-height, bracket-height = 608
+        const R16W=175
+        const QFL=R16W+22,  QFW=155
+        const SFL=QFL+QFW+22, SFW=145
+        const TFL=SFL+SFW+22, TFW=200
+        const GFL=TFL+TFW+18, GFW=178
+        const TW=GFL+GFW  // total canvas width ≈ 961
 
-          {/* The bracket grid — all columns share the same height so rows align */}
-          <div className="grid gap-1.5 h-full" style={{gridTemplateColumns:'1fr 1fr 1fr 175px 170px'}}>
+        // vertical centre of each card by column
+        const r16Y=(m:number)=>m*STP+STP/2
+        const qfY =(m:number)=>(2*m+1)*STP
+        const sfY =(m:number)=>(4*m+2)*STP
+        const tf3Y=(sfY(0)+sfY(1))/2  // 304
 
-            {/* R16 — 4 pair groups, each pair connected by a bracket arm */}
-            <div className="flex flex-col gap-1 h-full">
-              {Array.from({length:4},(_,g)=>{
-                const m1=g*2, m2=g*2+1
-                const [a1,b1]=r16p(m1); const [a2,b2]=r16p(m2)
+        return (
+          <div className="flex-1 min-h-0 overflow-auto pb-2">
+
+            {/* Column labels — absolutely aligned to card columns */}
+            <div className="relative mb-2 shrink-0" style={{height:18, minWidth:TW}}>
+              {([
+                {txt:'Round of 16',  cx:R16W/2,        col:'#f5a623'},
+                {txt:'Quarter Finals',cx:QFL+QFW/2,    col:'#94a3b8'},
+                {txt:'Semi Finals',  cx:SFL+SFW/2,     col:'#94a3b8'},
+                {txt:'3-Team Final', cx:TFL+TFW/2,     col:'#a78bfa'},
+                {txt:'Grand Final',  cx:GFL+GFW/2,     col:'#f5a623'},
+              ] as const).map(({txt,cx,col})=>(
+                <span key={txt} className="absolute top-0 text-[10px] font-bold uppercase tracking-widest whitespace-nowrap"
+                  style={{left:cx, transform:'translateX(-50%)', color:col}}>{txt}</span>
+              ))}
+            </div>
+
+            {/* ── Fixed-pixel bracket canvas ── */}
+            <div className="relative" style={{width:TW, height:BH}}>
+
+              {/* SVG connector lines */}
+              <svg className="absolute inset-0 pointer-events-none" width={TW} height={BH}>
+                {/* R16 → QF bracket arms (coloured by the first match of each pair) */}
+                {Array.from({length:4},(_,g)=>{
+                  const ty=r16Y(2*g), by=r16Y(2*g+1), my=qfY(g), bx=R16W+11
+                  const {border:col}=MATCH_COLORS[2*g]
+                  return <path key={g} d={`M${R16W},${ty} H${bx} V${by} H${R16W} M${bx},${my} H${QFL}`} stroke={col} strokeWidth="1.5" fill="none"/>
+                })}
+                {/* QF → SF bracket arms */}
+                {Array.from({length:2},(_,g)=>{
+                  const ty=qfY(2*g), by=qfY(2*g+1), my=sfY(g), bx=QFL+QFW+11
+                  return <path key={g} d={`M${QFL+QFW},${ty} H${bx} V${by} H${QFL+QFW} M${bx},${my} H${SFL}`} stroke="rgba(100,116,139,0.55)" strokeWidth="1.5" fill="none"/>
+                })}
+                {/* SF → 3TF bracket arm */}
+                {(()=>{
+                  const ty=sfY(0), by=sfY(1), bx=SFL+SFW+11
+                  return <path d={`M${SFL+SFW},${ty} H${bx} V${by} H${SFL+SFW} M${bx},${tf3Y} H${TFL}`} stroke="rgba(124,58,237,0.5)" strokeWidth="1.5" fill="none"/>
+                })()}
+                {/* 3TF → GF */}
+                <line x1={TFL+TFW} y1={tf3Y} x2={GFL} y2={tf3Y} stroke="rgba(245,166,35,0.5)" strokeWidth="1.5"/>
+              </svg>
+
+              {/* ── R16 — 8 compact cards, each centred in its row slot ── */}
+              {Array.from({length:8},(_,m)=>{
+                const [a,b]=r16p(m)
                 return (
-                  <div key={g} className="flex flex-1" style={{minHeight:0}}>
-                    <div className="flex flex-col flex-1 gap-0.5" style={{minHeight:0}}>
-                      <MCard label={`M${m1+1}`} teamA={a1} teamB={b1} result={ts.r16[m1]} onClick={()=>openModal('r16',m1)} canClick={!!a1&&!!b1} colorIdx={m1}/>
-                      <MCard label={`M${m2+1}`} teamA={a2} teamB={b2} result={ts.r16[m2]} onClick={()=>openModal('r16',m2)} canClick={!!a2&&!!b2} colorIdx={m2}/>
-                    </div>
-                    {/* Bracket arm: vertical bar + horizontal tick at midpoint */}
-                    <div className="relative" style={{width:8,flexShrink:0}}>
-                      <div className="absolute" style={{top:'25%',bottom:'25%',left:0,width:'1.5px',background:'rgba(255,255,255,0.2)'}}/>
-                      <div className="absolute" style={{top:'50%',left:0,right:0,height:'1.5px',background:'rgba(255,255,255,0.2)',transform:'translateY(-50%)'}}/>
-                    </div>
+                  <div key={m} className="absolute" style={{top:m*STP+Math.round((STP-CH)/2), left:0, width:R16W, height:CH}}>
+                    <MCard label={`M${m+1}`} teamA={a} teamB={b} result={ts.r16[m]} onClick={()=>openModal('r16',m)} canClick={!!a&&!!b} colorIdx={m}/>
                   </div>
                 )
               })}
-            </div>
 
-            {/* QF — 2 pair groups, each pair connected by a bracket arm */}
-            <div className="flex flex-col gap-1 h-full">
-              {Array.from({length:2},(_,g)=>{
-                const m1=g*2, m2=g*2+1
-                const [a1,b1]=qfp(m1); const [a2,b2]=qfp(m2)
+              {/* ── QF — 4 cards, each centred at the midpoint of its R16 pair ── */}
+              {Array.from({length:4},(_,m)=>{
+                const [a,b]=qfp(m)
                 return (
-                  <div key={g} className="flex flex-1" style={{minHeight:0}}>
-                    <div className="flex flex-col flex-1 gap-0.5" style={{minHeight:0}}>
-                      <MCard label={`QF${m1+1}`} teamA={a1} teamB={b1} result={ts.qf[m1]} onClick={()=>openModal('qf',m1)} canClick={!!a1&&!!b1}/>
-                      <MCard label={`QF${m2+1}`} teamA={a2} teamB={b2} result={ts.qf[m2]} onClick={()=>openModal('qf',m2)} canClick={!!a2&&!!b2}/>
-                    </div>
-                    {/* Bracket arm */}
-                    <div className="relative" style={{width:8,flexShrink:0}}>
-                      <div className="absolute" style={{top:'25%',bottom:'25%',left:0,width:'1.5px',background:'rgba(255,255,255,0.18)'}}/>
-                      <div className="absolute" style={{top:'50%',left:0,right:0,height:'1.5px',background:'rgba(255,255,255,0.18)',transform:'translateY(-50%)'}}/>
-                    </div>
+                  <div key={m} className="absolute" style={{top:qfY(m)-Math.round(CH/2), left:QFL, width:QFW, height:CH}}>
+                    <MCard label={`QF${m+1}`} teamA={a} teamB={b} result={ts.qf[m]} onClick={()=>openModal('qf',m)} canClick={!!a&&!!b}/>
                   </div>
                 )
               })}
-            </div>
 
-            {/* SF — 2 equal rows */}
-            <div className="flex flex-col gap-1 h-full">
+              {/* ── SF — 2 cards ── */}
               {[0,1].map(m=>{
                 const [a,b]=sfp(m)
-                return <MCard key={m} label={`SF${m+1}`} teamA={a} teamB={b} result={ts.sf[m]} onClick={()=>openModal('sf',m)} canClick={!!a&&!!b}/>
-              })}
-            </div>
-
-            {/* 3-Team Final */}
-            <div className="flex items-center">
-              <div className="w-full bg-[#0a1628] border-2 border-purple-500/40 rounded-xl p-3 flex flex-col gap-2">
-                <p className="text-[9px] font-bold text-purple-400 text-center uppercase tracking-widest">3-Team Final</p>
-
-                {f3().map((team,i)=>{
-                  const isThird=ts.final3ThirdIdx===i
-                  const isFinalist=ts.final3ThirdIdx!==null&&ts.final3ThirdIdx!==i
-                  return (
-                    <div key={i} className={`p-2 rounded-lg border text-[11px] ${isThird?'border-orange-500/40 bg-orange-500/10':isFinalist?'border-[#f5a623]/40 bg-[#f5a623]/10':'border-white/10 bg-[#0d1f3c]'}`}>
-                      {i===2&&<span className="text-[9px] text-blue-400 font-bold block">★ BEST LOSER</span>}
-                      <div className="flex items-center justify-between">
-                        <p className={`font-semibold truncate ${team?isThird?'text-orange-300':isFinalist?'text-[#f5a623]':'text-white':'text-slate-600 italic'}`}>
-                          {team?team.teamName:i===2?'TBD':'TBD'}
-                        </p>
-                        {isThird&&<span className="text-xs">🥉</span>}
-                        {isFinalist&&<span className="text-xs">🏅</span>}
-                      </div>
-                    </div>
-                  )
-                })}
-
-                {/* Best loser picker */}
-                {ts.sf[0]&&ts.sf[1]&&ts.bestLoserSFIdx===null&&(
-                  <div className="border-t border-white/10 pt-2">
-                    <p className="text-[9px] text-slate-400 mb-1.5 text-center">Pick best SF loser:</p>
-                    <div className="flex flex-col gap-1">
-                      {[0,1].map(si=>{const l=sfl(si);return l?(<button key={si} onClick={()=>persist({...ts,bestLoserSFIdx:si})} className="text-[10px] px-2 py-1 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 truncate">{l.teamName}</button>):null})}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3rd place picker */}
-                {ts.bestLoserSFIdx!==null&&ts.final3ThirdIdx===null&&(
-                  <div className="border-t border-white/10 pt-2">
-                    <p className="text-[9px] text-slate-400 mb-1.5 text-center">Who finishes 3rd?</p>
-                    <div className="flex flex-col gap-1">
-                      {f3().map((team,i)=>team?(<button key={i} onClick={()=>persist({...ts,final3ThirdIdx:i})} className="text-[10px] px-2 py-1 bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded-lg hover:bg-orange-500/30 truncate">🥉 {team.teamName}</button>):null)}
-                    </div>
-                  </div>
-                )}
-
-                {ts.final3ThirdIdx!==null&&(
-                  <button onClick={()=>persist({...ts,final3ThirdIdx:null,gfWinnerIdx:null})} className="text-[9px] text-slate-600 hover:text-slate-400 text-center py-0.5">↩ Change 3rd</button>
-                )}
-              </div>
-            </div>
-
-            {/* Grand Final */}
-            <div className="flex items-center">
-              {(()=>{
-                const [a,b]=gfPair(); const champ=champion()
                 return (
-                  <div className="w-full bg-[#0a1628] border-2 border-[#f5a623]/60 rounded-xl p-3 shadow-lg shadow-[#f5a623]/10">
-                    <p className="text-[9px] font-bold text-[#f5a623] text-center uppercase tracking-widest mb-2 flex items-center justify-center gap-1">
-                      <Trophy size={10}/> Grand Final
-                    </p>
-                    {champ ? (
-                      <div className="text-center">
-                        <div className="text-3xl mb-1">🏆</div>
-                        <p className="font-black text-[#f5a623] text-sm leading-tight">{champ.teamName}</p>
-                        <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-0.5">Champion</p>
-                        {/* mentor name intentionally hidden until Unveil Mentors */}
-                        <button onClick={()=>{if(a&&b)openModal('gf',0)}} className="mt-1.5 text-[9px] text-slate-600 hover:text-slate-400">↩ Change</button>
-                      </div>
-                    ) : (
-                      <MCard label="Final" teamA={a} teamB={b} result={null} onClick={()=>openModal('gf',0)} canClick={!!a&&!!b}/>
-                    )}
+                  <div key={m} className="absolute" style={{top:sfY(m)-Math.round(CH/2), left:SFL, width:SFW, height:CH}}>
+                    <MCard label={`SF${m+1}`} teamA={a} teamB={b} result={ts.sf[m]} onClick={()=>openModal('sf',m)} canClick={!!a&&!!b}/>
                   </div>
                 )
-              })()}
-            </div>
+              })}
+
+              {/* ── 3-Team Final ── */}
+              <div className="absolute" style={{top:tf3Y-110, left:TFL, width:TFW}}>
+                <div className="bg-[#0a1628] border-2 border-purple-500/40 rounded-xl p-3 flex flex-col gap-2">
+                  <p className="text-[9px] font-bold text-purple-400 text-center uppercase tracking-widest">3-Team Final</p>
+                  {f3().map((team,i)=>{
+                    const isThird=ts.final3ThirdIdx===i
+                    const isFinalist=ts.final3ThirdIdx!==null&&ts.final3ThirdIdx!==i
+                    return (
+                      <div key={i} className={`p-2 rounded-lg border text-[11px] ${isThird?'border-orange-500/40 bg-orange-500/10':isFinalist?'border-[#f5a623]/40 bg-[#f5a623]/10':'border-white/10 bg-[#0d1f3c]'}`}>
+                        {i===2&&<span className="text-[9px] text-blue-400 font-bold block">★ BEST LOSER</span>}
+                        <div className="flex items-center justify-between">
+                          <p className={`font-semibold truncate ${team?isThird?'text-orange-300':isFinalist?'text-[#f5a623]':'text-white':'text-slate-500 italic'}`}>
+                            {team?team.teamName:'TBD'}
+                          </p>
+                          {isThird&&<span className="text-xs">🥉</span>}
+                          {isFinalist&&<span className="text-xs">🏅</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {ts.sf[0]&&ts.sf[1]&&ts.bestLoserSFIdx===null&&(
+                    <div className="border-t border-white/10 pt-2">
+                      <p className="text-[9px] text-slate-400 mb-1.5 text-center">Pick best SF loser:</p>
+                      <div className="flex flex-col gap-1">
+                        {[0,1].map(si=>{const l=sfl(si);return l?(<button key={si} onClick={()=>persist({...ts,bestLoserSFIdx:si})} className="text-[10px] px-2 py-1 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 truncate">{l.teamName}</button>):null})}
+                      </div>
+                    </div>
+                  )}
+                  {ts.bestLoserSFIdx!==null&&ts.final3ThirdIdx===null&&(
+                    <div className="border-t border-white/10 pt-2">
+                      <p className="text-[9px] text-slate-400 mb-1.5 text-center">Who finishes 3rd?</p>
+                      <div className="flex flex-col gap-1">
+                        {f3().map((team,i)=>team?(<button key={i} onClick={()=>persist({...ts,final3ThirdIdx:i})} className="text-[10px] px-2 py-1 bg-orange-500/20 text-orange-300 border border-orange-500/30 rounded-lg hover:bg-orange-500/30 truncate">🥉 {team.teamName}</button>):null)}
+                      </div>
+                    </div>
+                  )}
+                  {ts.final3ThirdIdx!==null&&(
+                    <button onClick={()=>persist({...ts,final3ThirdIdx:null,gfWinnerIdx:null})} className="text-[9px] text-slate-600 hover:text-slate-400 text-center py-0.5">↩ Change 3rd</button>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Grand Final ── */}
+              <div className="absolute" style={{top:tf3Y-85, left:GFL, width:GFW}}>
+                {(()=>{
+                  const [a,b]=gfPair(); const champ=champion()
+                  return (
+                    <div className="bg-[#0a1628] border-2 border-[#f5a623]/60 rounded-xl p-3 shadow-lg shadow-[#f5a623]/10">
+                      <p className="text-[9px] font-bold text-[#f5a623] text-center uppercase tracking-widest mb-2 flex items-center justify-center gap-1">
+                        <Trophy size={10}/> Grand Final
+                      </p>
+                      {champ ? (
+                        <div className="text-center">
+                          <div className="text-3xl mb-1">🏆</div>
+                          <p className="font-black text-[#f5a623] text-sm leading-tight">{champ.teamName}</p>
+                          <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-0.5">Champion</p>
+                          <button onClick={()=>{if(a&&b)openModal('gf',0)}} className="mt-1.5 text-[9px] text-slate-600 hover:text-slate-400">↩ Change</button>
+                        </div>
+                      ) : (
+                        <MCard label="Final" teamA={a} teamB={b} result={null} onClick={()=>openModal('gf',0)} canClick={!!a&&!!b}/>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+
+            </div>{/* end canvas */}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ══════════════════ RESULT MODAL ══════════════════ */}
       {modal&&(
