@@ -463,18 +463,19 @@ function MCard({ label, teamA, teamB, result, onClick, canClick, colorIdx }: {
   return (
     <button onClick={canClick?onClick:undefined} disabled={!canClick}
       style={mc ? {
-        borderColor: mc.border,
-        background: result ? mc.bg : 'rgba(10,22,40,0.85)',
-        boxShadow: `0 0 6px ${mc.glow}`,
+        borderColor: mc.solid,
+        borderWidth: '1.5px',
+        background: mc.bg,
+        boxShadow: `0 0 10px ${mc.glow}, inset 0 0 12px ${mc.bg}`,
       } : {}}
       className={`w-full h-full text-left rounded-lg border px-2 py-1.5 flex flex-col justify-center transition-all ${
-        mc ? (canClick ? 'cursor-pointer hover:brightness-110' : 'cursor-default')
+        mc ? (canClick ? 'cursor-pointer hover:brightness-125' : 'cursor-default')
         : result?'border-[#f5a623]/30 bg-[#f5a623]/5 hover:bg-[#f5a623]/10 cursor-pointer'
         : canClick?'border-white/15 bg-[#0a1628] hover:border-[#f5a623]/40 cursor-pointer'
         :'border-white/5 bg-[#0a1628]/50 cursor-default'}`}>
-      <p className="text-[8px] font-mono font-bold mb-1" style={{ color: mc ? mc.solid : 'rgb(71,85,105)' }}>{label}</p>
+      <p className="text-[8px] font-bold mb-1 uppercase tracking-wider" style={{ color: mc ? mc.solid : 'rgb(71,85,105)' }}>{label}</p>
       <TRow team={teamA} isWinner={winA} isLoser={winB} score={result?.scoreA}/>
-      <div className="h-px my-0.5" style={{ background: mc ? mc.border : 'rgba(255,255,255,0.05)' }}/>
+      <div className="h-px my-0.5" style={{ background: mc ? mc.solid : 'rgba(255,255,255,0.05)', opacity: mc ? 0.3 : 1 }}/>
       <TRow team={teamB} isWinner={winB} isLoser={winA} score={result?.scoreB}/>
     </button>
   )
