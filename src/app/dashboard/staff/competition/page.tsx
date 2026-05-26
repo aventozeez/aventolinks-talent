@@ -240,6 +240,11 @@ function TeamsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
   const [students, setStudents] = useState(["", "", ""]);
   const [saving, setSaving] = useState(false);
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editTeamName, setEditTeamName] = useState("");
+  const [editSchoolName, setEditSchoolName] = useState("");
+  const [editStudents, setEditStudents] = useState(["", "", ""]);
+  const [editSaving, setEditSaving] = useState(false);
 
   const fetchTeams = useCallback(async () => {
     setLoading(true);
@@ -297,6 +302,42 @@ function TeamsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
       toast("Status updated!");
       fetchTeams();
     }
+  };
+
+  const startEditTeam = (team: Team) => {
+    setEditingTeamId(team.id);
+    setEditTeamName(team.team_name);
+    setEditSchoolName(team.school_name || "");
+    setEditStudents([team.student1 || "", team.student2 || "", team.student3 || ""]);
+    setExpandedTeam(team.id);
+  };
+
+  const cancelEditTeam = () => {
+    setEditingTeamId(null);
+  };
+
+  const saveTeamEdit = async () => {
+    if (!editTeamName.trim()) { toast("Team name is required", "err"); return; }
+    if (!editSchoolName.trim()) { toast("School name is required", "err"); return; }
+    if (editStudents.some(s => !s.trim())) { toast("All 3 student names are required", "err"); return; }
+    setEditSaving(true);
+    const { error } = await (supabase as any)
+      .from("sc_teams")
+      .update({
+        team_name:   editTeamName.trim(),
+        school_name: editSchoolName.trim(),
+        student1:    editStudents[0].trim(),
+        student2:    editStudents[1].trim(),
+        student3:    editStudents[2].trim(),
+      })
+      .eq("id", editingTeamId);
+    if (error) toast(error.message, "err");
+    else {
+      toast("Team updated!");
+      setEditingTeamId(null);
+      fetchTeams();
+    }
+    setEditSaving(false);
   };
 
   const deleteTeam = async (id: string) => {
@@ -453,84 +494,157 @@ function TeamsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 flex-wrap justify-end">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   <StatusBadge status={team.status} />
-                  {/* Expand toggle */}
+                  {/* Expand / collapse toggle */}
                   <button
-                    onClick={() => setExpandedTeam(expandedTeam === team.id ? null : team.id)}
+                    onClick={() => {
+                      if (expandedTeam === team.id) {
+                        setExpandedTeam(null);
+                        if (editingTeamId === team.id) setEditingTeamId(null);
+                      } else {
+                        setExpandedTeam(team.id);
+                      }
+                    }}
                     className="p-1.5 text-slate-400 hover:bg-white/10 rounded-lg transition-colors"
                     title={expandedTeam === team.id ? "Collapse" : "View details"}
                   >
                     {expandedTeam === team.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </button>
-                  <div className="flex gap-2">
-                    {team.status === "active" && (
-                      <>
-                        <button
-                          onClick={() => updateStatus(team.id, "eliminated")}
-                          className="px-3 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
-                        >
-                          Eliminate
-                        </button>
-                        <button
-                          onClick={() => updateStatus(team.id, "winner")}
-                          className="px-3 py-1 text-xs bg-[#f5a623]/20 text-[#f5a623] border border-[#f5a623]/30 rounded-lg hover:bg-[#f5a623]/30 transition-colors"
-                        >
-                          🏆 Winner
-                        </button>
-                      </>
-                    )}
-                    {team.status === "pending" && (
+                  {/* Edit */}
+                  <button
+                    onClick={() => startEditTeam(team)}
+                    className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+                    title="Edit team"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  {/* Status actions */}
+                  {team.status === "active" && (
+                    <>
                       <button
-                        onClick={() => updateStatus(team.id, "active")}
-                        className="px-3 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
+                        onClick={() => updateStatus(team.id, "eliminated")}
+                        className="px-3 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
                       >
-                        Activate
+                        Eliminate
                       </button>
-                    )}
-                    {team.status === "eliminated" && (
                       <button
-                        onClick={() => updateStatus(team.id, "active")}
-                        className="px-3 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
+                        onClick={() => updateStatus(team.id, "winner")}
+                        className="px-3 py-1 text-xs bg-[#f5a623]/20 text-[#f5a623] border border-[#f5a623]/30 rounded-lg hover:bg-[#f5a623]/30 transition-colors"
                       >
-                        Restore
+                        🏆 Winner
                       </button>
-                    )}
-                    {team.status === "winner" && (
-                      <button
-                        onClick={() => updateStatus(team.id, "active")}
-                        className="px-3 py-1 text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded-lg hover:bg-slate-500/30 transition-colors"
-                      >
-                        Remove Winner
-                      </button>
-                    )}
+                    </>
+                  )}
+                  {team.status === "pending" && (
                     <button
-                      onClick={() => deleteTeam(team.id)}
-                      className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                      onClick={() => updateStatus(team.id, "active")}
+                      className="px-3 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
                     >
-                      <Trash2 size={14} />
+                      Activate
                     </button>
-                  </div>
+                  )}
+                  {team.status === "eliminated" && (
+                    <button
+                      onClick={() => updateStatus(team.id, "active")}
+                      className="px-3 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
+                    >
+                      Restore
+                    </button>
+                  )}
+                  {team.status === "winner" && (
+                    <button
+                      onClick={() => updateStatus(team.id, "active")}
+                      className="px-3 py-1 text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded-lg hover:bg-slate-500/30 transition-colors"
+                    >
+                      Remove Winner
+                    </button>
+                  )}
+                  <button
+                    onClick={() => deleteTeam(team.id)}
+                    className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
 
-              {/* Expanded details */}
+              {/* Expanded panel — view OR edit */}
               {expandedTeam === team.id && (
-                <div className="border-t border-white/10 bg-[#0d1f3c] px-5 py-3">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Students</p>
-                  <div className="flex flex-wrap gap-2">
-                    {[team.student1, team.student2, team.student3].map((s, i) =>
-                      s ? (
-                        <span key={i} className="flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-slate-300">
-                          <span className="text-[#f5a623] font-bold">{i + 1}</span> {s}
-                        </span>
-                      ) : (
-                        <span key={i} className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-slate-600 italic">
-                          Student {i + 1} — not set
-                        </span>
-                      )
-                    )}
-                  </div>
+                <div className="border-t border-white/10 bg-[#0d1f3c] px-5 py-4">
+                  {editingTeamId === team.id ? (
+                    /* ── Edit mode ── */
+                    <div>
+                      <p className="text-xs font-semibold text-[#f5a623] mb-3">Edit Team</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <label className="text-[10px] text-slate-500 block mb-1">School Name *</label>
+                          <input
+                            value={editSchoolName}
+                            onChange={(e) => setEditSchoolName(e.target.value)}
+                            placeholder="School name"
+                            className="w-full bg-[#0a1628] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 block mb-1">Team Name *</label>
+                          <input
+                            value={editTeamName}
+                            onChange={(e) => setEditTeamName(e.target.value)}
+                            placeholder="Team name"
+                            className="w-full bg-[#0a1628] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                        {editStudents.map((s, i) => (
+                          <div key={i}>
+                            <label className="text-[10px] text-slate-500 block mb-1">Student {i + 1} *</label>
+                            <input
+                              value={s}
+                              onChange={(e) => setEditStudents(prev => prev.map((v, j) => j === i ? e.target.value : v))}
+                              placeholder={`Student ${i + 1} full name`}
+                              className="w-full bg-[#0a1628] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={saveTeamEdit}
+                          disabled={editSaving}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-[#0a1628] font-semibold rounded-lg hover:bg-[#e0941a] disabled:opacity-50 text-xs"
+                        >
+                          {editSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                          Save Changes
+                        </button>
+                        <button
+                          onClick={cancelEditTeam}
+                          className="px-4 py-2 bg-white/10 rounded-lg text-xs hover:bg-white/20"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── View mode ── */
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Students</p>
+                      <div className="flex flex-wrap gap-2">
+                        {[team.student1, team.student2, team.student3].map((s, i) =>
+                          s ? (
+                            <span key={i} className="flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-slate-300">
+                              <span className="text-[#f5a623] font-bold">{i + 1}</span> {s}
+                            </span>
+                          ) : (
+                            <span key={i} className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-slate-600 italic">
+                              Student {i + 1} — not set
+                            </span>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
