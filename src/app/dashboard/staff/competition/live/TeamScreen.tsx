@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { BZ_CHANNEL, type BzLiveState } from './buzzer/types'
 import { SP_CHANNEL, type SpLiveState } from './sprint/types'
+import { RF_LIVE_KEY, type RFDisplayState } from './rapid-fire/page'
 
 const BZ_TIMER_MS = 10000
 const SP_TIMER_MS = 30000
@@ -74,6 +75,12 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
   const submittedRef = useRef(false)
   const itemsRef = useRef<string[]>([])
   const dragIdxRef = useRef<number | null>(null)
+
+  // ── Rapid-Fire state ──────────────────────────────────────────────────────────
+  const [rfState, setRfState] = useState<RFDisplayState | null>(null)
+  const rfStateRef = useRef<RFDisplayState | null>(null)
+  const rfTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [rfCountdown, setRfCountdown] = useState(60)
 
   // ── Shared ─────────────────────────────────────────────────────────────────────
   const [dots, setDots] = useState('')
@@ -197,6 +204,21 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
 
   // ── Effects ────────────────────────────────────────────────────────────────────
   useEffect(() => {
+    // ── applyRf helper — defined first so loadFromDB and channels can use it ────
+    const applyRf = (s: RFDisplayState) => {
+      rfStateRef.current = s
+      setRfState(s)
+      if (rfTimerRef.current) { clearInterval(rfTimerRef.current); rfTimerRef.current = null }
+      if (s.timerStartedAt && (s.phase === 'playing-a' || s.phase === 'playing-b')) {
+        const tick = () => {
+          const elapsed = Date.now() - (rfStateRef.current?.timerStartedAt ?? Date.now())
+          setRfCountdown(Math.max(0, Math.ceil((s.timerDuration - elapsed) / 1000)))
+        }
+        tick()
+        rfTimerRef.current = setInterval(tick, 200)
+      }
+    }
+
     // ── 1. Initial DB load — immediately shows current state when opening mid-round
     const loadFromDB = async () => {
       try {
@@ -208,6 +230,11 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
         const { data } = await (supabase as any)
           .from('sc_sprint_session').select('*').eq('id', 'main').single()
         if (data && data.phase && data.phase !== 'setup') applySpState(data as SpLiveState)
+      } catch { /* table may not exist yet */ }
+      try {
+        const { data: rfRow } = await (supabase as any)
+          .from('sc_rf_live').select('state').eq('id', 'main').single()
+        if (rfRow?.state) applyRf(rfRow.state as RFDisplayState)
       } catch { /* table may not exist yet */ }
     }
     loadFromDB()
@@ -230,6 +257,21 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
     spCh.subscribe((status) => {
       if (status === 'SUBSCRIBED') spCh.send({ type: 'broadcast', event: 'ping', payload: {} }).catch(() => {})
     })
+
+    // ── 2c. Rapid Fire broadcast ──────────────────────────────────────────────────
+    const rfCh = supabase.channel(RF_LIVE_KEY)
+    rfCh.on('broadcast', { event: 'state' }, ({ payload }) => {
+      if (payload) applyRf(payload as RFDisplayState)
+    })
+    // Also listen via BroadcastChannel (same-browser instant)
+    let rfBc: BroadcastChannel | null = null
+    try {
+      rfBc = new BroadcastChannel(RF_LIVE_KEY)
+      rfBc.onmessage = (e: MessageEvent) => {
+        try { applyRf(JSON.parse(typeof e.data === 'string' ? e.data : JSON.stringify(e.data))) } catch { /* ignore */ }
+      }
+    } catch { /* not supported */ }
+    rfCh.subscribe()
 
     // ── 3. Postgres Changes — reliable DB push (works even if broadcast drops) ──
     const pgCh = (supabase as any)
@@ -264,10 +306,31 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
           }
         }
       } catch { /* ignore */ }
+      // RF poll
+      try {
+        const { data: rfRow } = await (supabase as any)
+          .from('sc_rf_live').select('state').eq('id', 'main').single()
+        if (rfRow?.state) {
+          const s = rfRow.state as RFDisplayState
+          const cur = rfStateRef.current
+          if (s.phase !== cur?.phase || s.correctCount !== cur?.correctCount || s.queueLength !== cur?.queueLength) {
+            applyRf(s)
+          }
+        }
+      } catch { /* ignore */ }
     }, 2000)
 
     // ── 5. localStorage polling — same-device / same-browser fallback ───────────
     const localPoll = setInterval(() => {
+      try {
+        const rfRaw = localStorage.getItem(RF_LIVE_KEY)
+        if (rfRaw) {
+          const p: RFDisplayState = JSON.parse(rfRaw)
+          if (p.phase !== rfStateRef.current?.phase || p.correctCount !== rfStateRef.current?.correctCount) {
+            applyRf(p)
+          }
+        }
+      } catch { /* ignore */ }
       try {
         const bzRaw = localStorage.getItem('sc_bz_state')
         if (bzRaw) {
@@ -294,24 +357,106 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
     return () => {
       supabase.removeChannel(bzCh)
       supabase.removeChannel(spCh)
+      supabase.removeChannel(rfCh)
       supabase.removeChannel(pgCh)
+      if (rfBc) rfBc.close()
       clearInterval(dbPoll)
       clearInterval(localPoll)
       clearInterval(dotsInt)
       if (bzTimerRef.current) clearInterval(bzTimerRef.current)
       if (spTimerRef.current) clearInterval(spTimerRef.current)
+      if (rfTimerRef.current) clearInterval(rfTimerRef.current)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Active round detection ─────────────────────────────────────────────────────
-  //   Sprint > Buzzer > Waiting (Rapid Fire or between rounds)
+  //   Sprint > Buzzer > Rapid Fire > Waiting
+  const rfPhase = rfState?.phase ?? 'setup'
+  const rfActive = rfPhase === 'playing-a' || rfPhase === 'playing-b'
   const activeRound =
     spState.phase !== 'setup' ? 'sprint' :
     bzState.phase !== 'setup' ? 'buzzer' :
+    rfActive                  ? 'rapid-fire' :
     'waiting'
 
   // ══════════════════════════════════════════════════════════════════════════════
-  // WAITING (Rapid Fire in progress or between rounds)
+  // RAPID FIRE — show live score + timer on team's device
+  // ══════════════════════════════════════════════════════════════════════════════
+  if (activeRound === 'rapid-fire' && rfState) {
+    const isMyTurn = (team === 'a' && rfPhase === 'playing-a') || (team === 'b' && rfPhase === 'playing-b')
+    const myScore   = team === 'a' ? rfState.scoreA : rfState.scoreB
+    const oppScore  = team === 'a' ? rfState.scoreB : rfState.scoreA
+    const myName    = team === 'a' ? rfState.teamAName : rfState.teamBName
+    const oppName   = team === 'a' ? rfState.teamBName : rfState.teamAName
+    const timerColor = rfCountdown > 20 ? 'text-green-400' : rfCountdown > 10 ? 'text-[#f5a623]' : 'text-red-400'
+
+    return (
+      <div className="min-h-screen bg-[#040c18] text-white flex flex-col select-none">
+
+        {/* Header bar */}
+        <div className={`border-b border-white/10 px-5 py-4 text-center ${accentBgLight}`}>
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mb-1">⚡ Rapid Fire</p>
+          <p className={`text-2xl font-black ${accentText}`}>{myName}</p>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6">
+
+          {isMyTurn ? (
+            <>
+              {/* It's this team's turn */}
+              <div className={`w-full max-w-sm py-6 px-8 rounded-3xl border-2 ${accentBorder} ${accentBgLight} text-center`}>
+                <p className="text-sm text-slate-400 uppercase tracking-widest mb-2">Your Turn!</p>
+                <p className={`text-8xl font-black ${timerColor} tabular-nums leading-none`}>{rfCountdown}</p>
+                <p className="text-slate-400 text-sm mt-2">seconds remaining</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+                <div className={`rounded-2xl border ${accentBorder} ${accentBgLight} p-4 text-center`}>
+                  <p className="text-xs text-slate-500 mb-1">✓ Correct</p>
+                  <p className={`text-4xl font-black ${accentText}`}>{rfState.correctCount}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
+                  <p className="text-xs text-slate-500 mb-1">In Queue</p>
+                  <p className="text-4xl font-black text-white">{rfState.queueLength}</p>
+                </div>
+              </div>
+
+              <div className={`rounded-2xl border ${accentBorder} ${accentBgLight} px-6 py-3 text-center`}>
+                <p className="text-xs text-slate-400 mb-0.5">Your Score</p>
+                <p className={`text-5xl font-black ${accentText}`}>{myScore} <span className="text-base font-normal text-slate-400">pts</span></p>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Opponent's turn */}
+              <div className="text-6xl">⚡</div>
+              <div className="text-center space-y-2">
+                <p className="text-xl font-bold text-slate-300">{oppName} is answering…</p>
+                <p className="text-slate-500">Watch the main screen</p>
+              </div>
+
+              {/* Score comparison */}
+              <div className="grid grid-cols-2 gap-3 w-full max-w-sm">
+                <div className={`rounded-2xl border ${accentBorder} ${accentBgLight} p-4 text-center`}>
+                  <p className="text-xs text-slate-500 mb-1 truncate">{myName}</p>
+                  <p className={`text-5xl font-black ${accentText}`}>{myScore}</p>
+                  <p className="text-xs text-slate-600 mt-1">pts</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
+                  <p className="text-xs text-slate-500 mb-1 truncate">{oppName}</p>
+                  <p className="text-5xl font-black text-slate-300">{oppScore}</p>
+                  <p className="text-xs text-slate-600 mt-1">pts</p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // WAITING (between rounds)
   // ══════════════════════════════════════════════════════════════════════════════
   if (activeRound === 'waiting') {
     return (
