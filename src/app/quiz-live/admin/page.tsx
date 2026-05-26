@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import {
@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import {
   getLiveState, saveLiveState, subscribeToLive, getSupabase,
-  QuizLiveState, LiveQuestion, POINTS, LIVE_ID,
+  QuizLiveState, LiveQuestion, POINTS, LIVE_ID, BROADCAST_ROOM,
 } from '@/lib/quiz-live'
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D']
@@ -24,6 +24,10 @@ const getAuth = () =>
 export default function AdminQuizLivePage() {
   const router = useRouter()
   const [authChecked, setAuthChecked] = useState(false)
+
+  // Broadcast channel ref — kept alive for the whole session so admin can push updates
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const channelRef = useRef<any>(null)
 
   // Live state
   const [state, setState]   = useState<QuizLiveState | null>(null)
@@ -86,18 +90,41 @@ export default function AdminQuizLivePage() {
 
   useEffect(() => {
     if (!authChecked) return
+
+    // Create a persistent broadcast channel so we can push state to all viewers
+    const sb = getSupabase()
+    const bc = sb.channel(BROADCAST_ROOM)
+    bc.subscribe()
+    channelRef.current = bc
+
     load()
-    return subscribeToLive((s) => {
+
+    // Also subscribe so if another admin tab makes changes, this tab stays current
+    const unsub = subscribeToLive((s) => {
       setState(s)
       if (s.phase !== 'idle') setShowSetup(false)
     })
+
+    return () => {
+      unsub()
+      sb.removeChannel(bc)
+      channelRef.current = null
+    }
   }, [authChecked, load])
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const patch = useCallback(async (updates: Partial<QuizLiveState>) => {
     setSaving(true)
     const { data } = await saveLiveState(updates)
-    if (data) setState(data)
+    if (data) {
+      setState(data)
+      // Push live to all viewer screens via Broadcast (bypasses RLS)
+      channelRef.current?.send({
+        type: 'broadcast',
+        event: 'quiz_state',
+        payload: data,
+      })
+    }
     setSaving(false)
   }, [])
 
