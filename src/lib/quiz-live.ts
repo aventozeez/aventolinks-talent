@@ -55,18 +55,39 @@ export async function saveLiveState(patch: Partial<Omit<QuizLiveState, 'id'>>) {
   return { data: data as QuizLiveState | null, error }
 }
 
-// ── Subscribe (Broadcast — no RLS dependency, instant cross-screen) ───────────
+// ── Subscribe (Broadcast + polling fallback) ──────────────────────────────────
 //
-// Viewer pages call this.  Admin sends via channelRef in admin/page.tsx.
-// The supabase singleton ensures each browser tab uses one WS connection.
+// Primary:  Supabase Broadcast — instant, no RLS dependency.
+// Fallback: polls DB every 2 s, only fires cb when volatile fields actually change.
+//           Guarantees updates even if WebSocket never connects in production.
+
+const _sig = (d: QuizLiveState) =>
+  `${d.phase}|${d.current_index}|${d.score_a}|${d.score_b}|${d.last_result}`
 
 export function subscribeToLive(cb: (s: QuizLiveState) => void): () => void {
+  let lastSig = ''
+
+  // 1 ── Broadcast (instant when WebSocket works)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channel = (supabase.channel(BROADCAST_ROOM) as any)
     .on('broadcast', { event: 'quiz_state' }, (msg: { payload: QuizLiveState }) => {
+      lastSig = _sig(msg.payload)   // keep poll in sync to avoid double-fire
       cb(msg.payload)
     })
     .subscribe()
 
-  return () => { supabase.removeChannel(channel) }
+  // 2 ── Polling fallback (≤ 2 s lag, always works)
+  const poll = setInterval(async () => {
+    const { data } = await getLiveState()
+    if (!data) return
+    const sig = _sig(data)
+    if (sig === lastSig) return     // nothing changed — skip
+    lastSig = sig
+    cb(data)
+  }, 2000)
+
+  return () => {
+    supabase.removeChannel(channel)
+    clearInterval(poll)
+  }
 }
