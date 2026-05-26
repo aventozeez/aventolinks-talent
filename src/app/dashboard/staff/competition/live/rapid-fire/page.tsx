@@ -192,6 +192,11 @@ export default function RapidFireAdminPage() {
       payload: state,
     }) as any)?.catch?.(() => { /* ignore */ });
 
+    // 3b. Supabase Presence — persists state for late-loading screens (no DB table needed)
+    // When a team screen subscribes AFTER this fires, presence.sync delivers the current state.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (rfChannelRef.current as any)?.track({ _role: 'admin', ...state });
+
     // 4. Supabase table upsert — persists state so display reads it on mount
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)

@@ -258,10 +258,25 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
       if (status === 'SUBSCRIBED') spCh.send({ type: 'broadcast', event: 'ping', payload: {} }).catch(() => {})
     })
 
-    // ── 2c. Rapid Fire broadcast ──────────────────────────────────────────────────
+    // ── 2c. Rapid Fire broadcast + presence ─────────────────────────────────────
     const rfCh = supabase.channel(RF_LIVE_KEY)
     rfCh.on('broadcast', { event: 'state' }, ({ payload }) => {
       if (payload) applyRf(payload as RFDisplayState)
+    })
+    // Presence sync — fires immediately on subscribe with whatever the admin has tracked.
+    // This is the primary fallback when the team screen loads AFTER the round started
+    // (Supabase Broadcast is fire-and-forget; presence state persists while admin is connected).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rfCh.on('presence', { event: 'sync' }, () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ps: Record<string, any[]> = (rfCh as any).presenceState()
+      const entries = Object.values(ps).flat() as any[]
+      const admin = entries.find((e: any) => e._role === 'admin')
+      if (admin) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _role, presenceRef, ...rfDisplayState } = admin
+        applyRf(rfDisplayState as RFDisplayState)
+      }
     })
     // Also listen via BroadcastChannel (same-browser instant)
     let rfBc: BroadcastChannel | null = null
@@ -372,7 +387,8 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
   // ── Active round detection ─────────────────────────────────────────────────────
   //   Sprint > Buzzer > Rapid Fire > Waiting
   const rfPhase = rfState?.phase ?? 'setup'
-  const rfActive = rfPhase === 'playing-a' || rfPhase === 'playing-b'
+  // rfActive covers all visible phases — playing, break between turns, and done
+  const rfActive = rfState !== null && rfPhase !== 'setup'
   const activeRound =
     spState.phase !== 'setup' ? 'sprint' :
     bzState.phase !== 'setup' ? 'buzzer' :
@@ -383,13 +399,89 @@ export default function TeamScreen({ team }: { team: 'a' | 'b' }) {
   // RAPID FIRE — show live score + timer on team's device
   // ══════════════════════════════════════════════════════════════════════════════
   if (activeRound === 'rapid-fire' && rfState) {
-    const isMyTurn = (team === 'a' && rfPhase === 'playing-a') || (team === 'b' && rfPhase === 'playing-b')
-    const myScore   = team === 'a' ? rfState.scoreA : rfState.scoreB
-    const oppScore  = team === 'a' ? rfState.scoreB : rfState.scoreA
-    const myName    = team === 'a' ? rfState.teamAName : rfState.teamBName
-    const oppName   = team === 'a' ? rfState.teamBName : rfState.teamAName
+    const isMyTurn   = (team === 'a' && rfPhase === 'playing-a') || (team === 'b' && rfPhase === 'playing-b')
+    const myScore    = team === 'a' ? rfState.scoreA  : rfState.scoreB
+    const oppScore   = team === 'a' ? rfState.scoreB  : rfState.scoreA
+    const myName     = team === 'a' ? rfState.teamAName : rfState.teamBName
+    const oppName    = team === 'a' ? rfState.teamBName : rfState.teamAName
     const timerColor = rfCountdown > 20 ? 'text-green-400' : rfCountdown > 10 ? 'text-[#f5a623]' : 'text-red-400'
 
+    // ── Break (between Team A and Team B turns) ─────────────────────────────
+    if (rfPhase === 'break') {
+      const myRoundDone  = team === 'a'   // Team A just finished
+      return (
+        <div className="min-h-screen bg-[#040c18] text-white flex flex-col select-none">
+          <div className={`border-b border-white/10 px-5 py-4 text-center ${accentBgLight}`}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mb-1">⚡ Rapid Fire</p>
+            <p className={`text-2xl font-black ${accentText}`}>{myName}</p>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6 text-center">
+            {myRoundDone ? (
+              <>
+                <div className="text-6xl">✅</div>
+                <p className="text-2xl font-bold text-slate-200">Round complete!</p>
+                <p className="text-slate-400">You scored <span className={`font-black ${accentText}`}>{myScore} pts</span></p>
+                <p className="text-slate-500 text-sm">Waiting for {oppName}&apos;s turn…</p>
+              </>
+            ) : (
+              <>
+                <div className="text-6xl">⚡</div>
+                <p className="text-2xl font-bold text-slate-200">Get Ready!</p>
+                <p className={`text-lg font-bold ${accentText}`}>Your turn is coming up</p>
+                <p className="text-slate-500 text-sm">Wait for the admin to start your round</p>
+              </>
+            )}
+            <div className="grid grid-cols-2 gap-3 w-full max-w-sm mt-4">
+              <div className={`rounded-2xl border ${accentBorder} ${accentBgLight} p-4 text-center`}>
+                <p className="text-xs text-slate-500 mb-1 truncate">{myName}</p>
+                <p className={`text-5xl font-black ${accentText}`}>{myScore}</p>
+                <p className="text-xs text-slate-600 mt-1">pts</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
+                <p className="text-xs text-slate-500 mb-1 truncate">{oppName}</p>
+                <p className="text-5xl font-black text-slate-300">{oppScore}</p>
+                <p className="text-xs text-slate-600 mt-1">pts</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // ── Done (both teams finished) ───────────────────────────────────────────
+    if (rfPhase === 'done') {
+      const iWon  = myScore > oppScore
+      const isTie = myScore === oppScore
+      return (
+        <div className="min-h-screen bg-[#040c18] text-white flex flex-col select-none">
+          <div className={`border-b border-white/10 px-5 py-4 text-center ${accentBgLight}`}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mb-1">⚡ Rapid Fire</p>
+            <p className={`text-2xl font-black ${accentText}`}>{myName}</p>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6 text-center">
+            <div className="text-6xl">{isTie ? '🤝' : iWon ? '🏆' : '💪'}</div>
+            <p className="text-2xl font-bold text-slate-200">
+              {isTie ? "It's a Tie!" : iWon ? 'You Won This Round!' : 'Round Complete'}
+            </p>
+            <div className="grid grid-cols-2 gap-3 w-full max-w-sm">
+              <div className={`rounded-2xl border ${accentBorder} ${accentBgLight} p-4 text-center`}>
+                <p className="text-xs text-slate-500 mb-1 truncate">{myName}</p>
+                <p className={`text-5xl font-black ${accentText}`}>{myScore}</p>
+                <p className="text-xs text-slate-600 mt-1">pts</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
+                <p className="text-xs text-slate-500 mb-1 truncate">{oppName}</p>
+                <p className="text-5xl font-black text-slate-300">{oppScore}</p>
+                <p className="text-xs text-slate-600 mt-1">pts</p>
+              </div>
+            </div>
+            <p className="text-slate-500 text-sm">Waiting for the next round…</p>
+          </div>
+        </div>
+      )
+    }
+
+    // ── Playing (playing-a or playing-b) ─────────────────────────────────────
     return (
       <div className="min-h-screen bg-[#040c18] text-white flex flex-col select-none">
 
