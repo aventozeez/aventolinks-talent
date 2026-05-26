@@ -44,6 +44,10 @@ const supabase = createClient(
 type Team = {
   id: string;
   team_name: string;
+  school_name: string;
+  student1: string;
+  student2: string;
+  student3: string;
   status: "pending" | "active" | "eliminated" | "winner";
   total_score: number;
   created_at: string;
@@ -52,6 +56,7 @@ type Team = {
 type Mentor = {
   id: string;
   name: string;
+  profession: string;
   created_at: string;
 };
 
@@ -231,13 +236,16 @@ function TeamsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [teamName, setTeamName] = useState("");
+  const [schoolName, setSchoolName] = useState("");
+  const [students, setStudents] = useState(["", "", ""]);
   const [saving, setSaving] = useState(false);
+  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
 
   const fetchTeams = useCallback(async () => {
     setLoading(true);
     const { data, error } = await (supabase as any)
       .from("sc_teams")
-      .select("id, team_name, status, total_score, created_at")
+      .select("id, team_name, school_name, student1, student2, student3, status, total_score, created_at")
       .order("created_at", { ascending: true });
     if (error) toast(error.message, "err");
     else setTeams(data || []);
@@ -248,19 +256,31 @@ function TeamsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
     fetchTeams();
   }, [fetchTeams]);
 
+  const resetForm = () => {
+    setTeamName("");
+    setSchoolName("");
+    setStudents(["", "", ""]);
+  };
+
   const registerTeam = async () => {
-    if (!teamName.trim()) {
-      toast("Team name is required", "err");
-      return;
-    }
+    if (!teamName.trim()) { toast("Team name is required", "err"); return; }
+    if (!schoolName.trim()) { toast("School name is required", "err"); return; }
+    if (students.some(s => !s.trim())) { toast("All 3 student names are required", "err"); return; }
     setSaving(true);
     const { error } = await (supabase as any)
       .from("sc_teams")
-      .insert({ team_name: teamName.trim(), status: "active" });
+      .insert({
+        team_name: teamName.trim(),
+        school_name: schoolName.trim(),
+        student1: students[0].trim(),
+        student2: students[1].trim(),
+        student3: students[2].trim(),
+        status: "active",
+      });
     if (error) toast(error.message, "err");
     else {
       toast("Team registered!");
-      setTeamName("");
+      resetForm();
       setShowForm(false);
       fetchTeams();
     }
@@ -321,7 +341,7 @@ function TeamsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
           <span className="text-sm text-slate-400 font-normal">({teams.length})</span>
         </h2>
         <button
-          onClick={() => setShowForm((p) => !p)}
+          onClick={() => { setShowForm((p) => !p); resetForm(); }}
           className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] text-[#0a1628] font-semibold rounded-lg hover:bg-[#e0941a] transition-colors text-sm"
         >
           <Plus size={16} /> Register Team
@@ -332,26 +352,52 @@ function TeamsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
       {showForm && (
         <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-xl p-5 mb-5">
           <h3 className="text-sm font-semibold text-[#f5a623] mb-4">Register New Team</h3>
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">School Name *</label>
+              <input
+                value={schoolName}
+                onChange={(e) => setSchoolName(e.target.value)}
+                placeholder="e.g. Greenfield High School"
+                className="w-full bg-[#0d1f3c] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+              />
+            </div>
+            <div>
               <label className="text-xs text-slate-400 block mb-1">Team Name *</label>
               <input
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && registerTeam()}
                 placeholder="e.g. Alpha Wolves, Team Phoenix…"
                 className="w-full bg-[#0d1f3c] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
               />
             </div>
+          </div>
+          <div className="mb-4">
+            <label className="text-xs text-slate-400 block mb-2">Students (3 required) *</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {students.map((s, i) => (
+                <div key={i}>
+                  <label className="text-[10px] text-slate-500 block mb-1">Student {i + 1}</label>
+                  <input
+                    value={s}
+                    onChange={(e) => setStudents(prev => prev.map((v, j) => j === i ? e.target.value : v))}
+                    placeholder={`Student ${i + 1} full name`}
+                    className="w-full bg-[#0d1f3c] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-3">
             <button
               onClick={registerTeam}
               disabled={saving}
               className="px-5 py-2 bg-[#f5a623] text-[#0a1628] font-semibold rounded-lg hover:bg-[#e0941a] disabled:opacity-50 text-sm flex items-center gap-2"
             >
-              {saving && <Loader2 size={14} className="animate-spin" />} Register
+              {saving && <Loader2 size={14} className="animate-spin" />} Register Team
             </button>
             <button
-              onClick={() => setShowForm(false)}
+              onClick={() => { setShowForm(false); resetForm(); }}
               className="px-4 py-2 bg-white/10 rounded-lg text-sm hover:bg-white/20"
             >
               Cancel
@@ -376,7 +422,7 @@ function TeamsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
           {teams.map((team) => (
             <div
               key={team.id}
-              className={`bg-[#0a1628] border rounded-xl px-5 py-4 flex items-center justify-between transition-colors ${
+              className={`bg-[#0a1628] border rounded-xl overflow-hidden transition-colors ${
                 team.status === "winner"
                   ? "border-[#f5a623]/40 bg-[#f5a623]/5"
                   : team.status === "eliminated"
@@ -384,77 +430,109 @@ function TeamsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
                   : "border-white/10 hover:border-white/20"
               }`}
             >
-              <div className="flex items-center gap-4">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
-                    team.status === "winner"
-                      ? "bg-[#f5a623] text-[#0a1628]"
-                      : team.status === "eliminated"
-                      ? "bg-white/10 text-slate-400"
-                      : "bg-[#f5a623]/20 text-[#f5a623]"
-                  }`}
-                >
-                  {team.status === "winner" ? "🏆" : team.team_name.charAt(0).toUpperCase()}
+              {/* Main row */}
+              <div className="px-5 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                      team.status === "winner"
+                        ? "bg-[#f5a623] text-[#0a1628]"
+                        : team.status === "eliminated"
+                        ? "bg-white/10 text-slate-400"
+                        : "bg-[#f5a623]/20 text-[#f5a623]"
+                    }`}
+                  >
+                    {team.status === "winner" ? "🏆" : team.team_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white">{team.team_name}</p>
+                    <p className="text-xs text-slate-400">
+                      {team.school_name || <span className="italic opacity-50">No school</span>}
+                      {" · "}Score: {team.total_score ?? 0} pts
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-white">{team.team_name}</p>
-                  <p className="text-xs text-slate-400">
-                    Score: {team.total_score ?? 0} pts
-                  </p>
+
+                <div className="flex items-center gap-3 flex-wrap justify-end">
+                  <StatusBadge status={team.status} />
+                  {/* Expand toggle */}
+                  <button
+                    onClick={() => setExpandedTeam(expandedTeam === team.id ? null : team.id)}
+                    className="p-1.5 text-slate-400 hover:bg-white/10 rounded-lg transition-colors"
+                    title={expandedTeam === team.id ? "Collapse" : "View details"}
+                  >
+                    {expandedTeam === team.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  <div className="flex gap-2">
+                    {team.status === "active" && (
+                      <>
+                        <button
+                          onClick={() => updateStatus(team.id, "eliminated")}
+                          className="px-3 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
+                        >
+                          Eliminate
+                        </button>
+                        <button
+                          onClick={() => updateStatus(team.id, "winner")}
+                          className="px-3 py-1 text-xs bg-[#f5a623]/20 text-[#f5a623] border border-[#f5a623]/30 rounded-lg hover:bg-[#f5a623]/30 transition-colors"
+                        >
+                          🏆 Winner
+                        </button>
+                      </>
+                    )}
+                    {team.status === "pending" && (
+                      <button
+                        onClick={() => updateStatus(team.id, "active")}
+                        className="px-3 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
+                      >
+                        Activate
+                      </button>
+                    )}
+                    {team.status === "eliminated" && (
+                      <button
+                        onClick={() => updateStatus(team.id, "active")}
+                        className="px-3 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
+                      >
+                        Restore
+                      </button>
+                    )}
+                    {team.status === "winner" && (
+                      <button
+                        onClick={() => updateStatus(team.id, "active")}
+                        className="px-3 py-1 text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded-lg hover:bg-slate-500/30 transition-colors"
+                      >
+                        Remove Winner
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteTeam(team.id)}
+                      className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <StatusBadge status={team.status} />
-                <div className="flex gap-2 flex-wrap justify-end">
-                  {team.status === "active" && (
-                    <>
-                      <button
-                        onClick={() => updateStatus(team.id, "eliminated")}
-                        className="px-3 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
-                      >
-                        Eliminate
-                      </button>
-                      <button
-                        onClick={() => updateStatus(team.id, "winner")}
-                        className="px-3 py-1 text-xs bg-[#f5a623]/20 text-[#f5a623] border border-[#f5a623]/30 rounded-lg hover:bg-[#f5a623]/30 transition-colors"
-                      >
-                        🏆 Mark Winner
-                      </button>
-                    </>
-                  )}
-                  {team.status === "pending" && (
-                    <button
-                      onClick={() => updateStatus(team.id, "active")}
-                      className="px-3 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
-                    >
-                      Activate
-                    </button>
-                  )}
-                  {team.status === "eliminated" && (
-                    <button
-                      onClick={() => updateStatus(team.id, "active")}
-                      className="px-3 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
-                    >
-                      Restore
-                    </button>
-                  )}
-                  {team.status === "winner" && (
-                    <button
-                      onClick={() => updateStatus(team.id, "active")}
-                      className="px-3 py-1 text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded-lg hover:bg-slate-500/30 transition-colors"
-                    >
-                      Remove Winner
-                    </button>
-                  )}
-                  <button
-                    onClick={() => deleteTeam(team.id)}
-                    className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+              {/* Expanded details */}
+              {expandedTeam === team.id && (
+                <div className="border-t border-white/10 bg-[#0d1f3c] px-5 py-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-2">Students</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[team.student1, team.student2, team.student3].map((s, i) =>
+                      s ? (
+                        <span key={i} className="flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-slate-300">
+                          <span className="text-[#f5a623] font-bold">{i + 1}</span> {s}
+                        </span>
+                      ) : (
+                        <span key={i} className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-slate-600 italic">
+                          Student {i + 1} — not set
+                        </span>
+                      )
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ))}
         </div>
@@ -486,19 +564,21 @@ function StatusBadge({ status }: { status: string }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function MentorsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void }) {
-  const [mentors,   setMentors]   = useState<Mentor[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [showForm,  setShowForm]  = useState(false);
-  const [mentorName, setMentorName] = useState("");
-  const [saving,    setSaving]    = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName,  setEditName]  = useState("");
+  const [mentors,       setMentors]       = useState<Mentor[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [showForm,      setShowForm]      = useState(false);
+  const [mentorName,    setMentorName]    = useState("");
+  const [mentorProfession, setMentorProfession] = useState("");
+  const [saving,        setSaving]        = useState(false);
+  const [editingId,     setEditingId]     = useState<string | null>(null);
+  const [editName,      setEditName]      = useState("");
+  const [editProfession, setEditProfession] = useState("");
 
   const fetchMentors = useCallback(async () => {
     setLoading(true);
     const { data, error } = await (supabase as any)
       .from("sc_mentors")
-      .select("id, name, created_at")
+      .select("id, name, profession, created_at")
       .order("created_at", { ascending: true });
     if (error) toast(error.message, "err");
     else setMentors(data || []);
@@ -509,14 +589,16 @@ function MentorsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void })
 
   const registerMentor = async () => {
     if (!mentorName.trim()) { toast("Mentor name is required", "err"); return; }
+    if (!mentorProfession.trim()) { toast("Profession is required", "err"); return; }
     setSaving(true);
     const { error } = await (supabase as any)
       .from("sc_mentors")
-      .insert({ name: mentorName.trim() });
+      .insert({ name: mentorName.trim(), profession: mentorProfession.trim() });
     if (error) toast(error.message, "err");
     else {
       toast("Mentor registered!");
       setMentorName("");
+      setMentorProfession("");
       setShowForm(false);
       fetchMentors();
     }
@@ -525,9 +607,10 @@ function MentorsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void })
 
   const saveEdit = async (id: string) => {
     if (!editName.trim()) { toast("Name cannot be empty", "err"); return; }
+    if (!editProfession.trim()) { toast("Profession cannot be empty", "err"); return; }
     const { error } = await (supabase as any)
       .from("sc_mentors")
-      .update({ name: editName.trim() })
+      .update({ name: editName.trim(), profession: editProfession.trim() })
       .eq("id", id);
     if (error) toast(error.message, "err");
     else { toast("Updated!"); setEditingId(null); fetchMentors(); }
@@ -581,25 +664,36 @@ function MentorsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void })
       {showForm && (
         <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-xl p-5 mb-5">
           <h3 className="text-sm font-semibold text-[#f5a623] mb-4">Register New Mentor</h3>
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
               <label className="text-xs text-slate-400 block mb-1">Full Name *</label>
               <input
                 value={mentorName}
                 onChange={(e) => setMentorName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && registerMentor()}
-                placeholder="e.g. Dr. Amara Osei, Prof. Ngozi Adeyemi…"
+                placeholder="e.g. Dr. Amara Osei"
                 className="w-full bg-[#0d1f3c] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
               />
             </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Profession *</label>
+              <input
+                value={mentorProfession}
+                onChange={(e) => setMentorProfession(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && registerMentor()}
+                placeholder="e.g. Software Engineer, Medical Doctor…"
+                className="w-full bg-[#0d1f3c] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3">
             <button
               onClick={registerMentor}
               disabled={saving}
               className="px-5 py-2 bg-[#f5a623] text-[#0a1628] font-semibold rounded-lg hover:bg-[#e0941a] disabled:opacity-50 text-sm flex items-center gap-2"
             >
-              {saving && <Loader2 size={14} className="animate-spin" />} Register
+              {saving && <Loader2 size={14} className="animate-spin" />} Register Mentor
             </button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-white/10 rounded-lg text-sm hover:bg-white/20">
+            <button onClick={() => { setShowForm(false); setMentorName(""); setMentorProfession(""); }} className="px-4 py-2 bg-white/10 rounded-lg text-sm hover:bg-white/20">
               Cancel
             </button>
           </div>
@@ -642,15 +736,30 @@ function MentorsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void })
                 </div>
                 <div>
                   {editingId === mentor.id ? (
-                    <input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") saveEdit(mentor.id); if (e.key === "Escape") setEditingId(null); }}
-                      autoFocus
-                      className="bg-[#0d1f3c] border border-[#f5a623] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none w-64"
-                    />
+                    <div className="flex flex-col gap-1.5">
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Escape") setEditingId(null); }}
+                        autoFocus
+                        placeholder="Full name"
+                        className="bg-[#0d1f3c] border border-[#f5a623] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none w-56"
+                      />
+                      <input
+                        value={editProfession}
+                        onChange={(e) => setEditProfession(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveEdit(mentor.id); if (e.key === "Escape") setEditingId(null); }}
+                        placeholder="Profession"
+                        className="bg-[#0d1f3c] border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[#f5a623] w-56"
+                      />
+                    </div>
                   ) : (
-                    <p className="font-semibold text-white">{mentor.name}</p>
+                    <>
+                      <p className="font-semibold text-white">{mentor.name}</p>
+                      <p className="text-xs text-[#f5a623]/80 font-medium mt-0.5">
+                        {mentor.profession || <span className="text-slate-500 italic font-normal">No profession set</span>}
+                      </p>
+                    </>
                   )}
                   <p className="text-xs text-slate-500 mt-0.5">
                     Added {new Date(mentor.created_at).toLocaleDateString()}
@@ -677,9 +786,9 @@ function MentorsTab({ toast }: { toast: (m: string, t?: "ok" | "err") => void })
                 ) : (
                   <>
                     <button
-                      onClick={() => { setEditingId(mentor.id); setEditName(mentor.name); }}
+                      onClick={() => { setEditingId(mentor.id); setEditName(mentor.name); setEditProfession(mentor.profession || ""); }}
                       className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                      title="Edit name"
+                      title="Edit mentor"
                     >
                       <Edit2 size={14} />
                     </button>
