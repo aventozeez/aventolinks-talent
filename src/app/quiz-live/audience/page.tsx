@@ -7,12 +7,18 @@ import { getLiveState, subscribeToLive, QuizLiveState, POINTS } from '@/lib/quiz
 const OPTION_LABELS = ['A', 'B', 'C', 'D']
 
 export default function AudiencePage() {
-  const [state, setState]   = useState<QuizLiveState | null>(null)
+  const [state, setState]     = useState<QuizLiveState | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getLiveState().then(({ data }) => { setState(data); setLoading(false) })
-    return subscribeToLive(setState)
+    // Load current state from DB on mount (handles page refresh)
+    getLiveState().then(({ data }) => {
+      if (data) setState(data)
+      setLoading(false)
+    })
+    // Subscribe to live broadcast updates from admin
+    const unsub = subscribeToLive(setState)
+    return unsub
   }, [])
 
   if (loading) {
@@ -63,7 +69,6 @@ export default function AudiencePage() {
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-5xl mx-auto w-full">
 
         {phase === 'idle' ? (
-          /* Idle / waiting screen */
           <div className="text-center space-y-5">
             <div className="text-9xl">🎓</div>
             <h1 className="text-5xl font-black text-white tracking-tight">Scholars Challenge</h1>
@@ -71,7 +76,6 @@ export default function AudiencePage() {
           </div>
 
         ) : currentQ ? (
-          /* Question screen */
           <div className="w-full space-y-6">
 
             {/* Q counter + category */}
@@ -95,8 +99,8 @@ export default function AudiencePage() {
             {/* Options */}
             <div className="grid grid-cols-2 gap-4">
               {currentQ.options.map((opt, idx) => {
-                const isCorrect  = idx === currentQ.correct_answer
-                const revealed   = phase === 'revealed'
+                const isCorrect = idx === currentQ.correct_answer
+                const revealed  = phase === 'revealed'
                 return (
                   <div
                     key={idx}

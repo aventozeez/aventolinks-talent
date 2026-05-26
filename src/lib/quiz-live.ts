@@ -1,12 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
+// Uses the existing singleton supabase client so all tabs share the same WS connection pool
+import { supabase } from './supabase'
 
-export const getSupabase = () =>
-  createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
-// Broadcast room — all 4 screens share this name
+// ── Broadcast room ─────────────────────────────────────────────────────────────
+// All 4 screens (admin, audience, team-a, team-b) must use the EXACT same name.
 export const BROADCAST_ROOM = 'quiz-live'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -35,12 +31,12 @@ export type QuizLiveState = {
 }
 
 export const LIVE_ID = 'default'
-export const POINTS   = 10
+export const POINTS  = 10
 
 // ── Read ──────────────────────────────────────────────────────────────────────
 
 export async function getLiveState() {
-  const { data, error } = await getSupabase()
+  const { data, error } = await supabase
     .from('quiz_live_state')
     .select('*')
     .eq('id', LIVE_ID)
@@ -51,7 +47,7 @@ export async function getLiveState() {
 // ── Write ─────────────────────────────────────────────────────────────────────
 
 export async function saveLiveState(patch: Partial<Omit<QuizLiveState, 'id'>>) {
-  const { data, error } = await getSupabase()
+  const { data, error } = await supabase
     .from('quiz_live_state')
     .upsert({ id: LIVE_ID, ...patch }, { onConflict: 'id' })
     .select()
@@ -59,22 +55,18 @@ export async function saveLiveState(patch: Partial<Omit<QuizLiveState, 'id'>>) {
   return { data: data as QuizLiveState | null, error }
 }
 
-// ── Subscribe (Broadcast — bypasses RLS, works for all viewers) ───────────────
+// ── Subscribe (Broadcast — no RLS dependency, instant cross-screen) ───────────
 //
-// Admin sends: channel.send({ type:'broadcast', event:'quiz_state', payload: state })
-// Viewers receive here.  Initial state is always fetched from DB via getLiveState().
+// Viewer pages call this.  Admin sends via channelRef in admin/page.tsx.
+// The supabase singleton ensures each browser tab uses one WS connection.
 
 export function subscribeToLive(cb: (s: QuizLiveState) => void): () => void {
-  const sb = getSupabase()
-  const channel = sb
-    .channel(BROADCAST_ROOM)
-    .on(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      'broadcast' as any,
-      { event: 'quiz_state' },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (payload: any) => cb(payload.payload as QuizLiveState)
-    )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const channel = (supabase.channel(BROADCAST_ROOM) as any)
+    .on('broadcast', { event: 'quiz_state' }, (msg: { payload: QuizLiveState }) => {
+      cb(msg.payload)
+    })
     .subscribe()
-  return () => { sb.removeChannel(channel) }
+
+  return () => { supabase.removeChannel(channel) }
 }

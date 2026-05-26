@@ -11,8 +11,12 @@ export default function TeamBPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getLiveState().then(({ data }) => { setState(data); setLoading(false) })
-    return subscribeToLive(setState)
+    getLiveState().then(({ data }) => {
+      if (data) setState(data)
+      setLoading(false)
+    })
+    const unsub = subscribeToLive(setState)
+    return unsub
   }, [])
 
   if (loading) {
@@ -23,16 +27,16 @@ export default function TeamBPage() {
     )
   }
 
-  const phase        = state?.phase ?? 'idle'
-  const currentQ     = state?.questions?.[state?.current_index ?? 0] ?? null
-  const totalQ       = state?.questions?.length ?? 0
-  const myName       = state?.team_b_name ?? 'Team B'
-  const theirName    = state?.team_a_name ?? 'Team A'
-  const myScore      = state?.score_b ?? 0
-  const theirScore   = state?.score_a ?? 0
-  const weGotIt      = state?.last_result === 'correct_b'
-  const theyGotIt    = state?.last_result === 'correct_a'
-  const noOneGotIt   = state?.last_result === 'wrong'
+  const phase      = state?.phase ?? 'idle'
+  const currentQ   = state?.questions?.[state?.current_index ?? 0] ?? null
+  const totalQ     = state?.questions?.length ?? 0
+  const myName     = state?.team_b_name ?? 'Team B'
+  const theirName  = state?.team_a_name ?? 'Team A'
+  const myScore    = state?.score_b ?? 0
+  const theirScore = state?.score_a ?? 0
+  const weGotIt    = state?.last_result === 'correct_b'
+  const theyGotIt  = state?.last_result === 'correct_a'
+  const noOneGotIt = state?.last_result === 'wrong'
 
   return (
     <div className="min-h-screen bg-[#060f1f] text-white flex flex-col select-none">
@@ -42,7 +46,6 @@ export default function TeamBPage() {
         <p className="text-[11px] font-black text-purple-400 uppercase tracking-[0.3em] mb-1">Your Team</p>
         <h1 className="text-3xl md:text-4xl font-black text-white">{myName}</h1>
 
-        {/* Scores row */}
         <div className="flex items-center justify-center gap-8 mt-4">
           <div className="text-center">
             <p className="text-6xl font-black text-purple-400 leading-none">{myScore}</p>
@@ -69,7 +72,6 @@ export default function TeamBPage() {
         ) : currentQ ? (
           <div className="w-full space-y-5">
 
-            {/* Counter */}
             <div className="flex items-center justify-between text-sm text-slate-500">
               <span>
                 Q <strong className="text-white">{(state?.current_index ?? 0) + 1}</strong>{' '}
@@ -80,14 +82,12 @@ export default function TeamBPage() {
               </span>
             </div>
 
-            {/* Question */}
             <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-6 shadow-xl">
               <p className="text-xl md:text-2xl font-bold text-white leading-snug">
                 {currentQ.question}
               </p>
             </div>
 
-            {/* Options */}
             <div className="space-y-2.5">
               {currentQ.options.map((opt, idx) => {
                 const isCorrect = idx === currentQ.correct_answer
@@ -115,7 +115,6 @@ export default function TeamBPage() {
               })}
             </div>
 
-            {/* Result */}
             {phase === 'revealed' && state?.last_result && (
               <div className={`rounded-xl px-5 py-3.5 text-center font-bold text-base border ${
                 weGotIt

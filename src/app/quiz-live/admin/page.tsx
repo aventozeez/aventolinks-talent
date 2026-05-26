@@ -2,54 +2,46 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
 import {
   Check, Copy, Loader2, RotateCcw, Play, SkipForward,
   X, Trophy, ChevronDown, ChevronUp, Settings,
 } from 'lucide-react'
 import {
-  getLiveState, saveLiveState, subscribeToLive, getSupabase,
-  QuizLiveState, LiveQuestion, POINTS, LIVE_ID, BROADCAST_ROOM,
+  getLiveState, saveLiveState,
+  QuizLiveState, LiveQuestion, POINTS, BROADCAST_ROOM,
 } from '@/lib/quiz-live'
+import { supabase } from '@/lib/supabase'
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D']
-
-// ── Auth helper ───────────────────────────────────────────────────────────────
-const getAuth = () =>
-  createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
 
 export default function AdminQuizLivePage() {
   const router = useRouter()
   const [authChecked, setAuthChecked] = useState(false)
 
-  // Broadcast channel ref — kept alive for the whole session so admin can push updates
+  // Broadcast channel — only set in ref AFTER WebSocket reaches SUBSCRIBED state
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channelRef = useRef<any>(null)
 
   // Live state
-  const [state, setState]   = useState<QuizLiveState | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving]   = useState(false)
+  const [state, setState]     = useState<QuizLiveState | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(false)
 
   // UI
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [showSetup, setShowSetup] = useState(true)
 
   // Setup form
-  const [teamA, setTeamA]     = useState('Team A')
-  const [teamB, setTeamB]     = useState('Team B')
+  const [teamA, setTeamA]           = useState('Team A')
+  const [teamB, setTeamB]           = useState('Team B')
   const [availableQs, setAvailableQs] = useState<LiveQuestion[]>([])
-  const [qLoading, setQLoading] = useState(false)
+  const [qLoading, setQLoading]       = useState(false)
 
   // ── Auth guard ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    const sb = getAuth()
-    sb.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) { router.push('/login'); return }
-      const { data } = await sb
+      const { data } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', session.user.id)
@@ -63,7 +55,7 @@ export default function AdminQuizLivePage() {
     })
   }, [router])
 
-  // ── Load + subscribe ────────────────────────────────────────────────────────
+  // ── Load initial state ──────────────────────────────────────────────────────
   const load = useCallback(async () => {
     const { data } = await getLiveState()
     if (data) {
@@ -72,7 +64,7 @@ export default function AdminQuizLivePage() {
       setTeamB(data.team_b_name || 'Team B')
       if (data.phase !== 'idle') setShowSetup(false)
     } else {
-      // Bootstrap default row
+      // Bootstrap default row if it doesn't exist yet
       const { data: created } = await saveLiveState({
         team_a_name: 'Team A',
         team_b_name: 'Team B',
@@ -88,37 +80,37 @@ export default function AdminQuizLivePage() {
     setLoading(false)
   }, [])
 
+  // ── Set up broadcast channel once auth clears ───────────────────────────────
   useEffect(() => {
     if (!authChecked) return
 
-    // Create a persistent broadcast channel so we can push state to all viewers
-    const sb = getSupabase()
-    const bc = sb.channel(BROADCAST_ROOM)
-    bc.subscribe()
-    channelRef.current = bc
+    // Admin is the broadcaster — create a dedicated send channel.
+    // We only arm channelRef AFTER the WS handshake reaches SUBSCRIBED
+    // so that send() calls never hit an un-ready socket.
+    const bc = supabase.channel(BROADCAST_ROOM)
+    bc.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
+        channelRef.current = bc
+      }
+    })
 
     load()
 
-    // Also subscribe so if another admin tab makes changes, this tab stays current
-    const unsub = subscribeToLive((s) => {
-      setState(s)
-      if (s.phase !== 'idle') setShowSetup(false)
-    })
-
     return () => {
-      unsub()
-      sb.removeChannel(bc)
+      supabase.removeChannel(bc)
       channelRef.current = null
     }
   }, [authChecked, load])
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
+  // ── Core patch helper ────────────────────────────────────────────────────────
+  // 1. Persists state to DB (source of truth for initial load on refresh)
+  // 2. Broadcasts to all viewer screens via Supabase Broadcast
   const patch = useCallback(async (updates: Partial<QuizLiveState>) => {
     setSaving(true)
     const { data } = await saveLiveState(updates)
     if (data) {
       setState(data)
-      // Push live to all viewer screens via Broadcast (bypasses RLS)
+      // Fire-and-forget broadcast — viewers receive full state instantly
       channelRef.current?.send({
         type: 'broadcast',
         event: 'quiz_state',
@@ -136,7 +128,7 @@ export default function AdminQuizLivePage() {
 
   const loadQuestions = async () => {
     setQLoading(true)
-    const { data } = await getSupabase()
+    const { data } = await supabase
       .from('quiz_questions')
       .select('id, question, options, correct_answer, category')
       .eq('is_active', true)
@@ -204,10 +196,10 @@ export default function AdminQuizLivePage() {
   const totalQ   = state?.questions?.length ?? 0
 
   const LINKS = [
-    { key: 'admin',    label: 'Admin',     path: '/quiz-live/admin',    emoji: '🎛️', border: 'border-[#f5a623]/40',   bg: 'bg-[#f5a623]/10',   text: 'text-[#f5a623]'   },
-    { key: 'audience', label: 'Audience',  path: '/quiz-live/audience', emoji: '📺', border: 'border-blue-500/40',   bg: 'bg-blue-500/10',    text: 'text-blue-300'    },
-    { key: 'team-a',   label: 'Team A',    path: '/quiz-live/team-a',   emoji: '🔵', border: 'border-green-500/40',  bg: 'bg-green-500/10',   text: 'text-green-300'   },
-    { key: 'team-b',   label: 'Team B',    path: '/quiz-live/team-b',   emoji: '🟣', border: 'border-purple-500/40', bg: 'bg-purple-500/10',  text: 'text-purple-300'  },
+    { key: 'admin',    label: 'Admin',    path: '/quiz-live/admin',    emoji: '🎛️', border: 'border-[#f5a623]/40',   bg: 'bg-[#f5a623]/10',  text: 'text-[#f5a623]'  },
+    { key: 'audience', label: 'Audience', path: '/quiz-live/audience', emoji: '📺', border: 'border-blue-500/40',   bg: 'bg-blue-500/10',   text: 'text-blue-300'   },
+    { key: 'team-a',   label: 'Team A',   path: '/quiz-live/team-a',   emoji: '🔵', border: 'border-green-500/40',  bg: 'bg-green-500/10',  text: 'text-green-300'  },
+    { key: 'team-b',   label: 'Team B',   path: '/quiz-live/team-b',   emoji: '🟣', border: 'border-purple-500/40', bg: 'bg-purple-500/10', text: 'text-purple-300' },
   ]
 
   return (
