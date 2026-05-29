@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Star, Trophy, Shuffle, Monitor, User } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
-import { DRAW_KEY, TournamentState } from '../DrawBracket'
+import { DRAW_KEY, TournamentState, DrawSlot } from '../DrawBracket'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,6 +15,40 @@ const supabase = createClient(
 export const MENTORS_REVEAL_KEY      = 'sc_mentors_reveal_v1'
 export const MENTORS_NAMES_KEY       = 'sc_mentor_names_v1'       // entered names
 export const MENTORS_ASSIGNMENT_KEY  = 'sc_mentor_assignments_v1' // slot → mentor name
+export const MENTORS_PINS_KEY        = 'sc_mentor_pins_v1'        // { teamName: mentorName }
+
+// Default pins — always applied unless overridden in localStorage
+const DEFAULT_PINS: Record<string, string> = {
+  'The International School, University of Ibadan': 'Suliat Alli',
+}
+
+// Build slot-to-mentor assignment array, honouring any pinned team→mentor pairs
+function buildAssignments(
+  names: string[],
+  slots: DrawSlot[],
+  pins: Record<string, string>,
+): string[] {
+  const result: string[] = Array(slots.length).fill('')
+  const used = new Set<string>()
+
+  // Apply pins first
+  for (let i = 0; i < slots.length; i++) {
+    const pinned = pins[slots[i].teamName]
+    if (pinned && names.includes(pinned)) {
+      result[i] = pinned
+      used.add(pinned)
+    }
+  }
+
+  // Shuffle remaining names and fill unpinned slots
+  const pool = [...names].filter(n => !used.has(n)).sort(() => Math.random() - 0.5)
+  let pi = 0
+  for (let i = 0; i < slots.length; i++) {
+    if (!result[i] && pool[pi] !== undefined) result[i] = pool[pi++]
+  }
+
+  return result
+}
 
 export default function MentorsPage() {
   const router = useRouter()
@@ -32,7 +66,8 @@ export default function MentorsPage() {
     ;(async () => {
       try {
         const draw = localStorage.getItem(DRAW_KEY)
-        if (draw) setTs(JSON.parse(draw) as TournamentState)
+        const localTs: TournamentState | null = draw ? JSON.parse(draw) as TournamentState : null
+        if (localTs) setTs(localTs)
 
         const rev = localStorage.getItem(MENTORS_REVEAL_KEY)
         if (rev) {
@@ -61,10 +96,11 @@ export default function MentorsPage() {
             const hasValidAssign = existingParsed.some(a => a.trim())
 
             if (!hasValidAssign) {
-              // No valid assignment yet — shuffle and assign now
-              const shuffled = [...names].sort(() => Math.random() - 0.5)
-              setAssignments(shuffled)
-              localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(shuffled))
+              const rawPins = localStorage.getItem(MENTORS_PINS_KEY)
+              const pins: Record<string, string> = { ...DEFAULT_PINS, ...(rawPins ? JSON.parse(rawPins) : {}) }
+              const assigned = buildAssignments(names, localTs?.slots ?? [], pins)
+              setAssignments(assigned)
+              localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(assigned))
             } else {
               setAssignments(existingParsed)
             }
@@ -94,7 +130,9 @@ export default function MentorsPage() {
       alert(`Please enter all 16 mentor names first (${16 - filled.length} missing).`)
       return
     }
-    const shuffled = [...mentorNames].sort(() => Math.random() - 0.5)
+    const rawPins = localStorage.getItem(MENTORS_PINS_KEY)
+    const pins: Record<string, string> = { ...DEFAULT_PINS, ...(rawPins ? JSON.parse(rawPins) : {}) }
+    const shuffled = ts ? buildAssignments(mentorNames, ts.slots, pins) : [...mentorNames].sort(() => Math.random() - 0.5)
     setAssignments(shuffled)
     localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(shuffled))
     // Also reset reveals when re-assigning
