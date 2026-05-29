@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Star, Trophy, Shuffle, Monitor, User } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
-import { DRAW_KEY, TournamentState, DrawSlot } from '../DrawBracket'
+import { DRAW_KEY, TournamentState } from '../DrawBracket'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,35 +15,35 @@ const supabase = createClient(
 export const MENTORS_REVEAL_KEY      = 'sc_mentors_reveal_v1'
 export const MENTORS_NAMES_KEY       = 'sc_mentor_names_v1'       // entered names
 export const MENTORS_ASSIGNMENT_KEY  = 'sc_mentor_assignments_v1' // slot → mentor name
-export const MENTORS_PINS_KEY        = 'sc_mentor_pins_v1'        // { teamName: mentorName }
+export const MENTORS_PINS_KEY        = 'sc_mentor_pins_v1'        // { slotIndex: mentorName }
 
-// Default pins — always applied unless overridden in localStorage
-const DEFAULT_PINS: Record<string, string> = {
-  'The International School, University of Ibadan': 'Suliat Alli',
+// Slot 0 = first card revealed = always Suliat Alli
+const DEFAULT_INDEX_PINS: Record<number, string> = {
+  0: 'Suliat Alli',
 }
 
-// Build slot-to-mentor assignment array, honouring any pinned team→mentor pairs
+// Build slot-to-mentor assignment array, honouring index-based pins
 function buildAssignments(
   names: string[],
-  slots: DrawSlot[],
-  pins: Record<string, string>,
+  count: number,
+  indexPins: Record<number, string>,
 ): string[] {
-  const result: string[] = Array(slots.length).fill('')
+  const result: string[] = Array(count).fill('')
   const used = new Set<string>()
 
-  // Apply pins first
-  for (let i = 0; i < slots.length; i++) {
-    const pinned = pins[slots[i].teamName]
-    if (pinned && names.includes(pinned)) {
-      result[i] = pinned
-      used.add(pinned)
+  // Apply index pins first
+  for (const [idxStr, name] of Object.entries(indexPins)) {
+    const idx = Number(idxStr)
+    if (idx < count && names.includes(name)) {
+      result[idx] = name
+      used.add(name)
     }
   }
 
   // Shuffle remaining names and fill unpinned slots
   const pool = [...names].filter(n => !used.has(n)).sort(() => Math.random() - 0.5)
   let pi = 0
-  for (let i = 0; i < slots.length; i++) {
+  for (let i = 0; i < count; i++) {
     if (!result[i] && pool[pi] !== undefined) result[i] = pool[pi++]
   }
 
@@ -94,11 +94,16 @@ export default function MentorsPage() {
             const existingAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
             const existingParsed: string[] = existingAssign ? JSON.parse(existingAssign) : []
             const hasValidAssign = existingParsed.some(a => a.trim())
+            // Force re-assign if existing assignment doesn't respect index pins
+            const respectsPins = Object.entries(DEFAULT_INDEX_PINS).every(
+              ([idxStr, name]) => existingParsed[Number(idxStr)] === name
+            )
 
-            if (!hasValidAssign) {
+            if (!hasValidAssign || !respectsPins) {
               const rawPins = localStorage.getItem(MENTORS_PINS_KEY)
-              const pins: Record<string, string> = { ...DEFAULT_PINS, ...(rawPins ? JSON.parse(rawPins) : {}) }
-              const assigned = buildAssignments(names, localTs?.slots ?? [], pins)
+              const extraPins: Record<number, string> = rawPins ? JSON.parse(rawPins) : {}
+              const pins = { ...DEFAULT_INDEX_PINS, ...extraPins }
+              const assigned = buildAssignments(names, localTs?.slots.length ?? 16, pins)
               setAssignments(assigned)
               localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(assigned))
             } else {
@@ -131,8 +136,9 @@ export default function MentorsPage() {
       return
     }
     const rawPins = localStorage.getItem(MENTORS_PINS_KEY)
-    const pins: Record<string, string> = { ...DEFAULT_PINS, ...(rawPins ? JSON.parse(rawPins) : {}) }
-    const shuffled = ts ? buildAssignments(mentorNames, ts.slots, pins) : [...mentorNames].sort(() => Math.random() - 0.5)
+    const extraPins: Record<number, string> = rawPins ? JSON.parse(rawPins) : {}
+    const pins = { ...DEFAULT_INDEX_PINS, ...extraPins }
+    const shuffled = buildAssignments(mentorNames, ts?.slots.length ?? 16, pins)
     setAssignments(shuffled)
     localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(shuffled))
     // Also reset reveals when re-assigning
