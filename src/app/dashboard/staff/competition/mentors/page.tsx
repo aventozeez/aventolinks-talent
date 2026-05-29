@@ -15,47 +15,46 @@ const supabase = createClient(
 export const MENTORS_REVEAL_KEY      = 'sc_mentors_reveal_v1'
 export const MENTORS_NAMES_KEY       = 'sc_mentor_names_v1'       // entered names
 export const MENTORS_ASSIGNMENT_KEY  = 'sc_mentor_assignments_v1' // slot → mentor name
-export const MENTORS_PINS_KEY        = 'sc_mentor_pins_v1'        // { slotIndex: mentorName }
 
-// Slot 0 = first card revealed = always Suliat Alli
-const DEFAULT_INDEX_PINS: Record<number, string> = {
-  0: 'Suliat Alli',
+// Hardcoded mentor→team pairings that survive every shuffle
+const MENTOR_TEAM_PINS: Record<string, string> = {
+  'Suliat Alli': 'The International School, University of Ibadan',
 }
 
-function getPins(): Record<number, string> {
-  const raw = localStorage.getItem(MENTORS_PINS_KEY)
-  const extra: Record<number, string> = raw ? JSON.parse(raw) : {}
-  return { ...DEFAULT_INDEX_PINS, ...extra }
-}
+// This team's card is always shown first in the reveal grid
+const FIRST_REVEAL_TEAM = 'The International School, University of Ibadan'
 
-function checkRespectsPins(arr: string[], pins: Record<number, string>): boolean {
-  return Object.entries(pins).every(([idxStr, name]) => arr[Number(idxStr)] === name)
-}
+type Slot = { teamName: string }
 
-// Shuffle names then swap pinned names into their target positions
-function buildAssignments(names: string[], count: number, pins: Record<number, string>): string[] {
-  const result = [...names].sort(() => Math.random() - 0.5).slice(0, count)
-  while (result.length < count) result.push('')
-  swapPins(result, pins)
-  return result
-}
-
-// Fix an existing assignment in-place without reshuffling
-function enforcePins(existing: string[], pins: Record<number, string>): string[] {
-  const result = [...existing]
-  swapPins(result, pins)
-  return result
-}
-
-function swapPins(arr: string[], pins: Record<number, string>) {
-  for (const [idxStr, name] of Object.entries(pins)) {
-    const target = Number(idxStr)
-    if (target >= arr.length) continue
-    if (arr[target] === name) continue
-    const src = arr.indexOf(name)
+function applyPins(arr: string[], slots: Slot[]) {
+  for (const [mentorName, teamName] of Object.entries(MENTOR_TEAM_PINS)) {
+    const target = slots.findIndex(s => s.teamName === teamName)
+    if (target === -1) continue
+    if (arr[target] === mentorName) continue
+    const src = arr.indexOf(mentorName)
     if (src === -1) continue
     ;[arr[src], arr[target]] = [arr[target], arr[src]]
   }
+}
+
+function checkRespectsPins(arr: string[], slots: Slot[]): boolean {
+  return Object.entries(MENTOR_TEAM_PINS).every(([mentorName, teamName]) => {
+    const idx = slots.findIndex(s => s.teamName === teamName)
+    return idx === -1 || arr[idx] === mentorName
+  })
+}
+
+function buildAssignments(names: string[], slots: Slot[]): string[] {
+  const result = [...names].sort(() => Math.random() - 0.5).slice(0, slots.length)
+  while (result.length < slots.length) result.push('')
+  applyPins(result, slots)
+  return result
+}
+
+function enforcePins(existing: string[], slots: Slot[]): string[] {
+  const result = [...existing]
+  applyPins(result, slots)
+  return result
 }
 
 export default function MentorsPage() {
@@ -97,21 +96,19 @@ export default function MentorsPage() {
           localStorage.setItem(MENTORS_NAMES_KEY, JSON.stringify(names))
           setDbLoaded(true)
 
+          const slots = localTs?.slots ?? []
           const existingAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
           const existingParsed: string[] = existingAssign ? JSON.parse(existingAssign) : []
           const hasValidAssign = existingParsed.some(a => a.trim())
-          const pins = getPins()
 
           if (!hasValidAssign) {
-            // No assignment at all — build fresh (only when all 16 names are ready)
             if (names.length >= 16) {
-              const assigned = buildAssignments(names, localTs?.slots.length ?? 16, pins)
+              const assigned = buildAssignments(names, slots)
               setAssignments(assigned)
               localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(assigned))
             }
-          } else if (!checkRespectsPins(existingParsed, pins)) {
-            // Assignment exists but Suliat Alli isn't at slot 0 — fix in-place, no reshuffle
-            const fixed = enforcePins(existingParsed, pins)
+          } else if (!checkRespectsPins(existingParsed, slots)) {
+            const fixed = enforcePins(existingParsed, slots)
             setAssignments(fixed)
             localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(fixed))
           } else {
@@ -125,10 +122,9 @@ export default function MentorsPage() {
           const savedAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
           if (savedAssign) {
             const existing: string[] = JSON.parse(savedAssign)
-            const pins = getPins()
-            if (existing.some(a => a.trim()) && !checkRespectsPins(existing, pins)) {
-              // Fix the cached assignment without reshuffling
-              const fixed = enforcePins(existing, pins)
+            const slots = localTs?.slots ?? []
+            if (existing.some(a => a.trim()) && !checkRespectsPins(existing, slots)) {
+              const fixed = enforcePins(existing, slots)
               setAssignments(fixed)
               localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(fixed))
             } else {
@@ -154,8 +150,7 @@ export default function MentorsPage() {
       alert(`Please enter all 16 mentor names first (${16 - filled.length} missing).`)
       return
     }
-    const pins = getPins()
-    const shuffled = buildAssignments(mentorNames, ts?.slots.length ?? 16, pins)
+    const shuffled = buildAssignments(mentorNames, ts?.slots ?? [])
     setAssignments(shuffled)
     localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(shuffled))
     // Also reset reveals when re-assigning
@@ -181,14 +176,14 @@ export default function MentorsPage() {
   const revealAll = () => {
     setRevealingAll(true)
     const current = [...revealed]
-    let i = 0
+    let di = 0
     const tick = () => {
-      while (i < 16 && current[i]) i++
-      if (i >= 16) { setRevealingAll(false); return }
-      current[i] = true
+      while (di < displayOrder.length && current[displayOrder[di]]) di++
+      if (di >= displayOrder.length) { setRevealingAll(false); return }
+      current[displayOrder[di]] = true
       persistRevealed([...current])
-      i++
-      if (i < 16) setTimeout(tick, 220)
+      di++
+      if (di < displayOrder.length) setTimeout(tick, 220)
       else setRevealingAll(false)
     }
     tick()
@@ -224,6 +219,12 @@ export default function MentorsPage() {
   const slots        = ts.slots
   const revealedCount = revealed.filter(Boolean).length
   const isAssigned   = assignments.some(a => a.trim())
+
+  // ISUI card displays first; rest follow in original bracket order
+  const isuiIdx = slots.findIndex(s => s.teamName === FIRST_REVEAL_TEAM)
+  const displayOrder = isuiIdx > 0
+    ? [isuiIdx, ...slots.map((_, i) => i).filter(i => i !== isuiIdx)]
+    : slots.map((_, i) => i)
 
   return (
     <div className="min-h-screen bg-[#060f1f] text-white">
@@ -365,7 +366,8 @@ export default function MentorsPage() {
         {/* ── Mentor Cards Grid ── */}
         {isAssigned && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {slots.map((slot, i) => {
+            {displayOrder.map(i => {
+              const slot         = slots[i]
               const isRevealed   = revealed[i]
               const mentorName   = assignments[i] || `Mentor ${i + 1}`
               const matchNum     = Math.floor(i / 2) + 1
