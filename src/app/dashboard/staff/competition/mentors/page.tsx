@@ -22,32 +22,40 @@ const DEFAULT_INDEX_PINS: Record<number, string> = {
   0: 'Suliat Alli',
 }
 
-// Build slot-to-mentor assignment array, honouring index-based pins
-function buildAssignments(
-  names: string[],
-  count: number,
-  indexPins: Record<number, string>,
-): string[] {
-  const result: string[] = Array(count).fill('')
-  const used = new Set<string>()
+function getPins(): Record<number, string> {
+  const raw = localStorage.getItem(MENTORS_PINS_KEY)
+  const extra: Record<number, string> = raw ? JSON.parse(raw) : {}
+  return { ...DEFAULT_INDEX_PINS, ...extra }
+}
 
-  // Apply index pins first
-  for (const [idxStr, name] of Object.entries(indexPins)) {
-    const idx = Number(idxStr)
-    if (idx < count && names.includes(name)) {
-      result[idx] = name
-      used.add(name)
-    }
-  }
+function checkRespectsPins(arr: string[], pins: Record<number, string>): boolean {
+  return Object.entries(pins).every(([idxStr, name]) => arr[Number(idxStr)] === name)
+}
 
-  // Shuffle remaining names and fill unpinned slots
-  const pool = [...names].filter(n => !used.has(n)).sort(() => Math.random() - 0.5)
-  let pi = 0
-  for (let i = 0; i < count; i++) {
-    if (!result[i] && pool[pi] !== undefined) result[i] = pool[pi++]
-  }
-
+// Shuffle names then swap pinned names into their target positions
+function buildAssignments(names: string[], count: number, pins: Record<number, string>): string[] {
+  const result = [...names].sort(() => Math.random() - 0.5).slice(0, count)
+  while (result.length < count) result.push('')
+  swapPins(result, pins)
   return result
+}
+
+// Fix an existing assignment in-place without reshuffling
+function enforcePins(existing: string[], pins: Record<number, string>): string[] {
+  const result = [...existing]
+  swapPins(result, pins)
+  return result
+}
+
+function swapPins(arr: string[], pins: Record<number, string>) {
+  for (const [idxStr, name] of Object.entries(pins)) {
+    const target = Number(idxStr)
+    if (target >= arr.length) continue
+    if (arr[target] === name) continue
+    const src = arr.indexOf(name)
+    if (src === -1) continue
+    ;[arr[src], arr[target]] = [arr[target], arr[src]]
+  }
 }
 
 export default function MentorsPage() {
@@ -89,33 +97,44 @@ export default function MentorsPage() {
           localStorage.setItem(MENTORS_NAMES_KEY, JSON.stringify(names))
           setDbLoaded(true)
 
-          // Auto-assign only when all 16 are present
-          if (data.length >= 16) {
-            const existingAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
-            const existingParsed: string[] = existingAssign ? JSON.parse(existingAssign) : []
-            const hasValidAssign = existingParsed.some(a => a.trim())
-            // Force re-assign if existing assignment doesn't respect index pins
-            const respectsPins = Object.entries(DEFAULT_INDEX_PINS).every(
-              ([idxStr, name]) => existingParsed[Number(idxStr)] === name
-            )
+          const existingAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
+          const existingParsed: string[] = existingAssign ? JSON.parse(existingAssign) : []
+          const hasValidAssign = existingParsed.some(a => a.trim())
+          const pins = getPins()
 
-            if (!hasValidAssign || !respectsPins) {
-              const rawPins = localStorage.getItem(MENTORS_PINS_KEY)
-              const extraPins: Record<number, string> = rawPins ? JSON.parse(rawPins) : {}
-              const pins = { ...DEFAULT_INDEX_PINS, ...extraPins }
+          if (!hasValidAssign) {
+            // No assignment at all — build fresh (only when all 16 names are ready)
+            if (names.length >= 16) {
               const assigned = buildAssignments(names, localTs?.slots.length ?? 16, pins)
               setAssignments(assigned)
               localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(assigned))
-            } else {
-              setAssignments(existingParsed)
             }
+          } else if (!checkRespectsPins(existingParsed, pins)) {
+            // Assignment exists but Suliat Alli isn't at slot 0 — fix in-place, no reshuffle
+            const fixed = enforcePins(existingParsed, pins)
+            setAssignments(fixed)
+            localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(fixed))
+          } else {
+            setAssignments(existingParsed)
           }
         } else {
-          // DB empty or error — fall back to any locally saved names/assignments
+          // DB empty or error — fall back to locally saved names/assignments
           const savedNames = localStorage.getItem(MENTORS_NAMES_KEY)
           if (savedNames) setMentorNames(JSON.parse(savedNames))
+
           const savedAssign = localStorage.getItem(MENTORS_ASSIGNMENT_KEY)
-          if (savedAssign) setAssignments(JSON.parse(savedAssign))
+          if (savedAssign) {
+            const existing: string[] = JSON.parse(savedAssign)
+            const pins = getPins()
+            if (existing.some(a => a.trim()) && !checkRespectsPins(existing, pins)) {
+              // Fix the cached assignment without reshuffling
+              const fixed = enforcePins(existing, pins)
+              setAssignments(fixed)
+              localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(fixed))
+            } else {
+              setAssignments(existing)
+            }
+          }
         }
       } catch {}
     })()
@@ -135,9 +154,7 @@ export default function MentorsPage() {
       alert(`Please enter all 16 mentor names first (${16 - filled.length} missing).`)
       return
     }
-    const rawPins = localStorage.getItem(MENTORS_PINS_KEY)
-    const extraPins: Record<number, string> = rawPins ? JSON.parse(rawPins) : {}
-    const pins = { ...DEFAULT_INDEX_PINS, ...extraPins }
+    const pins = getPins()
     const shuffled = buildAssignments(mentorNames, ts?.slots.length ?? 16, pins)
     setAssignments(shuffled)
     localStorage.setItem(MENTORS_ASSIGNMENT_KEY, JSON.stringify(shuffled))
