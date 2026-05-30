@@ -187,13 +187,15 @@ export default function CompetitionPage() {
 
       {/* Header */}
       <div className="bg-[#0a1628] border-b border-[#f5a623]/20 shadow-lg">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center gap-3">
-          <Trophy className="text-[#f5a623]" size={28} />
-          <div>
-            <h1 className="text-2xl font-bold text-white">Competition Manager</h1>
-            <p className="text-sm text-slate-400">Scholars Challenge Administration</p>
+        {activeTab !== 'draw' && (
+          <div className="max-w-7xl mx-auto px-6 py-5 flex items-center gap-3">
+            <Trophy className="text-[#f5a623]" size={28} />
+            <div>
+              <h1 className="text-2xl font-bold text-white">Competition Manager</h1>
+              <p className="text-sm text-slate-400">Scholars Challenge Administration</p>
+            </div>
           </div>
-        </div>
+        )}
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex gap-1 overflow-x-auto scrollbar-none">
             {tabs.map(({ key, label, icon: Icon }) => (

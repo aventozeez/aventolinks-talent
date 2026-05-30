@@ -222,7 +222,7 @@ export default function DrawBracket({
 
   // ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: 520 }}>
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 90px)', minHeight: 520 }}>
 
       {/* ── Compact action bar (no title) ── */}
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2 shrink-0">
