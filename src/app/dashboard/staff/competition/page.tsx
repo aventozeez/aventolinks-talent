@@ -215,7 +215,7 @@ export default function CompetitionPage() {
       </div>
 
       {/* Tab Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className={`max-w-7xl mx-auto px-6 ${activeTab === 'draw' ? 'pt-3 pb-0' : 'py-8'}`}>
         {activeTab === "teams"     && <TeamsTab toast={toast} />}
         {activeTab === "mentors"   && <MentorsTab toast={toast} />}
         {activeTab === "questions" && <QuestionsTab toast={toast} />}

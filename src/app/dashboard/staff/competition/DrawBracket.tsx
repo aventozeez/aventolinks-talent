@@ -222,18 +222,15 @@ export default function DrawBracket({
 
   // ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 220px)', minHeight: 560 }}>
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: 520 }}>
 
-      {/* ── Header bar ── */}
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2 shrink-0">
-        <div>
-          <h2 className="text-lg font-bold text-white">🎯 Tournament Draw & Bracket</h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {ts.phase==='setup'   && `${teams.length}/16 teams registered · Click Run Draw to assign teams to bracket positions`}
-            {ts.phase==='drawing' && 'Drawing teams to bracket positions…'}
-            {ts.phase==='bracket' && 'Click any match to enter result'}
-          </p>
-        </div>
+      {/* ── Compact action bar (no title) ── */}
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2 shrink-0">
+        <p className="text-[11px] text-slate-500">
+          {ts.phase==='setup'   && `${teams.length}/16 teams · Run Draw to assign bracket positions`}
+          {ts.phase==='drawing' && '🎲 Drawing teams to bracket positions…'}
+          {ts.phase==='bracket' && 'Click any match to enter result'}
+        </p>
         <div className="flex gap-2 flex-wrap">
           {/* Live display — always available */}
           <button
@@ -327,8 +324,8 @@ export default function DrawBracket({
 
       {/* ══════════════════ BRACKET ══════════════════ */}
       {ts.phase==='bracket' && (()=>{
-        // ── Layout constants (mirrors the presentation HTML) ──────────────────
-        const STP=76, CH=64, BH=8*STP  // step, card-height, bracket-height = 608
+        // ── Layout constants ──────────────────────────────────────────────────
+        const STP=68, CH=56, BH=8*STP  // step=68, card-height=56, total=544
         const R16W=175
         const QFL=R16W+22,  QFW=155
         const SFL=QFL+QFW+22, SFW=145
