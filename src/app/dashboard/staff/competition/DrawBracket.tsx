@@ -78,12 +78,14 @@ type ModalState = {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+type TabKey = 'teams' | 'mentors' | 'questions' | 'sets' | 'match' | 'draw'
+
 export default function DrawBracket({
   toast,
   onNavigate,
 }: {
   toast: (msg: string, type?: 'ok' | 'err') => void
-  onNavigate?: (tab: string) => void
+  onNavigate?: (tab: TabKey) => void
 }) {
   const router = useRouter()
   const [teams,       setTeams]       = useState<TTeam[]>([])
@@ -228,14 +230,14 @@ export default function DrawBracket({
 
       {/* ── Mini nav strip (replaces hidden page header) ── */}
       <div className="bg-[#0a1628] border-b border-[#f5a623]/20 flex items-center gap-1 px-3 shrink-0" style={{ minHeight: 40 }}>
-        {[
-          { key: 'teams',     label: 'Teams'       },
-          { key: 'mentors',   label: 'Mentors'     },
-          { key: 'questions', label: 'Questions'   },
-          { key: 'sets',      label: 'Question Sets' },
-          { key: 'match',     label: 'Match Setup' },
-          { key: 'draw',      label: 'Draw & Bracket' },
-        ].map(({ key, label }) => (
+        {([
+          { key: 'teams'     as TabKey, label: 'Teams'          },
+          { key: 'mentors'   as TabKey, label: 'Mentors'        },
+          { key: 'questions' as TabKey, label: 'Questions'      },
+          { key: 'sets'      as TabKey, label: 'Question Sets'  },
+          { key: 'match'     as TabKey, label: 'Match Setup'    },
+          { key: 'draw'      as TabKey, label: 'Draw & Bracket' },
+        ]).map(({ key, label }) => (
           <button
             key={key}
             onClick={() => onNavigate?.(key)}
