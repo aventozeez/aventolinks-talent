@@ -144,6 +144,50 @@ export default function DrawBracket({
     localStorage.removeItem(REVEAL_KEY)
   }
 
+  // ── Apply pre-determined seeded bracket (skips random draw) ──────────
+  const applySeededDraw = () => {
+    if (!confirm('Apply the official seeded bracket? This will overwrite any existing draw.')) return
+    const seededSlots: DrawSlot[] = [
+      // M1 — Seed 1 vs Seed 16
+      { position:  1, teamId: 'd458897d-8bb0-4091-8999-ff48428727e1', teamName: 'Ibadan Grammar School',                          mentorName: '' },
+      { position:  2, teamId: 'e557bec3-9c7f-4e2e-839d-a337b1357c49', teamName: 'His Marvelous Model College',                    mentorName: '' },
+      // M2 — Seed 8 vs Seed 9
+      { position:  3, teamId: 'a7045429-287b-49bc-9ebb-f7c81e2d338a', teamName: 'Sharon Rose Schools and College',                mentorName: '' },
+      { position:  4, teamId: '6a6ab42b-61ff-499c-803a-9fc2f56016ea', teamName: 'Olivet Baptist Academy',                         mentorName: '' },
+      // M3 — Seed 4 vs Seed 13
+      { position:  5, teamId: 'ae55e8be-c7a9-4430-841f-f998a9650d81', teamName: 'Greater Love Model College',                     mentorName: '' },
+      { position:  6, teamId: 'bb0f6936-d959-4bee-85e2-6848ff250681', teamName: 'The Smart School',                               mentorName: '' },
+      // M4 — Seed 5 vs Seed 12
+      { position:  7, teamId: '06e2acce-cd12-4e2b-82a1-aa50fc2f4c75', teamName: 'Maceland Academy',                               mentorName: '' },
+      { position:  8, teamId: '26023fc8-939f-4be5-84ed-7df5a1ff5ef8', teamName: 'Learning Cloud Academy',                         mentorName: '' },
+      // M5 — Seed 3 vs Seed 14
+      { position:  9, teamId: 'b52d7694-2a51-4664-b153-13ad780fcfd7', teamName: 'The International School, University of Ibadan', mentorName: '' },
+      { position: 10, teamId: '8de17b6b-ec26-4836-bdd4-08ad35c675d7', teamName: 'Aseda Private School of Science',               mentorName: '' },
+      // M6 — Seed 6 vs Seed 11
+      { position: 11, teamId: '333f7a6e-4903-44cb-b3dd-47713403e759', teamName: 'Ibadan Grammar School 2 - Molete',               mentorName: '' },
+      { position: 12, teamId: '127985b7-26e3-4ec4-8bc6-cb698aea2106', teamName: 'Besley Schools',                                 mentorName: '' },
+      // M7 — Seed 7 vs Seed 10
+      { position: 13, teamId: '711ef929-84e1-429a-b2e9-c5c9404c4d30', teamName: 'Olivet Baptist High School',                    mentorName: '' },
+      { position: 14, teamId: 'e80a4674-f410-42a9-a0fa-df3c696813a1', teamName: 'Community High School',                          mentorName: '' },
+      // M8 — Seed 2 vs Seed 15
+      { position: 15, teamId: '76ea1985-f7ab-49a2-abcb-aee5790a3021', teamName: 'Front Model College',                            mentorName: '' },
+      { position: 16, teamId: '9fc76a97-7bbd-4cdf-840d-d81d64a82e5b', teamName: 'Ibadan Boys High School',                        mentorName: '' },
+    ]
+    const next: TournamentState = {
+      ...blankState(),
+      phase: 'bracket',
+      mentors: ts.mentors,
+      slots: seededSlots,
+    }
+    persist(next)
+    setRevealCount(0)
+    localStorage.removeItem(REVEAL_KEY)
+    // Clear mentor assignment so it rebuilds with correct pins on next visit
+    localStorage.removeItem('sc_mentor_assignments_v1')
+    localStorage.removeItem('sc_mentors_reveal_v1')
+    toast('Seeded bracket applied ✓', 'ok')
+  }
+
   const openLiveDisplay = () => {
     window.open('/dashboard/staff/competition/live-draw', '_blank', 'noopener')
   }
@@ -233,9 +277,14 @@ export default function DrawBracket({
             </button>
           )}
           {ts.phase==='setup' && (
-            <button onClick={runDraw} disabled={teams.length<16} className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] text-[#0a1628] font-bold rounded-lg hover:bg-[#e0941a] disabled:opacity-40 text-sm">
-              <Shuffle size={14} /> Run Draw ({teams.length}/16)
-            </button>
+            <>
+              <button onClick={applySeededDraw} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-500 text-sm">
+                <Trophy size={14} /> Apply Seeded Draw
+              </button>
+              <button onClick={runDraw} disabled={teams.length<16} className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] text-[#0a1628] font-bold rounded-lg hover:bg-[#e0941a] disabled:opacity-40 text-sm">
+                <Shuffle size={14} /> Run Draw ({teams.length}/16)
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -263,7 +312,7 @@ export default function DrawBracket({
           </div>
           {teams.length < 16
             ? <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-xs text-yellow-300">⚠ {16-teams.length} more team{16-teams.length!==1?'s':''} needed. Register them in the Teams tab.</div>
-            : <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-xs text-green-300">✓ All 16 teams ready. Click <strong>Run Draw</strong> to randomly assign them to bracket positions.</div>
+            : <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-xs text-green-300">✓ All 16 teams ready. Click <strong>Apply Seeded Draw</strong> to use the official seeded bracket, or <strong>Run Draw</strong> for a random assignment.</div>
           }
         </div>
       )}
