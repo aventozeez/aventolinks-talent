@@ -110,44 +110,10 @@ export default function DrawBracket({
     localStorage.setItem(DRAW_KEY, JSON.stringify(next))
   }, [])
 
-  // ── Draw animation ────────────────────────────────────────────────────
+  // ── Draw animation (uses predetermined seeded bracket) ───────────────
   const runDraw = () => {
     if (teams.length < 16) { toast(`Need 16 teams — currently ${teams.length}`, 'err'); return }
-    const shuffled = [...teams].sort(() => Math.random() - 0.5).slice(0, 16)
-    const slots: DrawSlot[] = shuffled.map((t, i) => ({
-      position: i + 1, teamId: t.id, teamName: t.team_name,
-      mentorName: '', // assigned separately on the Unveil Mentors page
-    }))
-    const draft: TournamentState = { ...ts, phase: 'drawing', slots, r16: Array(8).fill(null), qf: Array(4).fill(null), sf: Array(2).fill(null), bestLoserSFIdx: null, final3ThirdIdx: null, gfWinnerIdx: null }
-    persist(draft)
-    setRevealCount(0)
-    localStorage.setItem(REVEAL_KEY, '0')
-    let count = 0
-    const tick = () => {
-      count++
-      setRevealCount(count)
-      localStorage.setItem(REVEAL_KEY, String(count))
-      if (count < 16) setTimeout(tick, 380)
-      else setTimeout(() => {
-        persist({ ...draft, phase: 'bracket' })
-        setRevealCount(0)
-        localStorage.removeItem(REVEAL_KEY)
-      }, 900)
-    }
-    setTimeout(tick, 300)
-  }
-
-  const resetDraw = () => {
-    if (!confirm('Reset the entire tournament? All results will be cleared.')) return
-    const next = blankState(); next.mentors = ts.mentors
-    persist(next); setRevealCount(0)
-    localStorage.removeItem(REVEAL_KEY)
-  }
-
-  // ── Apply pre-determined seeded bracket (skips random draw) ──────────
-  const applySeededDraw = () => {
-    if (!confirm('Apply the official seeded bracket? This will overwrite any existing draw.')) return
-    const seededSlots: DrawSlot[] = [
+    const slots: DrawSlot[] = [
       // M1 — Seed 1 vs Seed 16
       { position:  1, teamId: 'd458897d-8bb0-4091-8999-ff48428727e1', teamName: 'Ibadan Grammar School',                          mentorName: '' },
       { position:  2, teamId: 'e557bec3-9c7f-4e2e-839d-a337b1357c49', teamName: 'His Marvelous Model College',                    mentorName: '' },
@@ -173,19 +139,33 @@ export default function DrawBracket({
       { position: 15, teamId: '76ea1985-f7ab-49a2-abcb-aee5790a3021', teamName: 'Front Model College',                            mentorName: '' },
       { position: 16, teamId: '9fc76a97-7bbd-4cdf-840d-d81d64a82e5b', teamName: 'Ibadan Boys High School',                        mentorName: '' },
     ]
-    const next: TournamentState = {
-      ...blankState(),
-      phase: 'bracket',
-      mentors: ts.mentors,
-      slots: seededSlots,
+    const draft: TournamentState = { ...ts, phase: 'drawing', slots, r16: Array(8).fill(null), qf: Array(4).fill(null), sf: Array(2).fill(null), bestLoserSFIdx: null, final3ThirdIdx: null, gfWinnerIdx: null }
+    persist(draft)
+    setRevealCount(0)
+    localStorage.setItem(REVEAL_KEY, '0')
+    let count = 0
+    const tick = () => {
+      count++
+      setRevealCount(count)
+      localStorage.setItem(REVEAL_KEY, String(count))
+      if (count < 16) setTimeout(tick, 380)
+      else setTimeout(() => {
+        persist({ ...draft, phase: 'bracket' })
+        setRevealCount(0)
+        localStorage.removeItem(REVEAL_KEY)
+      }, 900)
     }
+    setTimeout(tick, 300)
+  }
+
+  const resetDraw = () => {
+    if (!confirm('Reset the entire tournament? All results will be cleared.')) return
+    const next = blankState(); next.mentors = ts.mentors
     persist(next)
     setRevealCount(0)
     localStorage.removeItem(REVEAL_KEY)
-    // Clear mentor assignment so it rebuilds with correct pins on next visit
     localStorage.removeItem('sc_mentor_assignments_v1')
     localStorage.removeItem('sc_mentors_reveal_v1')
-    toast('Seeded bracket applied ✓', 'ok')
   }
 
   const openLiveDisplay = () => {
@@ -277,14 +257,9 @@ export default function DrawBracket({
             </button>
           )}
           {ts.phase==='setup' && (
-            <>
-              <button onClick={applySeededDraw} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-500 text-sm">
-                <Trophy size={14} /> Apply Seeded Draw
-              </button>
-              <button onClick={runDraw} disabled={teams.length<16} className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] text-[#0a1628] font-bold rounded-lg hover:bg-[#e0941a] disabled:opacity-40 text-sm">
-                <Shuffle size={14} /> Run Draw ({teams.length}/16)
-              </button>
-            </>
+            <button onClick={runDraw} disabled={teams.length<16} className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] text-[#0a1628] font-bold rounded-lg hover:bg-[#e0941a] disabled:opacity-40 text-sm">
+              <Shuffle size={14} /> Run Draw ({teams.length}/16)
+            </button>
           )}
         </div>
       </div>
@@ -312,7 +287,7 @@ export default function DrawBracket({
           </div>
           {teams.length < 16
             ? <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-xs text-yellow-300">⚠ {16-teams.length} more team{16-teams.length!==1?'s':''} needed. Register them in the Teams tab.</div>
-            : <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-xs text-green-300">✓ All 16 teams ready. Click <strong>Apply Seeded Draw</strong> to use the official seeded bracket, or <strong>Run Draw</strong> for a random assignment.</div>
+            : <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-xs text-green-300">✓ All 16 teams ready. Click <strong>Run Draw</strong> to assign teams to bracket positions.</div>
           }
         </div>
       )}
