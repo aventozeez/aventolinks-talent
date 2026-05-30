@@ -80,8 +80,10 @@ type ModalState = {
 
 export default function DrawBracket({
   toast,
+  onNavigate,
 }: {
   toast: (msg: string, type?: 'ok' | 'err') => void
+  onNavigate?: (tab: string) => void
 }) {
   const router = useRouter()
   const [teams,       setTeams]       = useState<TTeam[]>([])
@@ -222,10 +224,34 @@ export default function DrawBracket({
 
   // ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 90px)', minHeight: 520 }}>
+    <div className="flex flex-col" style={{ height: '100vh', minHeight: 520 }}>
 
-      {/* ── Compact action bar (no title) ── */}
-      <div className="flex items-center justify-between mb-2 flex-wrap gap-2 shrink-0">
+      {/* ── Mini nav strip (replaces hidden page header) ── */}
+      <div className="bg-[#0a1628] border-b border-[#f5a623]/20 flex items-center gap-1 px-3 shrink-0" style={{ minHeight: 40 }}>
+        {[
+          { key: 'teams',     label: 'Teams'       },
+          { key: 'mentors',   label: 'Mentors'     },
+          { key: 'questions', label: 'Questions'   },
+          { key: 'sets',      label: 'Question Sets' },
+          { key: 'match',     label: 'Match Setup' },
+          { key: 'draw',      label: 'Draw & Bracket' },
+        ].map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => onNavigate?.(key)}
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+              key === 'draw'
+                ? 'border-[#f5a623] text-[#f5a623]'
+                : 'border-transparent text-slate-400 hover:text-white'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Compact action bar ── */}
+      <div className="flex items-center justify-between px-3 py-2 flex-wrap gap-2 shrink-0">
         <p className="text-[11px] text-slate-500">
           {ts.phase==='setup'   && `${teams.length}/16 teams · Run Draw to assign bracket positions`}
           {ts.phase==='drawing' && '🎲 Drawing teams to bracket positions…'}

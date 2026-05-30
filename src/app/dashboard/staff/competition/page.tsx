@@ -185,9 +185,9 @@ export default function CompetitionPage() {
     <div className="min-h-screen bg-[#0d1f3c] text-white">
       <Toasts toasts={toasts} remove={removeToast} />
 
-      {/* Header */}
-      <div className="bg-[#0a1628] border-b border-[#f5a623]/20 shadow-lg">
-        {activeTab !== 'draw' && (
+      {/* Header — hidden on draw tab to maximise space */}
+      {activeTab !== 'draw' && (
+        <div className="bg-[#0a1628] border-b border-[#f5a623]/20 shadow-lg">
           <div className="max-w-7xl mx-auto px-6 py-5 flex items-center gap-3">
             <Trophy className="text-[#f5a623]" size={28} />
             <div>
@@ -195,35 +195,35 @@ export default function CompetitionPage() {
               <p className="text-sm text-slate-400">Scholars Challenge Administration</p>
             </div>
           </div>
-        )}
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex gap-1 overflow-x-auto scrollbar-none">
-            {tabs.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${
-                  activeTab === key
-                    ? "border-[#f5a623] text-[#f5a623]"
-                    : "border-transparent text-slate-400 hover:text-white"
-                }`}
-              >
-                <Icon size={16} />
-                {label}
-              </button>
-            ))}
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="flex gap-1 overflow-x-auto scrollbar-none">
+              {tabs.map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${
+                    activeTab === key
+                      ? "border-[#f5a623] text-[#f5a623]"
+                      : "border-transparent text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Icon size={16} />
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Tab Content */}
-      <div className={`max-w-7xl mx-auto px-6 ${activeTab === 'draw' ? 'pt-3 pb-0' : 'py-8'}`}>
+      <div className={activeTab === 'draw' ? '' : 'max-w-7xl mx-auto px-6 py-8'}>
         {activeTab === "teams"     && <TeamsTab toast={toast} />}
         {activeTab === "mentors"   && <MentorsTab toast={toast} />}
         {activeTab === "questions" && <QuestionsTab toast={toast} />}
         {activeTab === "sets"      && <SetsTab toast={toast} />}
         {activeTab === "match"     && <MatchSetupTab toast={toast} router={router} />}
-        {activeTab === "draw"      && <DrawBracket toast={toast} />}
+        {activeTab === "draw"      && <DrawBracket toast={toast} onNavigate={setActiveTab} />}
       </div>
     </div>
   );
