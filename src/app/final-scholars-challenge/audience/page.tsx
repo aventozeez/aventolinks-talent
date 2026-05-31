@@ -1,50 +1,73 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Loader2 } from 'lucide-react'
-import { getLiveState, subscribeToLive, QuizLiveState, POINTS } from '@/lib/quiz-live'
-
-const OPTION_LABELS = ['A', 'B', 'C', 'D']
-
-const MODE_LABELS: Record<string, string> = {
-  rapid_fire:        '⚡ Rapid Fire',
-  buzzer:            '🔔 Buzzer Round',
-  innovation_sprint: '💡 Innovation Sprint',
-}
+import {
+  FSCState,
+  getMatchState, subscribeToMatch,
+  RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS,
+} from '@/lib/fsc-live'
 
 export default function AudiencePage() {
-  const [state,   setState]   = useState<QuizLiveState | null>(null)
+  const [state, setState] = useState<FSCState | null>(null)
   const [loading, setLoading] = useState(true)
+  const [timerMs, setTimerMs] = useState(0)
+  const stateRef = useRef<FSCState | null>(null)
 
-  useEffect(() => {
-    getLiveState().then(({ data }) => {
-      if (data) setState(data)
-      setLoading(false)
-    })
-    const sub = subscribeToLive(setState)
-    return sub.unsubscribe
+  const handleStateUpdate = useCallback((s: FSCState) => {
+    setState(s)
+    stateRef.current = s
   }, [])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#060f1f] flex items-center justify-center">
-        <Loader2 className="animate-spin text-[#f5a623]" size={40} />
-      </div>
-    )
+  useEffect(() => {
+    getMatchState().then(s => {
+      if (s) handleStateUpdate(s)
+      setLoading(false)
+    })
+    const sub = subscribeToMatch(handleStateUpdate)
+    return sub.unsubscribe
+  }, [handleStateUpdate])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const s = stateRef.current
+      if (!s) return
+      if ((s.rf_phase === 'a_playing' || s.rf_phase === 'b_playing') && s.rf_timer_start) {
+        setTimerMs(Math.max(0, RF_TIME_MS - (Date.now() - s.rf_timer_start)))
+      } else if ((s.bz_phase === 'buzzed_a' || s.bz_phase === 'buzzed_b' || s.bz_phase === 'second_chance') && s.bz_buzz_start) {
+        setTimerMs(Math.max(0, BZ_TIME_MS - (Date.now() - s.bz_buzz_start)))
+      } else if (s.is_phase === 'working' && s.is_timer_start) {
+        setTimerMs(Math.max(0, IS_TIME_MS - (Date.now() - s.is_timer_start)))
+      } else {
+        setTimerMs(0)
+      }
+    }, 500)
+    return () => clearInterval(id)
+  }, [])
+
+  if (loading) return (
+    <div className="min-h-screen bg-[#060f1f] flex items-center justify-center">
+      <Loader2 className="animate-spin text-[#f5a623]" size={40} />
+    </div>
+  )
+
+  const s = state
+  const round = s?.round ?? 'idle'
+  const nameA = s?.team_a_name ?? 'Team A'
+  const nameB = s?.team_b_name ?? 'Team B'
+  const totalA = (s?.rf_score_a ?? 0) + (s?.bz_score_a ?? 0) + (s?.is_score_a ?? 0)
+  const totalB = (s?.rf_score_b ?? 0) + (s?.bz_score_b ?? 0) + (s?.is_score_b ?? 0)
+  const timerSecs = Math.ceil(timerMs / 1000)
+  const timerWarn = timerSecs <= 10 && timerSecs > 0
+  const fmtTime = (ms: number) => { const sc = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(sc / 60)}:${String(sc % 60).padStart(2, '0')}` }
+
+  const ROUND_LABELS: Record<string, string> = {
+    idle: '',
+    rapid_fire: '⚡ Rapid Fire',
+    buzzer: '🔔 Buzzer Round',
+    innovation_sprint: '💡 Innovation Sprint',
+    finished: '🏆 Final Scores',
   }
-
-  const mode     = state?.mode ?? 'rapid_fire'
-  const phase    = state?.phase ?? 'idle'
-  const currentQ = state?.questions?.[state?.current_index ?? 0] ?? null
-  const totalQ   = state?.questions?.length ?? 0
-
-  const buzzedTeam =
-    phase === 'buzzed_a' ? state?.team_a_name :
-    phase === 'buzzed_b' ? state?.team_b_name : null
-  const buzzColor =
-    phase === 'buzzed_a' ? { ring: 'border-green-400', bg: 'bg-green-500/20', text: 'text-green-300' } :
-    phase === 'buzzed_b' ? { ring: 'border-purple-400', bg: 'bg-purple-500/20', text: 'text-purple-300' } :
-    null
 
   return (
     <div className="min-h-screen bg-[#060f1f] text-white flex flex-col select-none">
@@ -54,31 +77,23 @@ export default function AudiencePage() {
         <span className="text-xs font-black text-[#f5a623] uppercase tracking-[0.3em]">
           Final Scholars Challenge — Live
         </span>
-        {phase !== 'idle' && (
+        {round !== 'idle' && (
           <span className="text-xs font-bold text-slate-400 bg-white/5 px-3 py-1 rounded-full border border-white/10">
-            {MODE_LABELS[mode] ?? mode}
+            {ROUND_LABELS[round]}
           </span>
         )}
       </div>
 
-      {/* Scores */}
+      {/* Score board */}
       <div className="grid grid-cols-2 border-b border-white/10 shrink-0">
         <div className="bg-green-950/40 border-r border-white/10 px-8 py-5 text-center">
-          <p className="text-sm font-black text-green-400 uppercase tracking-widest truncate">
-            {state?.team_a_name ?? 'Team A'}
-          </p>
-          <p className="text-7xl font-black text-green-400 mt-1 leading-none">
-            {state?.score_a ?? 0}
-          </p>
+          <p className="text-sm font-black text-green-400 uppercase tracking-widest truncate">{nameA}</p>
+          <p className="text-7xl font-black text-green-400 mt-1 leading-none">{totalA}</p>
           <p className="text-xs text-green-700 mt-1 font-semibold">pts</p>
         </div>
         <div className="bg-purple-950/40 px-8 py-5 text-center">
-          <p className="text-sm font-black text-purple-400 uppercase tracking-widest truncate">
-            {state?.team_b_name ?? 'Team B'}
-          </p>
-          <p className="text-7xl font-black text-purple-400 mt-1 leading-none">
-            {state?.score_b ?? 0}
-          </p>
+          <p className="text-sm font-black text-purple-400 uppercase tracking-widest truncate">{nameB}</p>
+          <p className="text-7xl font-black text-purple-400 mt-1 leading-none">{totalB}</p>
           <p className="text-xs text-purple-700 mt-1 font-semibold">pts</p>
         </div>
       </div>
@@ -87,101 +102,348 @@ export default function AudiencePage() {
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-5xl mx-auto w-full">
 
         {/* ── Idle ── */}
-        {phase === 'idle' && (
+        {round === 'idle' && (
           <div className="text-center space-y-5">
             <div className="text-9xl">🎓</div>
             <h1 className="text-5xl font-black text-white tracking-tight">Final Scholars Challenge</h1>
-            <p className="text-slate-400 text-xl">Waiting for the admin to launch a match…</p>
+            <p className="text-slate-400 text-xl">Waiting for the match to begin…</p>
           </div>
         )}
 
-        {/* ── Active ── */}
-        {phase !== 'idle' && currentQ && (
+        {/* ── Finished ── */}
+        {round === 'finished' && (
+          <div className="text-center space-y-6 w-full max-w-2xl">
+            <div className="text-7xl">🏆</div>
+            <h2 className="text-4xl font-black text-white">Final Results</h2>
+            <div className="grid grid-cols-2 gap-4">
+              {(['a', 'b'] as const).map(team => {
+                const name = team === 'a' ? nameA : nameB
+                const rf = team === 'a' ? (s?.rf_score_a ?? 0) : (s?.rf_score_b ?? 0)
+                const bz = team === 'a' ? (s?.bz_score_a ?? 0) : (s?.bz_score_b ?? 0)
+                const is = team === 'a' ? (s?.is_score_a ?? 0) : (s?.is_score_b ?? 0)
+                const total = rf + bz + is
+                const other = team === 'a' ? totalB : totalA
+                const color = team === 'a'
+                  ? { border: 'border-green-500/40', text: 'text-green-400', dim: 'text-green-700' }
+                  : { border: 'border-purple-500/40', text: 'text-purple-400', dim: 'text-purple-700' }
+                const isWinner = total > other
+                return (
+                  <div key={team} className={`bg-[#0a1628] border-2 ${color.border} rounded-3xl p-6 ${isWinner ? 'ring-2 ring-[#f5a623]/60' : ''}`}>
+                    {isWinner && <p className="text-sm font-black text-[#f5a623] text-center mb-2">🏆 WINNER</p>}
+                    <p className={`text-base font-black ${color.text} text-center`}>{name}</p>
+                    <p className={`text-6xl font-black ${color.text} text-center mt-2`}>{total}</p>
+                    <div className="mt-4 space-y-2 border-t border-white/10 pt-3">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">⚡ Rapid Fire</span><span className={color.text}>{rf}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">🔔 Buzzer</span><span className={color.text}>{bz}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">💡 Innovation</span><span className={color.text}>{is}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {totalA === totalB && (
+              <p className="text-2xl font-black text-[#f5a623]">🤝 It&apos;s a Tie!</p>
+            )}
+          </div>
+        )}
+
+        {/* ── RAPID FIRE ── */}
+        {round === 'rapid_fire' && (
           <div className="w-full space-y-6">
 
-            {/* Q counter + category */}
-            <div className="flex items-center justify-between text-sm text-slate-500">
-              <span>
-                Question <strong className="text-white">{(state?.current_index ?? 0) + 1}</strong> of{' '}
-                <strong className="text-white">{totalQ}</strong>
-              </span>
-              <span className="bg-white/5 border border-white/10 px-3 py-1 rounded-full text-xs">
-                {currentQ.category}
-              </span>
-            </div>
-
-            {/* Question card */}
-            <div className="bg-[#0a1628] border border-white/10 rounded-3xl p-8 shadow-2xl">
-              <p className="text-3xl md:text-4xl font-bold text-white text-center leading-snug">
-                {currentQ.question}
-              </p>
-            </div>
-
-            {/* ── BUZZER — who buzzed ── */}
-            {buzzedTeam && buzzColor && (
-              <div className={`rounded-2xl px-6 py-5 text-center font-black text-3xl border-2 animate-pulse ${buzzColor.ring} ${buzzColor.bg} ${buzzColor.text}`}>
-                🔔 {buzzedTeam} BUZZED IN!
+            {s?.rf_phase === 'idle' && (
+              <div className="text-center space-y-4">
+                <p className="text-7xl">⚡</p>
+                <h2 className="text-4xl font-black text-white">Rapid Fire Round</h2>
+                <p className="text-slate-400 text-xl">Each team answers 10 questions in 60 seconds</p>
               </div>
             )}
 
-            {/* Options (hidden in innovation sprint or while buzzer waiting) */}
-            {mode !== 'innovation_sprint' && currentQ.options?.length > 0 && (
-              <div className="grid grid-cols-2 gap-4">
-                {currentQ.options.map((opt, idx) => {
-                  const isCorrect = idx === currentQ.correct_answer
-                  const revealed  = phase === 'revealed'
-                  return (
-                    <div key={idx} className={`flex items-center gap-4 px-6 py-5 rounded-2xl border text-base font-semibold transition-all duration-500 ${
-                      revealed && isCorrect
-                        ? 'border-green-400 bg-green-500/25 text-green-200 scale-[1.02] shadow-lg shadow-green-500/20'
-                        : revealed
-                        ? 'border-white/5 bg-white/[0.02] text-slate-600'
-                        : 'border-white/15 bg-white/5 text-white'
-                    }`}>
-                      <span className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black shrink-0 ${
-                        revealed && isCorrect ? 'bg-green-500 text-white' : 'bg-white/10 text-slate-400'
-                      }`}>{OPTION_LABELS[idx]}</span>
-                      <span className="flex-1">{opt}</span>
-                    </div>
-                  )
-                })}
+            {(s?.rf_phase === 'a_playing' || s?.rf_phase === 'b_playing') && (
+              <>
+                {/* Big timer */}
+                <div className={`rounded-3xl p-6 text-center border-2 transition-all ${
+                  timerWarn ? 'border-red-400 bg-red-500/10 animate-pulse' : timerSecs === 0 ? 'border-red-600 bg-red-900/20' :
+                  s.rf_phase === 'a_playing' ? 'border-green-400/50 bg-green-500/10' : 'border-purple-400/50 bg-purple-500/10'
+                }`}>
+                  <p className={`text-base font-black uppercase tracking-widest ${s.rf_phase === 'a_playing' ? 'text-green-400' : 'text-purple-400'}`}>
+                    {s.rf_phase === 'a_playing' ? nameA : nameB} — Rapid Fire
+                  </p>
+                  <p className={`text-8xl font-black mt-2 ${timerWarn || timerSecs === 0 ? 'text-red-400' : s.rf_phase === 'a_playing' ? 'text-green-400' : 'text-purple-400'}`}>
+                    {fmtTime(timerMs)}
+                  </p>
+                  <p className="text-slate-500 mt-2">
+                    Question {s.rf_q_index + 1} of {s.rf_questions?.length ?? 10}
+                    {s.rf_phase === 'a_playing' && ` · ${s.rf_correct_a} correct`}
+                    {s.rf_phase === 'b_playing' && ` · ${s.rf_correct_b} correct`}
+                  </p>
+                </div>
+
+                {/* Current question (no answer) */}
+                {s.rf_phase === 'a_playing' && s.rf_questions?.[s.rf_q_index] && (
+                  <div className="bg-[#0a1628] border border-white/10 rounded-3xl p-8 shadow-2xl">
+                    <p className="text-xs text-slate-500 mb-3">{s.rf_questions[s.rf_q_index].category}</p>
+                    <p className="text-3xl md:text-4xl font-bold text-white text-center leading-snug">
+                      {s.rf_questions[s.rf_q_index].question}
+                    </p>
+                  </div>
+                )}
+                {s.rf_phase === 'b_playing' && s.rf_questions?.[s.rf_q_index] && (
+                  <div className="bg-[#0a1628] border border-white/10 rounded-3xl p-8 shadow-2xl">
+                    <p className="text-xs text-slate-500 mb-3">{s.rf_questions[s.rf_q_index].category}</p>
+                    <p className="text-3xl md:text-4xl font-bold text-white text-center leading-snug">
+                      {s.rf_questions[s.rf_q_index].question}
+                    </p>
+                  </div>
+                )}
+
+                {/* Round scores */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-green-950/40 border border-green-500/30 rounded-2xl p-4 text-center">
+                    <p className="text-xs font-bold text-green-400 truncate">{nameA}</p>
+                    <p className="text-3xl font-black text-green-400">{s.rf_score_a}</p>
+                  </div>
+                  <div className="bg-purple-950/40 border border-purple-500/30 rounded-2xl p-4 text-center">
+                    <p className="text-xs font-bold text-purple-400 truncate">{nameB}</p>
+                    <p className="text-3xl font-black text-purple-400">{s.rf_score_b}</p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {s?.rf_phase === 'break' && (
+              <div className="text-center space-y-5">
+                <div className="bg-green-950/40 border border-green-500/40 rounded-3xl p-8 inline-block min-w-[240px]">
+                  <p className="text-base font-black text-green-400">{nameA}</p>
+                  <p className="text-6xl font-black text-green-400 mt-1">{s.rf_score_a}</p>
+                  <p className="text-sm text-green-700 mt-2">{s.rf_correct_a} correct</p>
+                </div>
+                <p className="text-xl font-bold text-slate-400">{nameB} is next…</p>
               </div>
             )}
 
-            {/* Innovation Sprint waiting */}
-            {mode === 'innovation_sprint' && phase === 'showing' && (
-              <div className="rounded-2xl border border-[#f5a623]/30 bg-[#f5a623]/8 px-8 py-6 text-center">
-                <p className="text-[#f5a623] font-black text-xl mb-1">💡 Innovation Sprint</p>
-                <p className="text-slate-400 text-base">Teams are preparing their response…</p>
+            {s?.rf_phase === 'done' && (
+              <div className="space-y-5 text-center">
+                <h3 className="text-2xl font-black text-white">Rapid Fire Complete!</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-green-950/40 border border-green-500/40 rounded-2xl p-6 text-center">
+                    <p className="text-base font-black text-green-400">{nameA}</p>
+                    <p className="text-5xl font-black text-green-400 mt-1">{s.rf_score_a}</p>
+                    <p className="text-sm text-green-700">{s.rf_correct_a} correct</p>
+                  </div>
+                  <div className="bg-purple-950/40 border border-purple-500/40 rounded-2xl p-6 text-center">
+                    <p className="text-base font-black text-purple-400">{nameB}</p>
+                    <p className="text-5xl font-black text-purple-400 mt-1">{s.rf_score_b}</p>
+                    <p className="text-sm text-purple-700">{s.rf_correct_b} correct</p>
+                  </div>
+                </div>
+                <p className="text-slate-400">🔔 Buzzer Round coming up next…</p>
               </div>
             )}
-
-            {/* Buzzer waiting */}
-            {mode === 'buzzer' && phase === 'showing' && (
-              <div className="rounded-2xl border border-[#f5a623]/20 bg-[#f5a623]/5 px-8 py-5 text-center">
-                <p className="text-[#f5a623]/70 font-semibold text-lg">🔔 Waiting for a buzz…</p>
-              </div>
-            )}
-
-            {/* Result banner */}
-            {phase === 'revealed' && state?.last_result && state.last_result !== 'pass' && (
-              <div className={`rounded-2xl px-6 py-4 text-center text-xl font-black border transition-all duration-300 ${
-                state.last_result === 'correct_a'
-                  ? 'bg-green-500/20 border-green-400/40 text-green-300'
-                  : state.last_result === 'correct_b'
-                  ? 'bg-purple-500/20 border-purple-400/40 text-purple-300'
-                  : 'bg-red-500/20 border-red-400/40 text-red-300'
-              }`}>
-                {state.last_result === 'correct_a' &&
-                  `✅ ${state.team_a_name} answered correctly! +${POINTS} points`}
-                {state.last_result === 'correct_b' &&
-                  `✅ ${state.team_b_name} answered correctly! +${POINTS} points`}
-                {state.last_result === 'wrong' && '❌ No one answered correctly this round'}
-              </div>
-            )}
-
           </div>
         )}
+
+        {/* ── BUZZER ROUND ── */}
+        {round === 'buzzer' && (
+          <div className="w-full space-y-6">
+
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-black text-white">🔔 Buzzer Round</h2>
+              <span className="text-slate-400 bg-white/5 border border-white/10 px-3 py-1 rounded-full text-sm">
+                Q {(s?.bz_q_index ?? 0) + 1} / {s?.bz_questions?.length ?? 10}
+              </span>
+            </div>
+
+            {/* Buzzer scores */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-green-950/40 border border-green-500/30 rounded-2xl p-3 text-center">
+                <p className="text-xs font-bold text-green-400 truncate">{nameA}</p>
+                <p className="text-4xl font-black text-green-400">{s?.bz_score_a ?? 0}</p>
+              </div>
+              <div className="bg-purple-950/40 border border-purple-500/30 rounded-2xl p-3 text-center">
+                <p className="text-xs font-bold text-purple-400 truncate">{nameB}</p>
+                <p className="text-4xl font-black text-purple-400">{s?.bz_score_b ?? 0}</p>
+              </div>
+            </div>
+
+            {s?.bz_phase === 'idle' && (
+              <div className="text-center py-8">
+                <p className="text-5xl animate-bounce">🔔</p>
+                <p className="text-white font-bold text-xl mt-3">Next question incoming…</p>
+              </div>
+            )}
+
+            {(s?.bz_phase === 'showing' || s?.bz_phase === 'buzzed_a' || s?.bz_phase === 'buzzed_b' || s?.bz_phase === 'second_chance' || s?.bz_phase === 'revealed') && s?.bz_questions?.[s.bz_q_index] && (
+              <div className="bg-[#0a1628] border border-white/10 rounded-3xl p-8 shadow-2xl">
+                <p className="text-xs text-slate-500 mb-3">{s.bz_questions[s.bz_q_index].category}</p>
+                <p className="text-3xl md:text-4xl font-bold text-white text-center leading-snug">
+                  {s.bz_questions[s.bz_q_index].question}
+                </p>
+              </div>
+            )}
+
+            {s?.bz_phase === 'showing' && (
+              <div className="rounded-2xl border border-[#f5a623]/20 bg-[#f5a623]/5 px-8 py-5 text-center">
+                <p className="text-[#f5a623] font-bold text-xl">🔔 Waiting for a buzz…</p>
+              </div>
+            )}
+
+            {(s?.bz_phase === 'buzzed_a' || s?.bz_phase === 'buzzed_b') && (
+              <>
+                <div className={`rounded-2xl px-6 py-5 text-center font-black text-3xl border-2 animate-pulse ${
+                  s.bz_phase === 'buzzed_a'
+                    ? 'border-green-400 bg-green-500/20 text-green-300'
+                    : 'border-purple-400 bg-purple-500/20 text-purple-300'
+                }`}>
+                  🔔 {s.bz_phase === 'buzzed_a' ? nameA : nameB} BUZZED IN!
+                </div>
+                <div className={`rounded-xl px-6 py-4 text-center border ${timerSecs <= 5 ? 'border-red-400 bg-red-500/10' : 'border-white/10 bg-white/5'}`}>
+                  <p className="text-xs text-slate-400 font-bold mb-1">Answering in</p>
+                  <p className={`text-5xl font-black ${timerSecs <= 5 ? 'text-red-400' : 'text-white'}`}>{timerSecs}s</p>
+                </div>
+              </>
+            )}
+
+            {s?.bz_phase === 'second_chance' && (
+              <div className={`rounded-2xl px-6 py-5 text-center border-2 ${
+                s.bz_second_chance_team === 'a'
+                  ? 'border-green-400/60 bg-green-500/10 text-green-300'
+                  : 'border-purple-400/60 bg-purple-500/10 text-purple-300'
+              }`}>
+                <p className="text-xl font-black">Second Chance!</p>
+                <p className="text-lg font-semibold mt-1">
+                  {s.bz_second_chance_team === 'a' ? nameA : nameB} — no penalty
+                </p>
+                <p className="text-4xl font-black mt-2">{timerSecs}s</p>
+              </div>
+            )}
+
+            {s?.bz_phase === 'revealed' && (
+              <div className={`rounded-2xl px-6 py-4 text-center text-xl font-black border transition-all ${
+                s.bz_last_result === 'correct_a' ? 'bg-green-500/20 border-green-400/40 text-green-300' :
+                s.bz_last_result === 'correct_b' ? 'bg-purple-500/20 border-purple-400/40 text-purple-300' :
+                s.bz_last_result === 'penalty_a' ? 'bg-red-500/15 border-red-400/30 text-red-300' :
+                s.bz_last_result === 'penalty_b' ? 'bg-red-500/15 border-red-400/30 text-red-300' :
+                'bg-slate-700/20 border-slate-600/30 text-slate-400'
+              }`}>
+                {s.bz_last_result === 'correct_a' && `✅ ${nameA} answered correctly! +10 pts`}
+                {s.bz_last_result === 'correct_b' && `✅ ${nameB} answered correctly! +10 pts`}
+                {s.bz_last_result === 'penalty_a' && `❌ ${nameA} — Penalty: −5 pts`}
+                {s.bz_last_result === 'penalty_b' && `❌ ${nameB} — Penalty: −5 pts`}
+                {s.bz_last_result === 'skip' && '⏭ No one scored this round'}
+              </div>
+            )}
+
+            {s?.bz_phase === 'done' && (
+              <div className="space-y-4 text-center">
+                <h3 className="text-2xl font-black text-white">Buzzer Round Complete!</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-green-950/40 border border-green-500/40 rounded-2xl p-5 text-center">
+                    <p className="text-base font-black text-green-400">{nameA}</p>
+                    <p className="text-5xl font-black text-green-400 mt-1">{s.bz_score_a}</p>
+                  </div>
+                  <div className="bg-purple-950/40 border border-purple-500/40 rounded-2xl p-5 text-center">
+                    <p className="text-base font-black text-purple-400">{nameB}</p>
+                    <p className="text-5xl font-black text-purple-400 mt-1">{s.bz_score_b}</p>
+                  </div>
+                </div>
+                <p className="text-slate-400">💡 Innovation Sprint coming up next…</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── INNOVATION SPRINT ── */}
+        {round === 'innovation_sprint' && (
+          <div className="w-full space-y-6">
+
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-black text-white">💡 Innovation Sprint</h2>
+              <span className="text-slate-400 bg-white/5 border border-white/10 px-3 py-1 rounded-full text-sm">
+                Problem {(s?.is_problem_index ?? 0) + 1} / {s?.is_problems?.length ?? 2}
+              </span>
+            </div>
+
+            {/* IS Scores */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-green-950/40 border border-green-500/30 rounded-2xl p-3 text-center">
+                <p className="text-xs font-bold text-green-400 truncate">{nameA}</p>
+                <p className="text-4xl font-black text-green-400">{s?.is_score_a ?? 0}</p>
+              </div>
+              <div className="bg-purple-950/40 border border-purple-500/30 rounded-2xl p-3 text-center">
+                <p className="text-xs font-bold text-purple-400 truncate">{nameB}</p>
+                <p className="text-4xl font-black text-purple-400">{s?.is_score_b ?? 0}</p>
+              </div>
+            </div>
+
+            {/* Problem statement */}
+            {s?.is_problems?.[s?.is_problem_index ?? 0] && (
+              <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-3xl p-8 shadow-2xl">
+                <p className="text-sm font-black text-[#f5a623] uppercase tracking-wider mb-3">Problem Statement</p>
+                <p className="text-2xl md:text-3xl font-bold text-white leading-snug text-center">
+                  {s.is_problems[s.is_problem_index].statement}
+                </p>
+              </div>
+            )}
+
+            {s?.is_phase === 'idle' && (
+              <div className="text-center">
+                <p className="text-slate-400 text-lg">Waiting for timer to start…</p>
+                <p className="text-slate-500 text-sm mt-1">Teams will arrange the solution steps</p>
+              </div>
+            )}
+
+            {s?.is_phase === 'working' && (
+              <div className={`rounded-3xl p-6 text-center border-2 transition-all ${
+                timerWarn ? 'border-red-400 bg-red-500/10 animate-pulse' : 'border-[#f5a623]/40 bg-[#f5a623]/5'
+              }`}>
+                <p className="text-base font-black text-[#f5a623] uppercase tracking-widest">Teams Arranging Steps</p>
+                <p className={`text-8xl font-black mt-2 ${timerWarn || timerSecs === 0 ? 'text-red-400' : 'text-[#f5a623]'}`}>
+                  {fmtTime(timerMs)}
+                </p>
+              </div>
+            )}
+
+            {s?.is_phase === 'collecting' && (
+              <div className="flex items-center justify-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-8 py-6">
+                <Loader2 className="animate-spin text-[#f5a623]" size={28} />
+                <p className="text-white font-bold text-lg">Collecting team answers…</p>
+              </div>
+            )}
+
+            {s?.is_phase === 'revealed' && (
+              <div className="space-y-4 text-center">
+                <p className="text-2xl font-black text-white">📊 Results!</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-green-950/40 border border-green-500/40 rounded-2xl p-5 text-center">
+                    <p className="text-base font-black text-green-400">{nameA}</p>
+                    <p className="text-4xl font-black text-green-400 mt-1">{s.is_score_a}</p>
+                    <p className="text-xs text-green-700">Innovation Sprint total</p>
+                  </div>
+                  <div className="bg-purple-950/40 border border-purple-500/40 rounded-2xl p-5 text-center">
+                    <p className="text-base font-black text-purple-400">{nameB}</p>
+                    <p className="text-4xl font-black text-purple-400 mt-1">{s.is_score_b}</p>
+                    <p className="text-xs text-purple-700">Innovation Sprint total</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {s?.is_phase === 'done' && (
+              <div className="text-center space-y-3">
+                <p className="text-2xl font-black text-white">Innovation Sprint Complete!</p>
+                <p className="text-slate-400">🏆 Final scores incoming…</p>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   )
