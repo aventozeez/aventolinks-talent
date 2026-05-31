@@ -182,6 +182,8 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
   let lastSig = ''
   let lastKnownState: FSCState | null = null  // tracks latest delivered state
   let destroyed = false
+  let channelReady = false                    // true once SUBSCRIBED
+  let buzzRetry: ReturnType<typeof setInterval> | null = null
   const mountTime = Date.now()
 
   const deliver = (s: FSCState) => {
@@ -190,6 +192,11 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
     if (sv === lastSig) return
     lastSig = sv
     lastKnownState = s
+    // If buzz was acknowledged (phase no longer 'showing'), stop retrying
+    if (s.bz_phase !== 'showing' && buzzRetry) {
+      clearInterval(buzzRetry)
+      buzzRetry = null
+    }
     cb(s)
   }
 
@@ -206,7 +213,7 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
         if (typeof window !== 'undefined') window.location.reload()
       }
     })
-    .subscribe()
+    .subscribe((status: string) => { channelReady = status === 'SUBSCRIBED' })
 
   const fetchAndDeliver = async () => {
     if (destroyed) return
@@ -263,6 +270,7 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
   return {
     unsubscribe: () => {
       destroyed = true
+      if (buzzRetry) { clearInterval(buzzRetry); buzzRetry = null }
       supabase.removeChannel(ch)
       clearInterval(poll)
       clearInterval(buzzBackup)
@@ -273,15 +281,28 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
 
     sendBuzz: (team: 'a' | 'b', qIndex?: number) => {
       if (destroyed) return
+      // Clear any previous retry for a prior question
+      if (buzzRetry) { clearInterval(buzzRetry); buzzRetry = null }
       // Prefer qIndex from caller (React state) over lastKnownState which may lag.
       const qIdx = qIndex ?? lastKnownState?.bz_q_index ?? 0
       const payload: BuzzPending = { team, q_index: qIdx, time: Date.now() }
-      // 1. Broadcast via Realtime — admin listens on same channel.
-      //    This is instant and bypasses RLS entirely.
-      ch.send({ type: 'broadcast', event: 'buzz', payload })
-      // 2. Also write to DB as backup so the admin's poll and the viewer-page
-      //    backup processor can handle it if the broadcast is missed.
-      saveBuzzPending(team, qIdx).catch(() => {})
+
+      const attemptSend = () => {
+        if (destroyed) return
+        // Stop retrying if phase is no longer 'showing' (buzz was acknowledged)
+        if (lastKnownState && lastKnownState.bz_phase !== 'showing') {
+          if (buzzRetry) { clearInterval(buzzRetry); buzzRetry = null }
+          return
+        }
+        // 1. Broadcast via Realtime (instant; no RLS; admin receives on same channel)
+        if (channelReady) ch.send({ type: 'broadcast', event: 'buzz', payload })
+        // 2. DB write as backup (admin 200ms poll + viewer backup processor)
+        saveBuzzPending(team, qIdx).catch(() => {})
+      }
+
+      attemptSend()
+      // Retry every 400 ms until the admin acknowledges (phase changes from 'showing')
+      buzzRetry = setInterval(attemptSend, 400)
     },
 
     submitISAnswer: (team, problemIndex, answer) => {
