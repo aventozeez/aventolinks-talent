@@ -11,7 +11,7 @@ export const RF_CORRECT_PTS = 10
 export const BZ_Q_COUNT     = 10
 export const BZ_CORRECT_PTS = 10
 export const BZ_PENALTY_PTS = 5       // first buzzer wrong → -5
-export const BZ_TIME_MS     = 15_000  // 15 s countdown after buzz
+export const BZ_TIME_MS     = 10_000  // 10 s countdown after buzz
 
 export const IS_PROB_COUNT  = 2
 export const IS_TIME_MS     = 60_000  // 60 s to arrange
@@ -149,7 +149,7 @@ export const stateSig = (s: FSCState) =>
 // ── Subscribe (viewers) ───────────────────────────────────────────────────────
 export function subscribeToMatch(cb: (s: FSCState) => void): {
   unsubscribe: () => void
-  sendBuzz: (team: 'a' | 'b') => void
+  sendBuzz: (team: 'a' | 'b') => void | Promise<void>
   submitISAnswer: (team: 'a' | 'b', problemIndex: number, answer: string[]) => void
 } {
   let lastSig = ''
@@ -202,7 +202,26 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
         document.removeEventListener('visibilitychange', onVisible)
       }
     },
-    sendBuzz: (team) => ch.send({ type: 'broadcast', event: 'buzz', payload: { team } }),
+
+    /** Write buzz directly to DB + broadcast — no admin tab required */
+    sendBuzz: async (team: 'a' | 'b') => {
+      if (destroyed) return
+      const s = await getMatchState()
+      // Bail if question is no longer showing (another team buzzed first)
+      if (!s || s.bz_phase !== 'showing') return
+      const newState: FSCState = {
+        ...s,
+        bz_phase: team === 'a' ? 'buzzed_a' : 'buzzed_b',
+        bz_buzz_start: Date.now(),
+      }
+      await saveMatchState(newState)
+      const safe = safeForViewers(newState)
+      // Broadcast to all viewers (including admin) immediately
+      ch.send({ type: 'broadcast', event: 'state', payload: safe })
+      // Also update this page right away
+      deliver(safe)
+    },
+
     submitISAnswer: (team, problemIndex, answer) => {
       saveISAnswer(team, problemIndex, answer).catch(() => {})
     },

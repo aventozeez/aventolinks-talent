@@ -170,11 +170,32 @@ export default function AdminPage() {
     setFscLoading(false)
   }, [])
 
-  // ── Subscribe to buzz events + init ───────────────────────────────────────
+  // ── Subscribe to state/buzz events + init ────────────────────────────────
   useEffect(() => {
     if (!authChecked) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ch = (supabase.channel(FSC_CHANNEL) as any)
+      // Primary: team pages write buzz to DB and broadcast 'state' directly
+      .on('broadcast', { event: 'state' }, (msg: { payload: FSCState }) => {
+        const incoming = msg.payload
+        const current = fscRef.current
+        if (!current) return
+        // Accept a buzz event from a team page while we're still in 'showing'
+        if ((incoming.bz_phase === 'buzzed_a' || incoming.bz_phase === 'buzzed_b')
+            && current.bz_phase === 'showing' && !buzzLockRef.current) {
+          buzzLockRef.current = true
+          // Merge: keep admin's full data (questions w/ answers) but take buzz fields
+          const merged: FSCState = {
+            ...incoming,
+            rf_questions:  current.rf_questions,
+            bz_questions:  current.bz_questions,
+            is_problems:   current.is_problems,
+          }
+          fscRef.current = merged
+          setFscState(merged)
+        }
+      })
+      // Fallback: legacy buzz broadcast (older clients / edge cases)
       .on('broadcast', { event: 'buzz' }, (msg: { payload: { team: 'a' | 'b' } }) => {
         if (buzzLockRef.current) return
         const s = fscRef.current
