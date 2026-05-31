@@ -2,7 +2,6 @@
 
 import { usePathname } from 'next/navigation'
 import Navbar from './Navbar'
-import Footer from './Footer'
 
 export default function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -16,7 +15,6 @@ export default function ConditionalLayout({ children }: { children: React.ReactN
     <>
       <Navbar />
       <main className="pt-16">{children}</main>
-      <Footer />
     </>
   )
 }
