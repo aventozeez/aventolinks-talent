@@ -16,6 +16,7 @@ export type LiveQuestion = {
   options:        string[]
   correct_answer: number
   category:       string
+  answer_key?:    string   // plain-text answer shown to admin only
 }
 
 export type QuizLiveState = {

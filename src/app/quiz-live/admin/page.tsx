@@ -162,12 +162,25 @@ export default function AdminQuizLivePage() {
 
   const loadQuestions = async () => {
     setQLoading(true)
-    const { data } = await supabase
-      .from('quiz_questions')
-      .select('id, question, options, correct_answer, category')
-      .eq('is_active', true)
-      .order('category')
-    setAvailableQs((data as LiveQuestion[]) || [])
+    // Uses the existing sc_questions table (same pool as the rest of the quiz system).
+    // Questions are open-answer; options array is empty so team screens just show the question text.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from('sc_questions')
+      .select('id, question_text, answer_key, subject')
+      .limit(200)
+    if (error) console.error('loadQuestions error', error)
+    setAvailableQs(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((data as any[]) || []).map((q) => ({
+        id:             q.id,
+        question:       q.question_text ?? '',
+        options:        [],
+        correct_answer: 0,
+        category:       q.subject ?? 'General',
+        answer_key:     q.answer_key ?? '',
+      }))
+    )
     setQLoading(false)
   }
 
@@ -408,6 +421,12 @@ export default function AdminQuizLivePage() {
             {/* Question card — answer always visible to admin */}
             <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-5">
               <p className="text-white font-semibold text-base leading-relaxed mb-4">{currentQ.question}</p>
+              {currentQ.answer_key && (
+                <div className="mb-4 px-3 py-2 rounded-lg bg-[#f5a623]/10 border border-[#f5a623]/20">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Answer (admin only)</p>
+                  <p className="text-base font-bold text-[#f5a623]">{currentQ.answer_key}</p>
+                </div>
+              )}
               {mode !== 'innovation_sprint' && currentQ.options?.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
                   {currentQ.options.map((opt, idx) => {
