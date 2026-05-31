@@ -109,6 +109,15 @@ export default function AdminPage() {
   const [managingPool, setManagingPool] = useState<QuestionPool | null>(null)
   const [managingPoolIds, setManagingPoolIds] = useState<Set<string>>(new Set())
   const [managingPoolSaving, setManagingPoolSaving] = useState(false)
+  // Inline entry for RF/BZ pools
+  const [bulkQs, setBulkQs] = useState<{q: string; a: string; cat: string}[]>(
+    () => Array.from({ length: 10 }, () => ({ q: '', a: '', cat: 'General' }))
+  )
+  const [bulkSaving, setBulkSaving] = useState(false)
+  // Inline entry for Sprint pools
+  const [sprintStmt, setSprintStmt] = useState('')
+  const [sprintSteps, setSprintSteps] = useState(['', '', '', '', ''])
+  const [sprintProbSaving, setSprintProbSaving] = useState(false)
 
   // ── Saved Matches ──────────────────────────────────────────────────────────
   const [savedMatches, setSavedMatches] = useState<SavedMatch[]>([])
@@ -438,6 +447,9 @@ export default function AdminPage() {
   const openManagePool = (pool: QuestionPool) => {
     setManagingPool(pool)
     setManagingPoolIds(new Set(pool.question_ids))
+    // reset inline entry forms
+    setBulkQs(Array.from({ length: 10 }, () => ({ q: '', a: '', cat: 'General' })))
+    setSprintStmt(''); setSprintSteps(['', '', '', '', ''])
   }
 
   const savePoolQuestions = async () => {
@@ -449,6 +461,78 @@ export default function AdminPage() {
     setPools(updated)
     await savePools(updated)
     setManagingPool(null); setManagingPoolIds(new Set()); setManagingPoolSaving(false)
+  }
+
+  /** Bulk-insert RF/BZ questions into fsc_questions AND add to pool */
+  const addBulkQuestionsToPool = async () => {
+    if (!managingPool) return
+    const filled = bulkQs.filter(r => r.q.trim())
+    if (filled.length === 0) return
+    setBulkSaving(true)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from('fsc_questions')
+      .insert(filled.map(r => ({
+        question: r.q.trim(), answer: r.a.trim(),
+        category: r.cat.trim() || 'General', type: 'regular', steps: null,
+      })))
+      .select('id')
+    if (error) { alert('Error saving questions'); setBulkSaving(false); return }
+    const newIds: string[] = (data as { id: string }[]).map(d => d.id)
+    const updatedPool: QuestionPool = {
+      ...managingPool,
+      question_ids: [...managingPool.question_ids, ...newIds],
+    }
+    const updatedPools = pools.map(p => p.id === managingPool.id ? updatedPool : p)
+    setManagingPool(updatedPool)
+    setManagingPoolIds(new Set(updatedPool.question_ids))
+    setPools(updatedPools)
+    await savePools(updatedPools)
+    await loadQuestions()
+    setBulkQs(Array.from({ length: 10 }, () => ({ q: '', a: '', cat: 'General' })))
+    setBulkSaving(false)
+  }
+
+  /** Insert a sprint problem into fsc_questions AND add to pool */
+  const addSprintProblemToPool = async () => {
+    if (!managingPool || !sprintStmt.trim()) return
+    const filledSteps = sprintSteps.filter(s => s.trim())
+    if (filledSteps.length < 2) { alert('Add at least 2 steps'); return }
+    setSprintProbSaving(true)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from('fsc_questions')
+      .insert({ question: sprintStmt.trim(), answer: '', category: 'Sprint', type: 'sprint', steps: filledSteps })
+      .select('id')
+      .single()
+    if (error) { alert('Error saving problem'); setSprintProbSaving(false); return }
+    const newId: string = (data as { id: string }).id
+    const updatedPool: QuestionPool = {
+      ...managingPool,
+      question_ids: [...managingPool.question_ids, newId],
+    }
+    const updatedPools = pools.map(p => p.id === managingPool.id ? updatedPool : p)
+    setManagingPool(updatedPool)
+    setManagingPoolIds(new Set(updatedPool.question_ids))
+    setPools(updatedPools)
+    await savePools(updatedPools)
+    await loadQuestions()
+    setSprintStmt(''); setSprintSteps(['', '', '', '', ''])
+    setSprintProbSaving(false)
+  }
+
+  /** Remove a question from the pool (does not delete from fsc_questions) */
+  const removeFromPool = async (qId: string) => {
+    if (!managingPool) return
+    const updatedPool: QuestionPool = {
+      ...managingPool,
+      question_ids: managingPool.question_ids.filter(id => id !== qId),
+    }
+    const updatedPools = pools.map(p => p.id === managingPool.id ? updatedPool : p)
+    setManagingPool(updatedPool)
+    setManagingPoolIds(new Set(updatedPool.question_ids))
+    setPools(updatedPools)
+    await savePools(updatedPools)
   }
 
   // ── Saved match actions ────────────────────────────────────────────────────
@@ -1015,7 +1099,7 @@ export default function AdminPage() {
         {/* ════════════════ POOLS ════════════════ */}
         {activeTab === 'pools' && <>
           {managingPool ? (<>
-            {/* ── Managing questions in a pool ── */}
+            {/* ── Pool editor ── */}
             <div className="flex items-center gap-3">
               <button onClick={() => { setManagingPool(null); setManagingPoolIds(new Set()) }}
                 className="px-3 py-1.5 bg-white/10 text-slate-400 hover:text-white rounded-xl text-xs border border-white/10 transition-colors">
@@ -1025,43 +1109,117 @@ export default function AdminPage() {
                 <p className="font-black text-white text-sm">{managingPool.name}</p>
                 <p className="text-[10px] text-slate-500">
                   {managingPool.type === 'rapid_fire' ? '⚡ Rapid Fire' : managingPool.type === 'buzzer' ? '🔔 Buzzer' : '💡 Sprint'}
-                  {' · '}{managingPoolIds.size} selected
+                  {' · '}{managingPool.question_ids.length} questions in pool
                 </p>
               </div>
             </div>
 
-            <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
-              {(managingPool.type === 'sprint' ? sprintQs : regularQs).map(q => {
-                const checked = managingPoolIds.has(q.id)
-                return (
-                  <button key={q.id} onClick={() => {
-                    const next = new Set(managingPoolIds)
-                    checked ? next.delete(q.id) : next.add(q.id)
-                    setManagingPoolIds(next)
-                  }} className={`w-full flex items-start gap-3 rounded-xl px-3 py-2.5 border text-left transition-all ${
-                    checked ? 'border-[#f5a623]/40 bg-[#f5a623]/10' : 'border-white/10 bg-[#0a1628] hover:border-white/20'
-                  }`}>
-                    <span className={`shrink-0 mt-0.5 text-sm ${checked ? 'text-[#f5a623]' : 'text-slate-600'}`}>
-                      {checked ? '☑' : '☐'}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white leading-snug">{q.question}</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">{q.category}</p>
-                    </div>
+            {/* ── RF / Buzzer: bulk question entry ── */}
+            {(managingPool.type === 'rapid_fire' || managingPool.type === 'buzzer') && (
+              <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-bold text-[#f5a623]">Add Questions</p>
+                  <button onClick={() => setBulkQs(prev => [...prev, { q: '', a: '', cat: 'General' }])}
+                    className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 transition-colors">
+                    <Plus size={10} /> Add row
                   </button>
-                )
-              })}
-              {(managingPool.type === 'sprint' ? sprintQs : regularQs).length === 0 && (
-                <p className="text-center text-slate-600 text-sm py-8">
-                  No {managingPool.type === 'sprint' ? 'sprint problems' : 'regular questions'} — add them in the Questions tab first
-                </p>
-              )}
-            </div>
+                </div>
+                {/* Column headers */}
+                <div className="grid gap-1.5" style={{ gridTemplateColumns: '1fr 0.6fr 0.45fr auto' }}>
+                  <p className="text-[10px] text-slate-600 pl-1">Question</p>
+                  <p className="text-[10px] text-slate-600 pl-1">Answer (admin only)</p>
+                  <p className="text-[10px] text-slate-600 pl-1">Category</p>
+                  <span />
+                </div>
+                <div className="space-y-1.5 max-h-[45vh] overflow-y-auto pr-1">
+                  {bulkQs.map((row, i) => (
+                    <div key={i} className="grid gap-1.5 items-center" style={{ gridTemplateColumns: '1fr 0.6fr 0.45fr auto' }}>
+                      <input value={row.q} onChange={e => setBulkQs(prev => prev.map((r, j) => j === i ? { ...r, q: e.target.value } : r))}
+                        placeholder={`Q${i + 1}`}
+                        className="bg-[#060f1f] border border-white/20 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#f5a623] w-full" />
+                      <input value={row.a} onChange={e => setBulkQs(prev => prev.map((r, j) => j === i ? { ...r, a: e.target.value } : r))}
+                        placeholder="Answer"
+                        className="bg-[#060f1f] border border-white/20 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#f5a623] w-full" />
+                      <input value={row.cat} onChange={e => setBulkQs(prev => prev.map((r, j) => j === i ? { ...r, cat: e.target.value } : r))}
+                        placeholder="General"
+                        className="bg-[#060f1f] border border-white/20 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#f5a623] w-full" />
+                      <button onClick={() => setBulkQs(prev => prev.filter((_, j) => j !== i))}
+                        className="p-1.5 text-slate-700 hover:text-red-400 transition-colors shrink-0">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={addBulkQuestionsToPool}
+                  disabled={bulkSaving || bulkQs.filter(r => r.q.trim()).length === 0}
+                  className="w-full py-2.5 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-sm hover:bg-[#e0941a] disabled:opacity-40 transition-colors mt-1">
+                  {bulkSaving
+                    ? <Loader2 size={14} className="animate-spin mx-auto" />
+                    : `Add ${bulkQs.filter(r => r.q.trim()).length} Question${bulkQs.filter(r => r.q.trim()).length !== 1 ? 's' : ''} to Pool`}
+                </button>
+              </div>
+            )}
 
-            <button onClick={savePoolQuestions} disabled={managingPoolSaving}
-              className="w-full py-3 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-sm hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
-              {managingPoolSaving ? <Loader2 size={16} className="animate-spin mx-auto" /> : `Save — ${managingPoolIds.size} questions selected`}
-            </button>
+            {/* ── Sprint: inline problem entry ── */}
+            {managingPool.type === 'sprint' && (
+              <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-3">
+                <p className="text-xs font-bold text-[#f5a623]">Add Sprint Problem</p>
+                <textarea value={sprintStmt} onChange={e => setSprintStmt(e.target.value)}
+                  placeholder="Problem statement *" rows={3}
+                  className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] resize-none" />
+                <div className="space-y-1.5">
+                  <p className="text-[10px] text-slate-400 font-semibold">Steps in correct order (up to 5):</p>
+                  {sprintSteps.map((step, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-slate-600 w-4 shrink-0">{i + 1}.</span>
+                      <input value={step} onChange={e => setSprintSteps(prev => prev.map((s, j) => j === i ? e.target.value : s))}
+                        placeholder={`Step ${i + 1}${i < 2 ? ' *' : ' (optional)'}`}
+                        className="flex-1 bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+                    </div>
+                  ))}
+                </div>
+                <button onClick={addSprintProblemToPool}
+                  disabled={sprintProbSaving || !sprintStmt.trim() || sprintSteps.filter(s => s.trim()).length < 2}
+                  className="w-full py-2.5 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-sm hover:bg-[#e0941a] disabled:opacity-40 transition-colors">
+                  {sprintProbSaving ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Add Problem to Pool'}
+                </button>
+              </div>
+            )}
+
+            {/* ── Questions already in this pool ── */}
+            {managingPool.question_ids.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  In Pool ({managingPool.question_ids.length})
+                </p>
+                {questions
+                  .filter(q => managingPool.question_ids.includes(q.id))
+                  .map((q, idx) => (
+                    <div key={q.id} className="flex items-start gap-2 bg-[#0a1628] border border-white/10 rounded-xl px-3 py-2.5">
+                      <span className="text-[10px] text-slate-600 font-bold mt-0.5 shrink-0 w-5 text-center">{idx + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white leading-snug">{q.question}</p>
+                        {q.answer && <p className="text-[10px] text-[#f5a623]/60 mt-0.5">✓ {q.answer}</p>}
+                        {q.steps && q.steps.length > 0 && (
+                          <p className="text-[10px] text-slate-500 mt-0.5">{q.steps.length} steps</p>
+                        )}
+                        <span className="text-[10px] text-slate-600">{q.category}</span>
+                      </div>
+                      <button onClick={() => removeFromPool(q.id)}
+                        className="p-1 text-slate-600 hover:text-red-400 transition-colors shrink-0 mt-0.5">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+
+            {managingPool.question_ids.length === 0 && (
+              <p className="text-center text-slate-600 text-sm py-6">
+                No questions yet — use the form above to add {managingPool.type === 'sprint' ? 'sprint problems' : 'questions'}
+              </p>
+            )}
           </>) : (<>
             {/* ── Pool list ── */}
             <div className="flex items-center justify-between">
