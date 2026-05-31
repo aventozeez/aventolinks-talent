@@ -52,7 +52,7 @@ export default function AudiencePage() {
       {/* Top bar */}
       <div className="bg-[#0a1628] border-b border-[#f5a623]/30 px-6 py-2 flex items-center justify-between shrink-0">
         <span className="text-xs font-black text-[#f5a623] uppercase tracking-[0.3em]">
-          Scholars Challenge — Live Quiz
+          Final Scholars Challenge — Live
         </span>
         {phase !== 'idle' && (
           <span className="text-xs font-bold text-slate-400 bg-white/5 px-3 py-1 rounded-full border border-white/10">
@@ -90,7 +90,7 @@ export default function AudiencePage() {
         {phase === 'idle' && (
           <div className="text-center space-y-5">
             <div className="text-9xl">🎓</div>
-            <h1 className="text-5xl font-black text-white tracking-tight">Scholars Challenge</h1>
+            <h1 className="text-5xl font-black text-white tracking-tight">Final Scholars Challenge</h1>
             <p className="text-slate-400 text-xl">Get ready — the quiz is about to begin</p>
           </div>
         )}

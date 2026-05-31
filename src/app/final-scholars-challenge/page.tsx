@@ -7,7 +7,7 @@ const LINKS = [
   {
     key:     'admin',
     label:   'Admin',
-    path:    '/quiz-live/admin',
+    path:    '/final-scholars-challenge/admin',
     emoji:   '🎛️',
     desc:    'Controls questions, marks correct / wrong, advances rounds',
     border:  'border-[#f5a623]/40',
@@ -18,7 +18,7 @@ const LINKS = [
   {
     key:     'audience',
     label:   'Audience Display',
-    path:    '/quiz-live/audience',
+    path:    '/final-scholars-challenge/audience',
     emoji:   '📺',
     desc:    'Big-screen display for the hall / projector — both team scores + question',
     border:  'border-blue-500/40',
@@ -29,7 +29,7 @@ const LINKS = [
   {
     key:     'team-a',
     label:   'Team A',
-    path:    '/quiz-live/team-a',
+    path:    '/final-scholars-challenge/team-a',
     emoji:   '🔵',
     desc:    "Team A's screen — their score prominent, current question",
     border:  'border-green-500/40',
@@ -40,7 +40,7 @@ const LINKS = [
   {
     key:     'team-b',
     label:   'Team B',
-    path:    '/quiz-live/team-b',
+    path:    '/final-scholars-challenge/team-b',
     emoji:   '🟣',
     desc:    "Team B's screen — their score prominent, current question",
     border:  'border-purple-500/40',
@@ -50,7 +50,7 @@ const LINKS = [
   },
 ]
 
-export default function QuizLiveLanding() {
+export default function FinalScholarsChallengeLanding() {
   const [origin, setOrigin]       = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
@@ -70,7 +70,7 @@ export default function QuizLiveLanding() {
         <div className="inline-flex items-center gap-2 bg-[#f5a623]/15 text-[#f5a623] border border-[#f5a623]/30 px-4 py-1.5 rounded-full text-sm font-bold mb-5">
           <Trophy size={15} /> Scholars Challenge
         </div>
-        <h1 className="text-4xl font-black text-white">Quiz Live</h1>
+        <h1 className="text-4xl font-black text-white">Final Scholars Challenge</h1>
         <p className="text-slate-400 mt-2 text-base">
           Share each link to the right device. All screens update live.
         </p>

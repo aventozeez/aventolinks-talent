@@ -23,10 +23,10 @@ const MODES: { key: GameMode; label: string; desc: string; Icon: typeof Zap }[] 
 ]
 
 const LINKS = [
-  { key: 'admin',    label: 'Admin',    path: '/quiz-live/admin',    emoji: '🎛️', border: 'border-[#f5a623]/40',   bg: 'bg-[#f5a623]/10',  text: 'text-[#f5a623]'  },
-  { key: 'audience', label: 'Audience', path: '/quiz-live/audience', emoji: '📺', border: 'border-blue-500/40',   bg: 'bg-blue-500/10',   text: 'text-blue-300'   },
-  { key: 'team-a',   label: 'Team A',   path: '/quiz-live/team-a',   emoji: '🔵', border: 'border-green-500/40',  bg: 'bg-green-500/10',  text: 'text-green-300'  },
-  { key: 'team-b',   label: 'Team B',   path: '/quiz-live/team-b',   emoji: '🟣', border: 'border-purple-500/40', bg: 'bg-purple-500/10', text: 'text-purple-300' },
+  { key: 'admin',    label: 'Admin',    path: '/final-scholars-challenge/admin',    emoji: '🎛️', border: 'border-[#f5a623]/40',   bg: 'bg-[#f5a623]/10',  text: 'text-[#f5a623]'  },
+  { key: 'audience', label: 'Audience', path: '/final-scholars-challenge/audience', emoji: '📺', border: 'border-blue-500/40',   bg: 'bg-blue-500/10',   text: 'text-blue-300'   },
+  { key: 'team-a',   label: 'Team A',   path: '/final-scholars-challenge/team-a',   emoji: '🔵', border: 'border-green-500/40',  bg: 'bg-green-500/10',  text: 'text-green-300'  },
+  { key: 'team-b',   label: 'Team B',   path: '/final-scholars-challenge/team-b',   emoji: '🟣', border: 'border-purple-500/40', bg: 'bg-purple-500/10', text: 'text-purple-300' },
 ]
 
 export default function AdminQuizLivePage() {
@@ -280,7 +280,7 @@ export default function AdminQuizLivePage() {
       <div className="bg-[#0a1628] border-b border-[#f5a623]/20 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <Trophy className="text-[#f5a623]" size={22} />
-          <h1 className="font-bold text-lg">Quiz Live — Admin</h1>
+          <h1 className="font-bold text-lg">Final Scholars Challenge — Admin</h1>
           {saving && <Loader2 size={14} className="animate-spin text-slate-400" />}
         </div>
         <button
