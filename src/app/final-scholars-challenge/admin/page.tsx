@@ -79,6 +79,9 @@ export default function AdminPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channelRef = useRef<any>(null)
   const buzzLockRef = useRef(false)
+  const autoEndedRFRef = useRef(false)   // prevents double-firing auto-end
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyStateRef = useRef<any>(null) // stable ref so timer can call applyState
 
   // ── Timers ─────────────────────────────────────────────────────────────────
   const [timerMs, setTimerMs] = useState(0)
@@ -95,6 +98,13 @@ export default function AdminPage() {
 
   // ── Sync ref ───────────────────────────────────────────────────────────────
   useEffect(() => { fscRef.current = fscState }, [fscState])
+
+  // Reset auto-end flag whenever a team's RF turn begins
+  useEffect(() => {
+    if (fscState?.rf_phase === 'a_playing' || fscState?.rf_phase === 'b_playing') {
+      autoEndedRFRef.current = false
+    }
+  }, [fscState?.rf_phase])
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -119,6 +129,8 @@ export default function AdminPage() {
     })
     setSaving(false)
   }, [])
+  // Keep ref in sync so the timer interval can call applyState
+  useEffect(() => { applyStateRef.current = applyState }, [applyState])
 
   // ── Loaders ────────────────────────────────────────────────────────────────
   const loadTeams = useCallback(async () => {
@@ -168,7 +180,17 @@ export default function AdminPage() {
       const s = fscRef.current
       if (!s) return
       if (s.rf_phase === 'a_playing' || s.rf_phase === 'b_playing') {
-        setTimerMs(Math.max(0, RF_TIME_MS - (Date.now() - (s.rf_timer_start ?? Date.now()))))
+        const remaining = Math.max(0, RF_TIME_MS - (Date.now() - (s.rf_timer_start ?? Date.now())))
+        setTimerMs(remaining)
+        // Auto-end team's turn when timer reaches 0
+        if (remaining === 0 && !autoEndedRFRef.current) {
+          autoEndedRFRef.current = true
+          const isA = s.rf_phase === 'a_playing'
+          const newState: FSCState = isA
+            ? { ...s, rf_phase: 'break', rf_score_a: s.rf_correct_a * RF_CORRECT_PTS }
+            : { ...s, rf_phase: 'done',  rf_score_b: s.rf_correct_b * RF_CORRECT_PTS }
+          applyStateRef.current?.(newState)
+        }
       } else if ((s.bz_phase === 'buzzed_a' || s.bz_phase === 'buzzed_b' || s.bz_phase === 'second_chance') && s.bz_buzz_start) {
         setTimerMs(Math.max(0, BZ_TIME_MS - (Date.now() - s.bz_buzz_start)))
       } else if (s.is_phase === 'working' && s.is_timer_start) {
