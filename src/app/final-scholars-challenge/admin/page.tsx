@@ -949,7 +949,7 @@ export default function AdminPage() {
                 <div className={`rounded-2xl p-4 text-center border-2 ${timerWarn && timerSecs > 0 ? 'border-red-400 bg-red-500/10 animate-pulse' : timerSecs === 0 ? 'border-red-600 bg-red-900/20' : 'border-green-400/40 bg-green-500/10'}`}>
                   <p className="text-xs font-bold text-green-400 uppercase tracking-widest">{s.team_a_name} — Time Remaining</p>
                   <p className={`text-6xl font-black mt-1 ${timerWarn || timerSecs === 0 ? 'text-red-400' : 'text-green-400'}`}>{fmtTime(timerMs)}</p>
-                  <p className="text-xs text-slate-500 mt-1">Q {s.rf_q_index + 1} of {s.rf_questions?.length ?? RF_Q_COUNT} · {s.rf_correct_a} correct</p>
+                  <p className="text-xs text-slate-500 mt-1">Q {Math.min(s.rf_q_index + 1, RF_Q_COUNT)} of {RF_Q_COUNT}{s.rf_q_index >= RF_Q_COUNT ? ' ♻' : ''} · {s.rf_correct_a} correct</p>
                 </div>
 
                 {currentRFQ && (
@@ -1006,7 +1006,7 @@ export default function AdminPage() {
                 <div className={`rounded-2xl p-4 text-center border-2 ${timerWarn && timerSecs > 0 ? 'border-red-400 bg-red-500/10 animate-pulse' : timerSecs === 0 ? 'border-red-600 bg-red-900/20' : 'border-purple-400/40 bg-purple-500/10'}`}>
                   <p className="text-xs font-bold text-purple-400 uppercase tracking-widest">{s.team_b_name} — Time Remaining</p>
                   <p className={`text-6xl font-black mt-1 ${timerWarn || timerSecs === 0 ? 'text-red-400' : 'text-purple-400'}`}>{fmtTime(timerMs)}</p>
-                  <p className="text-xs text-slate-500 mt-1">Q {s.rf_q_index + 1} of {s.rf_questions?.length ?? RF_Q_COUNT} · {s.rf_correct_b} correct</p>
+                  <p className="text-xs text-slate-500 mt-1">Q {Math.min(s.rf_q_index + 1, RF_Q_COUNT)} of {RF_Q_COUNT}{s.rf_q_index >= RF_Q_COUNT ? ' ♻' : ''} · {s.rf_correct_b} correct</p>
                 </div>
 
                 {currentRFQ && (

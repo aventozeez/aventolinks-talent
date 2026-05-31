@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react'
 import {
   FSCState,
   getMatchState, subscribeToMatch,
-  RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS,
+  RF_Q_COUNT, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS,
 } from '@/lib/fsc-live'
 
 const TEAM: 'a' | 'b' = 'b'
@@ -241,7 +241,7 @@ export default function TeamBPage() {
                     {fmtTime(timerMs)}
                   </p>
                   {s.rf_phase === 'b_playing' && (
-                    <p className="text-xs text-slate-500 mt-2">Q {s.rf_q_index + 1} of {s.rf_questions?.length ?? 10}</p>
+                    <p className="text-xs text-slate-500 mt-2">Q {Math.min(s.rf_q_index + 1, RF_Q_COUNT)} of {RF_Q_COUNT}</p>
                   )}
                 </div>
 

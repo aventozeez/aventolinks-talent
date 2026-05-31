@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react'
 import {
   FSCState,
   getMatchState, subscribeToMatch,
-  RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS,
+  RF_Q_COUNT, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS,
 } from '@/lib/fsc-live'
 
 const TEAM: 'a' | 'b' = 'a'
@@ -242,7 +242,7 @@ export default function TeamAPage() {
                     {fmtTime(timerMs)}
                   </p>
                   {s.rf_phase === 'a_playing' && (
-                    <p className="text-xs text-slate-500 mt-2">Q {s.rf_q_index + 1} of {s.rf_questions?.length ?? 10}</p>
+                    <p className="text-xs text-slate-500 mt-2">Q {Math.min(s.rf_q_index + 1, RF_Q_COUNT)} of {RF_Q_COUNT}</p>
                   )}
                 </div>
 
@@ -269,7 +269,7 @@ export default function TeamAPage() {
                 <div className={`bg-[#0a1628] border ${COLOR.border} rounded-2xl p-5 text-center`}>
                   <p className={`text-xs font-bold ${COLOR.text}`}>{myName} — Done!</p>
                   <p className={`text-4xl font-black ${COLOR.text} mt-1`}>{s.rf_score_a} pts</p>
-                  <p className="text-xs text-slate-500 mt-1">{s.rf_correct_a} correct out of {s.rf_questions?.length ?? 10}</p>
+                  <p className="text-xs text-slate-500 mt-1">{s.rf_correct_a} correct out of {RF_Q_COUNT}</p>
                 </div>
                 <div className="bg-[#0a1628] border border-purple-500/20 rounded-2xl p-4 text-center">
                   <p className="text-purple-400 font-semibold text-sm">{theirName}&apos;s turn is next</p>

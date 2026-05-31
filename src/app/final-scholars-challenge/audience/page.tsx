@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react'
 import {
   FSCState,
   getMatchState, subscribeToMatch,
-  RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS,
+  RF_Q_COUNT, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS,
 } from '@/lib/fsc-live'
 
 export default function AudiencePage() {
@@ -179,7 +179,7 @@ export default function AudiencePage() {
                     {fmtTime(timerMs)}
                   </p>
                   <p className="text-slate-500 mt-2">
-                    Question {s.rf_q_index + 1} of {s.rf_questions?.length ?? 10}
+                    Question {Math.min(s.rf_q_index + 1, RF_Q_COUNT)} of {RF_Q_COUNT}
                     {s.rf_phase === 'a_playing' && ` · ${s.rf_correct_a} correct`}
                     {s.rf_phase === 'b_playing' && ` · ${s.rf_correct_b} correct`}
                   </p>
