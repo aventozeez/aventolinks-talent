@@ -110,8 +110,8 @@ export default function AdminPage() {
   const [managingPoolIds, setManagingPoolIds] = useState<Set<string>>(new Set())
   const [managingPoolSaving, setManagingPoolSaving] = useState(false)
   // Inline entry for RF/BZ pools
-  const [bulkQs, setBulkQs] = useState<{q: string; a: string; cat: string}[]>(
-    () => Array.from({ length: 10 }, () => ({ q: '', a: '', cat: 'General' }))
+  const [bulkQs, setBulkQs] = useState<{q: string; a: string}[]>(
+    () => Array.from({ length: 10 }, () => ({ q: '', a: '' }))
   )
   const [bulkSaving, setBulkSaving] = useState(false)
   // Inline entry for Sprint pools
@@ -448,7 +448,7 @@ export default function AdminPage() {
     setManagingPool(pool)
     setManagingPoolIds(new Set(pool.question_ids))
     // reset inline entry forms
-    setBulkQs(Array.from({ length: 10 }, () => ({ q: '', a: '', cat: 'General' })))
+    setBulkQs(Array.from({ length: 10 }, () => ({ q: '', a: '' })))
     setSprintStmt(''); setSprintSteps(['', '', '', '', ''])
   }
 
@@ -474,7 +474,7 @@ export default function AdminPage() {
       .from('fsc_questions')
       .insert(filled.map(r => ({
         question: r.q.trim(), answer: r.a.trim(),
-        category: r.cat.trim() || 'General', type: 'regular', steps: null,
+        category: 'General', type: 'regular', steps: null,
       })))
       .select('id')
     if (error) { alert('Error saving questions'); setBulkSaving(false); return }
@@ -489,7 +489,7 @@ export default function AdminPage() {
     setPools(updatedPools)
     await savePools(updatedPools)
     await loadQuestions()
-    setBulkQs(Array.from({ length: 10 }, () => ({ q: '', a: '', cat: 'General' })))
+    setBulkQs(Array.from({ length: 10 }, () => ({ q: '', a: '' })))
     setBulkSaving(false)
   }
 
@@ -1119,29 +1119,25 @@ export default function AdminPage() {
               <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-2">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-bold text-[#f5a623]">Add Questions</p>
-                  <button onClick={() => setBulkQs(prev => [...prev, { q: '', a: '', cat: 'General' }])}
+                  <button onClick={() => setBulkQs(prev => [...prev, { q: '', a: '' }])}
                     className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 transition-colors">
                     <Plus size={10} /> Add row
                   </button>
                 </div>
                 {/* Column headers */}
-                <div className="grid gap-1.5" style={{ gridTemplateColumns: '1fr 0.6fr 0.45fr auto' }}>
+                <div className="grid gap-1.5" style={{ gridTemplateColumns: '1fr 0.6fr auto' }}>
                   <p className="text-[10px] text-slate-600 pl-1">Question</p>
                   <p className="text-[10px] text-slate-600 pl-1">Answer (admin only)</p>
-                  <p className="text-[10px] text-slate-600 pl-1">Category</p>
                   <span />
                 </div>
                 <div className="space-y-1.5 max-h-[45vh] overflow-y-auto pr-1">
                   {bulkQs.map((row, i) => (
-                    <div key={i} className="grid gap-1.5 items-center" style={{ gridTemplateColumns: '1fr 0.6fr 0.45fr auto' }}>
+                    <div key={i} className="grid gap-1.5 items-center" style={{ gridTemplateColumns: '1fr 0.6fr auto' }}>
                       <input value={row.q} onChange={e => setBulkQs(prev => prev.map((r, j) => j === i ? { ...r, q: e.target.value } : r))}
                         placeholder={`Q${i + 1}`}
                         className="bg-[#060f1f] border border-white/20 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#f5a623] w-full" />
                       <input value={row.a} onChange={e => setBulkQs(prev => prev.map((r, j) => j === i ? { ...r, a: e.target.value } : r))}
                         placeholder="Answer"
-                        className="bg-[#060f1f] border border-white/20 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#f5a623] w-full" />
-                      <input value={row.cat} onChange={e => setBulkQs(prev => prev.map((r, j) => j === i ? { ...r, cat: e.target.value } : r))}
-                        placeholder="General"
                         className="bg-[#060f1f] border border-white/20 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#f5a623] w-full" />
                       <button onClick={() => setBulkQs(prev => prev.filter((_, j) => j !== i))}
                         className="p-1.5 text-slate-700 hover:text-red-400 transition-colors shrink-0">
