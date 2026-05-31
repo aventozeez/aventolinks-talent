@@ -153,28 +153,55 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
   submitISAnswer: (team: 'a' | 'b', problemIndex: number, answer: string[]) => void
 } {
   let lastSig = ''
+  let destroyed = false
+
+  const deliver = (s: FSCState) => {
+    if (destroyed) return
+    const sv = stateSig(s)
+    if (sv === lastSig) return
+    lastSig = sv
+    cb(s)
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ch = (supabase.channel(FSC_CHANNEL) as any)
     .on('broadcast', { event: 'state' }, (msg: { payload: FSCState }) => {
-      const s = msg.payload
-      const sv = stateSig(s)
-      if (sv === lastSig) return
-      lastSig = sv; cb(s)
+      deliver(msg.payload)
     })
     .subscribe()
 
-  const poll = setInterval(async () => {
+  const fetchAndDeliver = async () => {
+    if (destroyed) return
     const s = await getMatchState()
-    if (!s) return
-    const safe = safeForViewers(s)
-    const sv = stateSig(safe)
-    if (sv === lastSig) return
-    lastSig = sv; cb(safe)
-  }, 2000)
+    if (!s || destroyed) return
+    deliver(safeForViewers(s))
+  }
+
+  // Fetch immediately on subscribe so the page is never blank
+  fetchAndDeliver()
+
+  // Poll every 1 000 ms (fast enough to feel live; halved from 2 000 ms)
+  const poll = setInterval(fetchAndDeliver, 1000)
+
+  // Re-sync instantly when the user switches back to this tab
+  const onVisible = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      fetchAndDeliver()
+    }
+  }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisible)
+  }
 
   return {
-    unsubscribe: () => { supabase.removeChannel(ch); clearInterval(poll) },
+    unsubscribe: () => {
+      destroyed = true
+      supabase.removeChannel(ch)
+      clearInterval(poll)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisible)
+      }
+    },
     sendBuzz: (team) => ch.send({ type: 'broadcast', event: 'buzz', payload: { team } }),
     submitISAnswer: (team, problemIndex, answer) => {
       saveISAnswer(team, problemIndex, answer).catch(() => {})

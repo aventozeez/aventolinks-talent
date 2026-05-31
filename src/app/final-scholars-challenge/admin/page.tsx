@@ -152,6 +152,18 @@ export default function AdminPage() {
   const loadFSCState = useCallback(async () => {
     const s = await getMatchState()
     setFscState(s)
+    if (s) {
+      fscRef.current = s
+      // Re-broadcast current state so all viewer pages sync immediately
+      // (use a short delay to ensure channelRef is set after subscribe)
+      setTimeout(() => {
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'state',
+          payload: safeForViewers(s),
+        })
+      }, 500)
+    }
     setFscLoading(false)
   }, [])
 
