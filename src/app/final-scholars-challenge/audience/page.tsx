@@ -418,18 +418,56 @@ export default function AudiencePage() {
             )}
 
             {s?.is_phase === 'revealed' && (
-              <div className="space-y-4 text-center">
-                <p className="text-2xl font-black text-white">📊 Results!</p>
+              <div className="space-y-5">
+                <p className="text-2xl font-black text-white text-center">📊 Results!</p>
+
+                {/* Per-team step breakdowns side by side */}
+                {(s.is_step_results_a || s.is_step_results_b) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Team A breakdown */}
+                    {s.is_team_a_answer && s.is_step_results_a && (
+                      <div className="bg-green-950/30 border border-green-500/30 rounded-2xl p-4">
+                        <p className="text-xs font-black text-green-400 mb-3 truncate">{nameA}</p>
+                        {s.is_team_a_answer.map((step, i) => {
+                          const ok = s.is_step_results_a![i]
+                          return (
+                            <div key={i} className="flex items-start gap-1.5 py-1.5 border-b border-white/5 last:border-0">
+                              <span className={`text-xs shrink-0 mt-0.5 font-black ${ok ? 'text-green-400' : 'text-red-400'}`}>{ok ? '✓' : '✗'}</span>
+                              <p className="text-[11px] text-white/80 leading-snug">{step}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {/* Team B breakdown */}
+                    {s.is_team_b_answer && s.is_step_results_b && (
+                      <div className="bg-purple-950/30 border border-purple-500/30 rounded-2xl p-4">
+                        <p className="text-xs font-black text-purple-400 mb-3 truncate">{nameB}</p>
+                        {s.is_team_b_answer.map((step, i) => {
+                          const ok = s.is_step_results_b![i]
+                          return (
+                            <div key={i} className="flex items-start gap-1.5 py-1.5 border-b border-white/5 last:border-0">
+                              <span className={`text-xs shrink-0 mt-0.5 font-black ${ok ? 'text-green-400' : 'text-red-400'}`}>{ok ? '✓' : '✗'}</span>
+                              <p className="text-[11px] text-white/80 leading-snug">{step}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Scores */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-green-950/40 border border-green-500/40 rounded-2xl p-5 text-center">
                     <p className="text-base font-black text-green-400">{nameA}</p>
                     <p className="text-4xl font-black text-green-400 mt-1">{s.is_score_a}</p>
-                    <p className="text-xs text-green-700">Innovation Sprint total</p>
+                    <p className="text-xs text-green-700">IS total</p>
                   </div>
                   <div className="bg-purple-950/40 border border-purple-500/40 rounded-2xl p-5 text-center">
                     <p className="text-base font-black text-purple-400">{nameB}</p>
                     <p className="text-4xl font-black text-purple-400 mt-1">{s.is_score_b}</p>
-                    <p className="text-xs text-purple-700">Innovation Sprint total</p>
+                    <p className="text-xs text-purple-700">IS total</p>
                   </div>
                 </div>
               </div>

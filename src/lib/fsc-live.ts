@@ -72,6 +72,9 @@ export type FSCState = {
   is_timer_start: number | null
   is_team_a_answer: string[] | null
   is_team_b_answer: string[] | null
+  // Per-step grading results (broadcast to all screens on reveal)
+  is_step_results_a: boolean[] | null
+  is_step_results_b: boolean[] | null
 }
 
 export const makeDefaultState = (a = 'Team A', b = 'Team B'): FSCState => ({
@@ -86,6 +89,7 @@ export const makeDefaultState = (a = 'Team A', b = 'Team B'): FSCState => ({
   bz_buzz_start: null, bz_second_chance_team: null, bz_last_result: null,
   is_phase: 'idle', is_problem_index: 0, is_problems: [],
   is_timer_start: null, is_team_a_answer: null, is_team_b_answer: null,
+  is_step_results_a: null, is_step_results_b: null,
 })
 
 /** Strip correct step order before broadcasting to viewers */

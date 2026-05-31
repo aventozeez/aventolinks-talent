@@ -516,6 +516,9 @@ export default function AdminPage() {
     const gradeA = gradeTeam(isAnswers.a)
     const gradeB = gradeTeam(isAnswers.b)
     setIsGrades({ a: gradeA, b: gradeB })
+    // Compute per-step correct/wrong so all screens can show the breakdown
+    const stepResultsA = prob.steps.map((step, i) => isAnswers.a ? isAnswers.a[i] === step : false)
+    const stepResultsB = prob.steps.map((step, i) => isAnswers.b ? isAnswers.b[i] === step : false)
     await applyState({
       ...s,
       is_phase: 'revealed',
@@ -523,14 +526,16 @@ export default function AdminPage() {
       is_score_b: s.is_score_b + gradeB,
       is_team_a_answer: isAnswers.a,
       is_team_b_answer: isAnswers.b,
+      is_step_results_a: stepResultsA,
+      is_step_results_b: stepResultsB,
     })
   }
   const nextISProblem = () => {
     const s = fscRef.current; if (!s) return
     const next = s.is_problem_index + 1
     setIsAnswers(null); setIsGrades(null)
-    if (next >= IS_PROB_COUNT) applyState({ ...s, is_phase: 'done' })
-    else applyState({ ...s, is_phase: 'idle', is_problem_index: next })
+    if (next >= IS_PROB_COUNT) applyState({ ...s, is_phase: 'done', is_step_results_a: null, is_step_results_b: null })
+    else applyState({ ...s, is_phase: 'idle', is_problem_index: next, is_step_results_a: null, is_step_results_b: null })
   }
   const finishMatch = async () => {
     if (!confirm('Finish the match and show final scores?')) return
@@ -1293,23 +1298,24 @@ export default function AdminPage() {
               {/* revealed */}
               {s.is_phase === 'revealed' && (
                 <div className="space-y-3">
-                  {isGrades && currentISP && (
+                  {currentISP && (s.is_step_results_a || s.is_step_results_b) && (
                     <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-3">
                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Grading Results</p>
                       {(['a', 'b'] as const).map(team => {
                         const answer = team === 'a' ? (isAnswers?.a ?? s.is_team_a_answer) : (isAnswers?.b ?? s.is_team_b_answer)
-                        const grade = team === 'a' ? isGrades.a : isGrades.b
+                        const stepResults = team === 'a' ? s.is_step_results_a : s.is_step_results_b
                         const name = team === 'a' ? s.team_a_name : s.team_b_name
+                        const score = team === 'a' ? s.is_score_a : s.is_score_b
                         const color = team === 'a' ? 'text-green-400' : 'text-purple-400'
                         return (
                           <div key={team} className={`rounded-xl p-3 border ${team === 'a' ? 'border-green-500/30' : 'border-purple-500/30'}`}>
                             <div className="flex items-center justify-between mb-2">
                               <p className={`text-xs font-bold ${color}`}>{name}</p>
-                              <p className={`text-lg font-black ${color}`}>{grade} pts</p>
+                              <p className={`text-lg font-black ${color}`}>{score} pts total</p>
                             </div>
-                            {answer && currentISP.steps.map((correctStep, i) => {
+                            {answer && stepResults && currentISP.steps.map((correctStep, i) => {
                               const teamStep = answer[i] ?? ''
-                              const ok = teamStep === correctStep
+                              const ok = stepResults[i]
                               return (
                                 <div key={i} className={`flex items-start gap-2 py-1 border-b border-white/5 last:border-0`}>
                                   <span className={`text-[10px] font-black mt-0.5 ${ok ? 'text-green-400' : 'text-red-400'}`}>{ok ? '✓' : '✗'}</span>
