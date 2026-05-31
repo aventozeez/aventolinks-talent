@@ -149,10 +149,11 @@ export const stateSig = (s: FSCState) =>
 // ── Subscribe (viewers) ───────────────────────────────────────────────────────
 export function subscribeToMatch(cb: (s: FSCState) => void): {
   unsubscribe: () => void
-  sendBuzz: (team: 'a' | 'b') => void | Promise<void>
+  sendBuzz: (team: 'a' | 'b') => void
   submitISAnswer: (team: 'a' | 'b', problemIndex: number, answer: string[]) => void
 } {
   let lastSig = ''
+  let lastKnownState: FSCState | null = null  // tracks latest delivered state
   let destroyed = false
 
   const deliver = (s: FSCState) => {
@@ -160,6 +161,7 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
     const sv = stateSig(s)
     if (sv === lastSig) return
     lastSig = sv
+    lastKnownState = s
     cb(s)
   }
 
@@ -203,23 +205,37 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
       }
     },
 
-    /** Write buzz directly to DB + broadcast — no admin tab required */
-    sendBuzz: async (team: 'a' | 'b') => {
+    sendBuzz: (team: 'a' | 'b') => {
       if (destroyed) return
-      const s = await getMatchState()
-      // Bail if question is no longer showing (another team buzzed first)
-      if (!s || s.bz_phase !== 'showing') return
-      const newState: FSCState = {
-        ...s,
-        bz_phase: team === 'a' ? 'buzzed_a' : 'buzzed_b',
-        bz_buzz_start: Date.now(),
-      }
-      await saveMatchState(newState)
-      const safe = safeForViewers(newState)
-      // Broadcast to all viewers (including admin) immediately
-      ch.send({ type: 'broadcast', event: 'state', payload: safe })
-      // Also update this page right away
-      deliver(safe)
+
+      // ── Fast path ──────────────────────────────────────────────────────────
+      // Send buzz event to admin immediately; admin processes it and broadcasts
+      // the updated state back to all pages (works in < 100 ms when admin active)
+      ch.send({ type: 'broadcast', event: 'buzz', payload: { team } })
+
+      // ── Backup path (300 ms later) ─────────────────────────────────────────
+      // If admin tab was throttled and hasn't processed the buzz yet, write
+      // directly to DB so all pages pick it up via the next poll/broadcast.
+      // We read from DB at this point because admin's DB save (from
+      // showBZQuestion) will have completed by now (~100 ms max).
+      setTimeout(async () => {
+        if (destroyed) return
+        // Admin already handled it — lastKnownState was updated via broadcast
+        const cur = lastKnownState
+        if (cur && (cur.bz_phase === 'buzzed_a' || cur.bz_phase === 'buzzed_b')) return
+        // Fetch from DB (which now has the up-to-date 'showing' state)
+        const s = await getMatchState()
+        if (!s || s.bz_phase !== 'showing') return
+        const newState: FSCState = {
+          ...s,
+          bz_phase: team === 'a' ? 'buzzed_a' : 'buzzed_b',
+          bz_buzz_start: Date.now(),
+        }
+        await saveMatchState(newState)
+        const safe = safeForViewers(newState)
+        ch.send({ type: 'broadcast', event: 'state', payload: safe })
+        deliver(safe)
+      }, 300)
     },
 
     submitISAnswer: (team, problemIndex, answer) => {
