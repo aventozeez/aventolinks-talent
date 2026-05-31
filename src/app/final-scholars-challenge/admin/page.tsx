@@ -119,14 +119,17 @@ export default function AdminPage() {
 
   // ── Core: save state + broadcast to all clients ────────────────────────────
   const applyState = useCallback(async (newState: FSCState) => {
-    setSaving(true)
+    // 1. Update local state immediately (no waiting)
     fscRef.current = newState
     setFscState(newState)
-    await saveMatchState(newState)
+    // 2. Broadcast to viewers instantly — before any DB write
     channelRef.current?.send({
       type: 'broadcast', event: 'state',
       payload: safeForViewers(newState),
     })
+    // 3. Persist to DB in background (keeps poll-based fallback in sync)
+    setSaving(true)
+    await saveMatchState(newState)
     setSaving(false)
   }, [])
   // Keep ref in sync so the timer interval can call applyState
@@ -197,11 +200,9 @@ export default function AdminPage() {
         // Auto-end team's turn when timer reaches 0
         if (remaining === 0 && !autoEndedRFRef.current) {
           autoEndedRFRef.current = true
+          // Score is already current from live updates — just flip the phase
           const isA = s.rf_phase === 'a_playing'
-          const newState: FSCState = isA
-            ? { ...s, rf_phase: 'break', rf_score_a: s.rf_correct_a * RF_CORRECT_PTS }
-            : { ...s, rf_phase: 'done',  rf_score_b: s.rf_correct_b * RF_CORRECT_PTS }
-          applyStateRef.current?.(newState)
+          applyStateRef.current?.({ ...s, rf_phase: isA ? 'break' : 'done' })
         }
       } else if ((s.bz_phase === 'buzzed_a' || s.bz_phase === 'buzzed_b' || s.bz_phase === 'second_chance') && s.bz_buzz_start) {
         setTimerMs(Math.max(0, BZ_TIME_MS - (Date.now() - s.bz_buzz_start)))
@@ -331,22 +332,26 @@ export default function AdminPage() {
     const newCorrectB = (!isA && correct) ? s.rf_correct_b + 1 : s.rf_correct_b
     const nextIdx = s.rf_q_index + 1
     const done = nextIdx >= RF_Q_COUNT
-    const newState: FSCState = { ...s, rf_correct_a: newCorrectA, rf_correct_b: newCorrectB, rf_q_index: nextIdx }
+    // Update live score after every click so viewers see it immediately
+    const newState: FSCState = {
+      ...s,
+      rf_correct_a: newCorrectA,
+      rf_correct_b: newCorrectB,
+      rf_q_index: nextIdx,
+      rf_score_a: isA  ? newCorrectA * RF_CORRECT_PTS : s.rf_score_a,
+      rf_score_b: !isA ? newCorrectB * RF_CORRECT_PTS : s.rf_score_b,
+    }
     if (done) {
-      if (isA) {
-        applyState({ ...newState, rf_phase: 'break', rf_score_a: newCorrectA * RF_CORRECT_PTS })
-      } else {
-        applyState({ ...newState, rf_phase: 'done', rf_score_b: newCorrectB * RF_CORRECT_PTS })
-      }
+      applyState({ ...newState, rf_phase: isA ? 'break' : 'done' })
     } else {
       applyState(newState)
     }
   }
   const endRFEarly = () => {
     const s = fscRef.current; if (!s) return
+    // Score is already current from live updates — just flip the phase
     const isA = s.rf_phase === 'a_playing'
-    if (isA) applyState({ ...s, rf_phase: 'break', rf_score_a: s.rf_correct_a * RF_CORRECT_PTS })
-    else applyState({ ...s, rf_phase: 'done', rf_score_b: s.rf_correct_b * RF_CORRECT_PTS })
+    applyState({ ...s, rf_phase: isA ? 'break' : 'done' })
   }
   const proceedToBuzzer = () => {
     const s = fscRef.current; if (!s) return
