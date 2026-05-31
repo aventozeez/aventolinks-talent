@@ -113,6 +113,33 @@ export async function saveMatchState(state: FSCState): Promise<FSCState | null> 
   return (data?.data as FSCState) ?? null
 }
 
+// ── Buzz pending (written by team page, polled by admin) ─────────────────────
+const FSC_BUZZ_ID = 'bz_pending'
+export type BuzzPending = { team: 'a' | 'b'; q_index: number; time: number }
+
+/** Team page calls this when they buzz — writes a lightweight record to DB */
+export async function saveBuzzPending(team: 'a' | 'b', qIndex: number): Promise<void> {
+  const payload: BuzzPending = { team, q_index: qIndex, time: Date.now() }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from('fsc_match_state')
+    .upsert({ id: FSC_BUZZ_ID, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+}
+
+/** Admin polls this to detect a buzz */
+export async function getBuzzPending(): Promise<BuzzPending | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from('fsc_match_state').select('data').eq('id', FSC_BUZZ_ID).maybeSingle()
+  return (data?.data as BuzzPending) ?? null
+}
+
+/** Admin calls this after processing a buzz (or when showing the next question) */
+export async function clearBuzzPending(): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from('fsc_match_state').delete().eq('id', FSC_BUZZ_ID)
+}
+
 /** Save team IS answer to dedicated table so admin can read it for grading */
 export async function saveISAnswer(team: 'a' | 'b', problemIndex: number, answer: string[]) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -207,35 +234,13 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
 
     sendBuzz: (team: 'a' | 'b') => {
       if (destroyed) return
-
-      // ── Fast path ──────────────────────────────────────────────────────────
-      // Send buzz event to admin immediately; admin processes it and broadcasts
-      // the updated state back to all pages (works in < 100 ms when admin active)
-      ch.send({ type: 'broadcast', event: 'buzz', payload: { team } })
-
-      // ── Backup path (300 ms later) ─────────────────────────────────────────
-      // If admin tab was throttled and hasn't processed the buzz yet, write
-      // directly to DB so all pages pick it up via the next poll/broadcast.
-      // We read from DB at this point because admin's DB save (from
-      // showBZQuestion) will have completed by now (~100 ms max).
-      setTimeout(async () => {
-        if (destroyed) return
-        // Admin already handled it — lastKnownState was updated via broadcast
-        const cur = lastKnownState
-        if (cur && (cur.bz_phase === 'buzzed_a' || cur.bz_phase === 'buzzed_b')) return
-        // Fetch from DB (which now has the up-to-date 'showing' state)
-        const s = await getMatchState()
-        if (!s || s.bz_phase !== 'showing') return
-        const newState: FSCState = {
-          ...s,
-          bz_phase: team === 'a' ? 'buzzed_a' : 'buzzed_b',
-          bz_buzz_start: Date.now(),
-        }
-        await saveMatchState(newState)
-        const safe = safeForViewers(newState)
-        ch.send({ type: 'broadcast', event: 'state', payload: safe })
-        deliver(safe)
-      }, 300)
+      // Guard: only buzz when question is showing (use local known state)
+      if (lastKnownState?.bz_phase !== 'showing') return
+      // Write a lightweight buzz record to DB.
+      // Admin polls every 200 ms, sees it, processes it, and broadcasts
+      // the updated match state to all pages — no broadcast needed here.
+      const qIdx = lastKnownState.bz_q_index
+      saveBuzzPending(team, qIdx).catch(() => {})
     },
 
     submitISAnswer: (team, problemIndex, answer) => {

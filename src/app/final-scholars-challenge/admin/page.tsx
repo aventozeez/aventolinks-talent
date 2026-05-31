@@ -14,6 +14,7 @@ import {
   FSC_CHANNEL,
   makeDefaultState, safeForViewers,
   getMatchState, saveMatchState, getISAnswers,
+  getBuzzPending, clearBuzzPending,
   RF_Q_COUNT, RF_TIME_MS, RF_CORRECT_PTS,
   BZ_Q_COUNT, BZ_CORRECT_PTS, BZ_PENALTY_PTS, BZ_TIME_MS,
   IS_PROB_COUNT, IS_TIME_MS, IS_STEP_PTS, IS_BONUS_PTS,
@@ -170,40 +171,29 @@ export default function AdminPage() {
     setFscLoading(false)
   }, [])
 
-  // ── Subscribe to state/buzz events + init ────────────────────────────────
+  // ── Buzz poll — admin checks DB every 200 ms during 'showing' phase ─────────
+  useEffect(() => {
+    const id = setInterval(async () => {
+      const s = fscRef.current
+      if (!s || s.round !== 'buzzer' || s.bz_phase !== 'showing') return
+      if (buzzLockRef.current) return
+      const pending = await getBuzzPending()
+      if (!pending) return
+      // Stale buzz from a previous question — ignore and clean up
+      if (pending.q_index !== s.bz_q_index) { clearBuzzPending().catch(() => {}); return }
+      buzzLockRef.current = true
+      clearBuzzPending().catch(() => {})
+      const newPhase: BZPhase = pending.team === 'a' ? 'buzzed_a' : 'buzzed_b'
+      applyState({ ...s, bz_phase: newPhase, bz_buzz_start: pending.time })
+    }, 200)
+    return () => clearInterval(id)
+  }, [applyState])
+
+  // ── Channel (broadcast-only — admin sends state to viewers) ──────────────
   useEffect(() => {
     if (!authChecked) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ch = (supabase.channel(FSC_CHANNEL) as any)
-      // Primary: team pages write buzz to DB and broadcast 'state' directly
-      .on('broadcast', { event: 'state' }, (msg: { payload: FSCState }) => {
-        const incoming = msg.payload
-        const current = fscRef.current
-        if (!current) return
-        // Accept a buzz event from a team page while we're still in 'showing'
-        if ((incoming.bz_phase === 'buzzed_a' || incoming.bz_phase === 'buzzed_b')
-            && current.bz_phase === 'showing' && !buzzLockRef.current) {
-          buzzLockRef.current = true
-          // Merge: keep admin's full data (questions w/ answers) but take buzz fields
-          const merged: FSCState = {
-            ...incoming,
-            rf_questions:  current.rf_questions,
-            bz_questions:  current.bz_questions,
-            is_problems:   current.is_problems,
-          }
-          fscRef.current = merged
-          setFscState(merged)
-        }
-      })
-      // Fallback: legacy buzz broadcast (older clients / edge cases)
-      .on('broadcast', { event: 'buzz' }, (msg: { payload: { team: 'a' | 'b' } }) => {
-        if (buzzLockRef.current) return
-        const s = fscRef.current
-        if (!s || s.bz_phase !== 'showing') return
-        buzzLockRef.current = true
-        const newPhase: BZPhase = msg.payload.team === 'a' ? 'buzzed_a' : 'buzzed_b'
-        applyState({ ...s, bz_phase: newPhase, bz_buzz_start: Date.now() })
-      })
       .subscribe((status: string) => { if (status === 'SUBSCRIBED') channelRef.current = ch })
 
     loadTeams(); loadQuestions(); loadFSCState()
@@ -383,6 +373,7 @@ export default function AdminPage() {
   const showBZQuestion = () => {
     const s = fscRef.current; if (!s) return
     buzzLockRef.current = false
+    clearBuzzPending().catch(() => {})  // clear any leftover buzz from last question
     applyState({ ...s, bz_phase: 'showing', bz_buzz_start: null, bz_second_chance_team: null, bz_last_result: null })
   }
   const bzCorrect = () => {
