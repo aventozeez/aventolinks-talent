@@ -1,23 +1,40 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import { getLiveState, subscribeToLive, QuizLiveState, POINTS } from '@/lib/quiz-live'
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D']
 
 export default function TeamAPage() {
-  const [state, setState]     = useState<QuizLiveState | null>(null)
+  const [state,   setState]   = useState<QuizLiveState | null>(null)
   const [loading, setLoading] = useState(true)
+  const [buzzed,  setBuzzed]  = useState(false)   // local feedback after pressing buzz
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sendBuzzRef = useRef<((team: 'a' | 'b') => void) | null>(null)
 
   useEffect(() => {
     getLiveState().then(({ data }) => {
       if (data) setState(data)
       setLoading(false)
     })
-    const unsub = subscribeToLive(setState)
-    return unsub
+
+    const sub = subscribeToLive((s) => {
+      setState(s)
+      // Reset local buzz state when question advances
+      if (s.phase === 'showing') setBuzzed(false)
+    })
+    sendBuzzRef.current = sub.sendBuzz
+
+    return sub.unsubscribe
   }, [])
+
+  const handleBuzz = () => {
+    if (buzzed || state?.phase !== 'showing') return
+    setBuzzed(true)
+    sendBuzzRef.current?.('a')
+  }
 
   if (loading) {
     return (
@@ -27,6 +44,7 @@ export default function TeamAPage() {
     )
   }
 
+  const mode       = state?.mode ?? 'rapid_fire'
   const phase      = state?.phase ?? 'idle'
   const currentQ   = state?.questions?.[state?.current_index ?? 0] ?? null
   const totalQ     = state?.questions?.length ?? 0
@@ -37,6 +55,8 @@ export default function TeamAPage() {
   const weGotIt    = state?.last_result === 'correct_a'
   const theyGotIt  = state?.last_result === 'correct_b'
   const noOneGotIt = state?.last_result === 'wrong'
+  const weBuzzed   = phase === 'buzzed_a'
+  const theyBuzzed = phase === 'buzzed_b'
 
   return (
     <div className="min-h-screen bg-[#060f1f] text-white flex flex-col select-none">
@@ -59,63 +79,99 @@ export default function TeamAPage() {
         </div>
       </div>
 
-      {/* Main */}
+      {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center px-5 py-8 max-w-2xl mx-auto w-full">
 
-        {phase === 'idle' ? (
+        {/* ── Idle ── */}
+        {phase === 'idle' && (
           <div className="text-center space-y-4">
             <div className="text-7xl">🏆</div>
             <h2 className="text-2xl font-black text-white">Good luck, {myName}!</h2>
             <p className="text-slate-400 text-lg">Waiting for the quiz to begin…</p>
           </div>
+        )}
 
-        ) : currentQ ? (
+        {/* ── Active ── */}
+        {phase !== 'idle' && currentQ && (
           <div className="w-full space-y-5">
 
+            {/* Q counter + category */}
             <div className="flex items-center justify-between text-sm text-slate-500">
               <span>
-                Q <strong className="text-white">{(state?.current_index ?? 0) + 1}</strong>{' '}
-                / <strong className="text-white">{totalQ}</strong>
+                Q <strong className="text-white">{(state?.current_index ?? 0) + 1}</strong>
+                {' '}/ <strong className="text-white">{totalQ}</strong>
               </span>
               <span className="text-xs bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
                 {currentQ.category}
               </span>
             </div>
 
+            {/* Question card */}
             <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-6 shadow-xl">
               <p className="text-xl md:text-2xl font-bold text-white leading-snug">
                 {currentQ.question}
               </p>
             </div>
 
-            <div className="space-y-2.5">
-              {currentQ.options.map((opt, idx) => {
-                const isCorrect = idx === currentQ.correct_answer
-                const revealed  = phase === 'revealed'
-                return (
-                  <div
-                    key={idx}
-                    className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border text-sm font-medium
-                      transition-all duration-500 ${
+            {/* Options (not shown in innovation sprint) */}
+            {mode !== 'innovation_sprint' && currentQ.options?.length > 0 && (
+              <div className="space-y-2.5">
+                {currentQ.options.map((opt, idx) => {
+                  const isCorrect = idx === currentQ.correct_answer
+                  const revealed  = phase === 'revealed'
+                  return (
+                    <div key={idx} className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border text-sm font-medium transition-all duration-500 ${
                       revealed && isCorrect
                         ? 'border-green-400 bg-green-500/20 text-green-200'
                         : revealed
                         ? 'border-white/5 bg-white/[0.02] text-slate-600'
                         : 'border-white/15 bg-white/5 text-white'
-                    }`}
-                  >
-                    <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${
-                      revealed && isCorrect ? 'bg-green-500 text-white' : 'bg-white/10 text-slate-500'
                     }`}>
-                      {OPTION_LABELS[idx]}
-                    </span>
-                    {opt}
-                  </div>
-                )
-              })}
-            </div>
+                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${
+                        revealed && isCorrect ? 'bg-green-500 text-white' : 'bg-white/10 text-slate-500'
+                      }`}>{OPTION_LABELS[idx]}</span>
+                      {opt}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
-            {phase === 'revealed' && state?.last_result && (
+            {/* ── BUZZER BUTTON (buzzer mode only, question showing) ── */}
+            {mode === 'buzzer' && phase === 'showing' && (
+              <button
+                onClick={handleBuzz}
+                disabled={buzzed}
+                className={`w-full py-8 rounded-2xl font-black text-2xl transition-all duration-150 ${
+                  buzzed
+                    ? 'bg-green-600/40 border-2 border-green-400/60 text-green-300 opacity-70'
+                    : 'bg-green-500 hover:bg-green-400 active:scale-95 text-white shadow-2xl shadow-green-500/40 border-2 border-green-400'
+                }`}
+              >
+                {buzzed ? '🔔 Buzzed! Waiting…' : '🔔 BUZZ IN'}
+              </button>
+            )}
+
+            {/* ── Buzzed state display ── */}
+            {mode === 'buzzer' && (weBuzzed || theyBuzzed) && (
+              <div className={`rounded-2xl px-5 py-4 text-center font-black text-xl border ${
+                weBuzzed
+                  ? 'bg-green-500/25 border-green-400/60 text-green-300'
+                  : 'bg-slate-700/40 border-slate-600/40 text-slate-300'
+              }`}>
+                {weBuzzed ? '🔔 You buzzed first! Wait for admin…' : `🔔 ${theirName} buzzed first`}
+              </div>
+            )}
+
+            {/* ── Innovation Sprint prompt ── */}
+            {mode === 'innovation_sprint' && phase === 'showing' && (
+              <div className="rounded-xl border border-[#f5a623]/20 bg-[#f5a623]/5 px-5 py-4 text-center">
+                <p className="text-[#f5a623]/70 text-sm font-semibold">💡 Prepare your response — admin will award points</p>
+              </div>
+            )}
+
+            {/* ── Result feedback ── */}
+            {phase === 'revealed' && state?.last_result && state.last_result !== 'pass' && (
               <div className={`rounded-xl px-5 py-3.5 text-center font-bold text-base border ${
                 weGotIt
                   ? 'bg-green-500/20 border-green-400/40 text-green-300'
@@ -123,13 +179,13 @@ export default function TeamAPage() {
                   ? 'bg-slate-700/40 border-slate-600/40 text-slate-400'
                   : 'bg-red-500/15 border-red-400/30 text-red-400'
               }`}>
-                {weGotIt    && `🎉 You got it right! +${POINTS} points`}
+                {weGotIt    && `🎉 You got it! +${mode === 'innovation_sprint' ? (state.score_a - (state?.score_a ?? 0)) : POINTS} points`}
                 {theyGotIt  && `${theirName} answered correctly`}
                 {noOneGotIt && '❌ No one answered correctly'}
               </div>
             )}
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   )

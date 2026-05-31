@@ -6,19 +6,23 @@ import { getLiveState, subscribeToLive, QuizLiveState, POINTS } from '@/lib/quiz
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D']
 
+const MODE_LABELS: Record<string, string> = {
+  rapid_fire:        '⚡ Rapid Fire',
+  buzzer:            '🔔 Buzzer Round',
+  innovation_sprint: '💡 Innovation Sprint',
+}
+
 export default function AudiencePage() {
-  const [state, setState]     = useState<QuizLiveState | null>(null)
+  const [state,   setState]   = useState<QuizLiveState | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Load current state from DB on mount (handles page refresh)
     getLiveState().then(({ data }) => {
       if (data) setState(data)
       setLoading(false)
     })
-    // Subscribe to live broadcast updates from admin
-    const unsub = subscribeToLive(setState)
-    return unsub
+    const sub = subscribeToLive(setState)
+    return sub.unsubscribe
   }, [])
 
   if (loading) {
@@ -29,18 +33,32 @@ export default function AudiencePage() {
     )
   }
 
+  const mode     = state?.mode ?? 'rapid_fire'
   const phase    = state?.phase ?? 'idle'
   const currentQ = state?.questions?.[state?.current_index ?? 0] ?? null
   const totalQ   = state?.questions?.length ?? 0
 
+  const buzzedTeam =
+    phase === 'buzzed_a' ? state?.team_a_name :
+    phase === 'buzzed_b' ? state?.team_b_name : null
+  const buzzColor =
+    phase === 'buzzed_a' ? { ring: 'border-green-400', bg: 'bg-green-500/20', text: 'text-green-300' } :
+    phase === 'buzzed_b' ? { ring: 'border-purple-400', bg: 'bg-purple-500/20', text: 'text-purple-300' } :
+    null
+
   return (
     <div className="min-h-screen bg-[#060f1f] text-white flex flex-col select-none">
 
-      {/* Top bar — branding */}
-      <div className="bg-[#0a1628] border-b border-[#f5a623]/30 px-6 py-2 text-center shrink-0">
+      {/* Top bar */}
+      <div className="bg-[#0a1628] border-b border-[#f5a623]/30 px-6 py-2 flex items-center justify-between shrink-0">
         <span className="text-xs font-black text-[#f5a623] uppercase tracking-[0.3em]">
           Scholars Challenge — Live Quiz
         </span>
+        {phase !== 'idle' && (
+          <span className="text-xs font-bold text-slate-400 bg-white/5 px-3 py-1 rounded-full border border-white/10">
+            {MODE_LABELS[mode] ?? mode}
+          </span>
+        )}
       </div>
 
       {/* Scores */}
@@ -68,14 +86,17 @@ export default function AudiencePage() {
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-5xl mx-auto w-full">
 
-        {phase === 'idle' ? (
+        {/* ── Idle ── */}
+        {phase === 'idle' && (
           <div className="text-center space-y-5">
             <div className="text-9xl">🎓</div>
             <h1 className="text-5xl font-black text-white tracking-tight">Scholars Challenge</h1>
             <p className="text-slate-400 text-xl">Get ready — the quiz is about to begin</p>
           </div>
+        )}
 
-        ) : currentQ ? (
+        {/* ── Active ── */}
+        {phase !== 'idle' && currentQ && (
           <div className="w-full space-y-6">
 
             {/* Q counter + category */}
@@ -96,40 +117,55 @@ export default function AudiencePage() {
               </p>
             </div>
 
-            {/* Options */}
-            <div className="grid grid-cols-2 gap-4">
-              {currentQ.options.map((opt, idx) => {
-                const isCorrect = idx === currentQ.correct_answer
-                const revealed  = phase === 'revealed'
-                return (
-                  <div
-                    key={idx}
-                    className={`flex items-center gap-4 px-6 py-5 rounded-2xl border text-base font-semibold
-                      transition-all duration-500 ${
+            {/* ── BUZZER — who buzzed ── */}
+            {buzzedTeam && buzzColor && (
+              <div className={`rounded-2xl px-6 py-5 text-center font-black text-3xl border-2 animate-pulse ${buzzColor.ring} ${buzzColor.bg} ${buzzColor.text}`}>
+                🔔 {buzzedTeam} BUZZED IN!
+              </div>
+            )}
+
+            {/* Options (hidden in innovation sprint or while buzzer waiting) */}
+            {mode !== 'innovation_sprint' && currentQ.options?.length > 0 && (
+              <div className="grid grid-cols-2 gap-4">
+                {currentQ.options.map((opt, idx) => {
+                  const isCorrect = idx === currentQ.correct_answer
+                  const revealed  = phase === 'revealed'
+                  return (
+                    <div key={idx} className={`flex items-center gap-4 px-6 py-5 rounded-2xl border text-base font-semibold transition-all duration-500 ${
                       revealed && isCorrect
                         ? 'border-green-400 bg-green-500/25 text-green-200 scale-[1.02] shadow-lg shadow-green-500/20'
                         : revealed
                         ? 'border-white/5 bg-white/[0.02] text-slate-600'
                         : 'border-white/15 bg-white/5 text-white'
-                    }`}
-                  >
-                    <span className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black shrink-0 ${
-                      revealed && isCorrect
-                        ? 'bg-green-500 text-white'
-                        : 'bg-white/10 text-slate-400'
                     }`}>
-                      {OPTION_LABELS[idx]}
-                    </span>
-                    <span className="flex-1">{opt}</span>
-                  </div>
-                )
-              })}
-            </div>
+                      <span className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black shrink-0 ${
+                        revealed && isCorrect ? 'bg-green-500 text-white' : 'bg-white/10 text-slate-400'
+                      }`}>{OPTION_LABELS[idx]}</span>
+                      <span className="flex-1">{opt}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Innovation Sprint waiting */}
+            {mode === 'innovation_sprint' && phase === 'showing' && (
+              <div className="rounded-2xl border border-[#f5a623]/30 bg-[#f5a623]/8 px-8 py-6 text-center">
+                <p className="text-[#f5a623] font-black text-xl mb-1">💡 Innovation Sprint</p>
+                <p className="text-slate-400 text-base">Teams are preparing their response…</p>
+              </div>
+            )}
+
+            {/* Buzzer waiting */}
+            {mode === 'buzzer' && phase === 'showing' && (
+              <div className="rounded-2xl border border-[#f5a623]/20 bg-[#f5a623]/5 px-8 py-5 text-center">
+                <p className="text-[#f5a623]/70 font-semibold text-lg">🔔 Waiting for a buzz…</p>
+              </div>
+            )}
 
             {/* Result banner */}
-            {phase === 'revealed' && state?.last_result && (
-              <div className={`rounded-2xl px-6 py-4 text-center text-xl font-black border
-                transition-all duration-300 ${
+            {phase === 'revealed' && state?.last_result && state.last_result !== 'pass' && (
+              <div className={`rounded-2xl px-6 py-4 text-center text-xl font-black border transition-all duration-300 ${
                 state.last_result === 'correct_a'
                   ? 'bg-green-500/20 border-green-400/40 text-green-300'
                   : state.last_result === 'correct_b'
@@ -143,8 +179,9 @@ export default function AudiencePage() {
                 {state.last_result === 'wrong' && '❌ No one answered correctly this round'}
               </div>
             )}
+
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   )
