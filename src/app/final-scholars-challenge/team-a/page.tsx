@@ -23,9 +23,6 @@ export default function TeamAPage() {
   const submittedRef = useRef(false)
   const [submitted, setSubmitted] = useState(false)
 
-  // IS drag-and-drop state
-  const [dragState, setDragState] = useState<{ from: number; over: number } | null>(null)
-  const stepDivRefs = useRef<(HTMLDivElement | null)[]>([])
 
   // Buzz
   const [buzzed, setBuzzed] = useState(false)
@@ -124,39 +121,12 @@ export default function TeamAPage() {
     sendBuzzRef.current?.(TEAM, state.bz_q_index)
   }
 
-  const doReorder = (from: number, to: number) => {
-    if (from === to) return
-    setMySteps(prev => {
-      const ns = [...prev]
-      const [r] = ns.splice(from, 1)
-      ns.splice(to, 0, r)
-      return ns
-    })
-  }
-
-  const handleDragHandleDown = (e: React.PointerEvent<HTMLSpanElement>, idx: number) => {
-    e.preventDefault()
-    setDragState({ from: idx, over: idx })
-  }
-
-  const handleListPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragState) return
-    for (let i = 0; i < stepDivRefs.current.length; i++) {
-      const el = stepDivRefs.current[i]
-      if (!el) continue
-      const rect = el.getBoundingClientRect()
-      if (e.clientY >= rect.top && e.clientY < rect.bottom) {
-        if (dragState.over !== i) setDragState(ds => ds ? { ...ds, over: i } : null)
-        break
-      }
-    }
-  }
-
-  const handleListPointerUp = () => {
-    if (dragState) {
-      doReorder(dragState.from, dragState.over)
-      setDragState(null)
-    }
+  const moveStep = (idx: number, dir: -1 | 1) => {
+    const target = idx + dir
+    if (target < 0 || target >= mySteps.length) return
+    const ns = [...mySteps];
+    [ns[idx], ns[target]] = [ns[target], ns[idx]]
+    setMySteps(ns)
   }
 
   const submitManually = () => {
@@ -471,31 +441,18 @@ export default function TeamAPage() {
                   <div className="bg-[#0a1628] border border-[#f5a623]/20 rounded-2xl p-4">
                     <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-wider mb-2">Problem</p>
                     <p className="text-sm text-white font-medium mb-4">{s.is_problems[s.is_problem_index].statement}</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Arrange the steps in correct order:</p>
-                    <p className="text-[10px] text-slate-600 mb-2">Hold &amp; drag ⠿ to reorder</p>
-                    <div
-                      className="space-y-2 touch-none"
-                      onPointerMove={handleListPointerMove}
-                      onPointerUp={handleListPointerUp}
-                      onPointerLeave={() => { if (dragState) setDragState(null) }}
-                    >
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Arrange the steps in correct order:</p>
+                    <div className="space-y-2">
                       {mySteps.map((step, idx) => (
-                        <div
-                          key={idx}
-                          ref={el => { stepDivRefs.current[idx] = el }}
-                          className={`flex items-center gap-2 rounded-xl px-3 py-2.5 border transition-all select-none
-                            ${dragState?.over === idx && dragState.from !== idx
-                              ? `border-[#f5a623] bg-[#f5a623]/10`
-                              : 'bg-white/5 border-white/10'}
-                            ${dragState?.from === idx ? 'opacity-40 scale-[0.97]' : ''}
-                          `}
-                        >
-                          <span
-                            onPointerDown={e => handleDragHandleDown(e, idx)}
-                            className="text-slate-500 shrink-0 cursor-grab active:cursor-grabbing text-base leading-none px-0.5 touch-none"
-                          >⠿</span>
+                        <div key={idx} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
                           <span className={`text-xs font-black w-5 text-center shrink-0 ${COLOR.text}`}>{idx + 1}</span>
                           <p className="flex-1 text-sm text-white leading-snug">{step}</p>
+                          <div className="flex flex-col gap-1 shrink-0">
+                            <button onClick={() => moveStep(idx, -1)} disabled={idx === 0}
+                              className="w-7 h-7 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-lg text-white disabled:opacity-20 transition-colors text-xs">▲</button>
+                            <button onClick={() => moveStep(idx, 1)} disabled={idx === mySteps.length - 1}
+                              className="w-7 h-7 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-lg text-white disabled:opacity-20 transition-colors text-xs">▼</button>
+                          </div>
                         </div>
                       ))}
                     </div>

@@ -400,13 +400,28 @@ export default function AudiencePage() {
             )}
 
             {s?.is_phase === 'working' && (
-              <div className={`rounded-3xl p-6 text-center border-2 transition-all ${
-                timerWarn ? 'border-red-400 bg-red-500/10 animate-pulse' : 'border-[#f5a623]/40 bg-[#f5a623]/5'
-              }`}>
-                <p className="text-base font-black text-[#f5a623] uppercase tracking-widest">Teams Arranging Steps</p>
-                <p className={`text-8xl font-black mt-2 ${timerWarn || timerSecs === 0 ? 'text-red-400' : 'text-[#f5a623]'}`}>
-                  {fmtTime(timerMs)}
-                </p>
+              <div className="space-y-4">
+                <div className={`rounded-3xl p-6 text-center border-2 transition-all ${
+                  timerWarn ? 'border-red-400 bg-red-500/10 animate-pulse' : 'border-[#f5a623]/40 bg-[#f5a623]/5'
+                }`}>
+                  <p className="text-base font-black text-[#f5a623] uppercase tracking-widest">Teams Arranging Steps</p>
+                  <p className={`text-8xl font-black mt-2 ${timerWarn || timerSecs === 0 ? 'text-red-400' : 'text-[#f5a623]'}`}>
+                    {fmtTime(timerMs)}
+                  </p>
+                </div>
+                {(s.is_problems?.[s.is_problem_index]?.steps_shuffled?.length ?? 0) > 0 && (
+                  <div className="bg-[#0a1628] border border-[#f5a623]/20 rounded-2xl p-5">
+                    <p className="text-xs font-black text-[#f5a623] uppercase tracking-wider mb-3">Steps (shuffled — teams are arranging these)</p>
+                    <div className="space-y-2">
+                      {s.is_problems[s.is_problem_index].steps_shuffled.map((step, i) => (
+                        <div key={i} className="flex items-start gap-3 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5">
+                          <span className="text-xs font-black text-[#f5a623]/60 w-5 text-center shrink-0 mt-0.5">{i + 1}</span>
+                          <p className="text-sm text-white/80 leading-snug">{step}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
