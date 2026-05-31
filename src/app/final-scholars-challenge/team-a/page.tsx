@@ -103,7 +103,14 @@ export default function TeamAPage() {
       } else if ((s.bz_phase === 'buzzed_a' || s.bz_phase === 'buzzed_b' || s.bz_phase === 'second_chance') && s.bz_buzz_start) {
         setTimerMs(Math.max(0, BZ_TIME_MS - (Date.now() - s.bz_buzz_start)))
       } else if (s.is_phase === 'working' && s.is_timer_start) {
-        setTimerMs(Math.max(0, IS_TIME_MS - (Date.now() - s.is_timer_start)))
+        const remaining = Math.max(0, IS_TIME_MS - (Date.now() - s.is_timer_start))
+        setTimerMs(remaining)
+        // Auto-submit when IS timer hits 0 (before admin clicks "Collect Answers")
+        if (remaining === 0 && !submittedRef.current && myStepsRef.current.length > 0) {
+          submittedRef.current = true
+          setSubmitted(true)
+          submitISRef.current?.(TEAM, s.is_problem_index, myStepsRef.current)
+        }
       } else {
         setTimerMs(0)
       }
