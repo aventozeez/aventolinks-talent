@@ -136,6 +136,11 @@ export default function AdminPage() {
   // Keep ref in sync so the timer interval can call applyState
   useEffect(() => { applyStateRef.current = applyState }, [applyState])
 
+  // ── Resync: tell all viewer pages to reload ────────────────────────────────
+  const handleResync = useCallback(() => {
+    channelRef.current?.send({ type: 'broadcast', event: 'reload', payload: {} })
+  }, [])
+
   // ── Loaders ────────────────────────────────────────────────────────────────
   const loadTeams = useCallback(async () => {
     setTeamsLoading(true)
@@ -189,11 +194,46 @@ export default function AdminPage() {
     return () => clearInterval(id)
   }, [applyState])
 
-  // ── Channel (broadcast-only — admin sends state to viewers) ──────────────
+  // ── Admin state sync — pick up external bz_phase changes during 'showing' ──
+  // The buzz poll above only reads fsc_buzz_pending. If the viewer-page backup
+  // processor fires first (admin tab closed/backgrounded), it clears the pending
+  // record and writes bz_phase:'buzzed_a' directly to fsc_match_state. This poll
+  // detects that DB change and syncs the admin UI so Correct/Wrong become available.
+  useEffect(() => {
+    const id = setInterval(async () => {
+      const s = fscRef.current
+      if (!s || s.round !== 'buzzer' || s.bz_phase !== 'showing') return
+      if (buzzLockRef.current) return
+      const latest = await getMatchState()
+      if (!latest || latest.bz_phase === 'showing') return
+      // State was changed externally — sync admin and re-broadcast to viewers
+      buzzLockRef.current = true
+      fscRef.current = latest
+      setFscState(latest)
+      channelRef.current?.send({
+        type: 'broadcast', event: 'state',
+        payload: safeForViewers(latest),
+      })
+    }, 500)
+    return () => clearInterval(id)
+  }, [])
+
+  // ── Channel (admin sends state; also listens for team buzzes) ──────────────
   useEffect(() => {
     if (!authChecked) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ch = (supabase.channel(FSC_CHANNEL) as any)
+      // Team pages broadcast 'buzz' directly — process it immediately here
+      .on('broadcast', { event: 'buzz' }, (msg: { payload: { team: 'a' | 'b'; q_index: number; time: number } }) => {
+        const s = fscRef.current
+        if (!s || s.round !== 'buzzer' || s.bz_phase !== 'showing') return
+        if (buzzLockRef.current) return
+        if (msg.payload.q_index !== s.bz_q_index) return
+        buzzLockRef.current = true
+        clearBuzzPending().catch(() => {})
+        const newPhase: BZPhase = msg.payload.team === 'a' ? 'buzzed_a' : 'buzzed_b'
+        applyStateRef.current?.({ ...s, bz_phase: newPhase, bz_buzz_start: msg.payload.time })
+      })
       .subscribe((status: string) => { if (status === 'SUBSCRIBED') channelRef.current = ch })
 
     loadTeams(); loadQuestions(); loadFSCState()
@@ -373,7 +413,9 @@ export default function AdminPage() {
   const showBZQuestion = () => {
     const s = fscRef.current; if (!s) return
     buzzLockRef.current = false
-    clearBuzzPending().catch(() => {})  // clear any leftover buzz from last question
+    // Note: stale buzzes from previous questions are cleaned up by the poll's
+    // q_index mismatch check. Calling clearBuzzPending() here could race with
+    // a fast buzz arriving right after the broadcast, wiping it out.
     applyState({ ...s, bz_phase: 'showing', bz_buzz_start: null, bz_second_chance_team: null, bz_last_result: null })
   }
   const bzCorrect = () => {
@@ -557,6 +599,10 @@ export default function AdminPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> LIVE
           </span>
         )}
+        <button onClick={handleResync} title="Force all viewer screens to reload"
+          className="flex items-center gap-1 px-2.5 py-1 bg-blue-500/20 border border-blue-500/40 rounded-full text-[10px] font-bold text-blue-400 hover:bg-blue-500/30 transition-colors">
+          📡 Resync
+        </button>
         {saving && <Loader2 size={14} className="animate-spin text-slate-400" />}
       </div>
 

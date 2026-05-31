@@ -176,12 +176,13 @@ export const stateSig = (s: FSCState) =>
 // ── Subscribe (viewers) ───────────────────────────────────────────────────────
 export function subscribeToMatch(cb: (s: FSCState) => void): {
   unsubscribe: () => void
-  sendBuzz: (team: 'a' | 'b') => void
+  sendBuzz: (team: 'a' | 'b', qIndex?: number) => void
   submitISAnswer: (team: 'a' | 'b', problemIndex: number, answer: string[]) => void
 } {
   let lastSig = ''
   let lastKnownState: FSCState | null = null  // tracks latest delivered state
   let destroyed = false
+  const mountTime = Date.now()
 
   const deliver = (s: FSCState) => {
     if (destroyed) return
@@ -197,6 +198,14 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
     .on('broadcast', { event: 'state' }, (msg: { payload: FSCState }) => {
       deliver(msg.payload)
     })
+    .on('broadcast', { event: 'reload' }, () => {
+      // Admin sent a resync signal — reload this viewer page.
+      // Guard: ignore if the page just loaded (< 3 s ago) to prevent newly-
+      // opened tabs from immediately reloading when admin sends the signal.
+      if (Date.now() - mountTime > 3000) {
+        if (typeof window !== 'undefined') window.location.reload()
+      }
+    })
     .subscribe()
 
   const fetchAndDeliver = async () => {
@@ -209,8 +218,8 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
   // Fetch immediately on subscribe so the page is never blank
   fetchAndDeliver()
 
-  // Poll every 1 000 ms (fast enough to feel live; halved from 2 000 ms)
-  const poll = setInterval(fetchAndDeliver, 1000)
+  // Poll every 300 ms — keeps viewer pages in sync even when broadcast lags
+  const poll = setInterval(fetchAndDeliver, 300)
 
   // Re-sync instantly when the user switches back to this tab
   const onVisible = () => {
@@ -222,24 +231,56 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
     document.addEventListener('visibilitychange', onVisible)
   }
 
+  // ── Buzz backup processor ────────────────────────────────────────────────
+  // The admin page polls every 200 ms to process buzzes. This runs every
+  // 500 ms as a fallback so buzzes register even if the admin tab is closed.
+  // It only acts after the buzz has been pending for >1 s (giving admin first shot).
+  const buzzBackup = setInterval(async () => {
+    if (destroyed) return
+    if (!lastKnownState || lastKnownState.bz_phase !== 'showing') return
+
+    const pending = await getBuzzPending()
+    if (!pending || destroyed) return
+    if (pending.q_index !== lastKnownState.bz_q_index) return
+
+    // Admin processes within ~200 ms; only step in if still unprocessed after 1 s
+    const age = Date.now() - pending.time
+    if (age < 1000) return
+
+    // Re-read full state from DB (preserves admin-only fields like answers/steps)
+    const fullState = await getMatchState()
+    if (!fullState || destroyed) return
+    if (fullState.bz_phase !== 'showing') return      // admin already processed it
+    if (fullState.bz_q_index !== pending.q_index) return
+
+    const buzzedPhase = pending.team === 'a' ? 'buzzed_a' : 'buzzed_b'
+    const updated: FSCState = { ...fullState, bz_phase: buzzedPhase, bz_buzz_start: pending.time }
+    await saveMatchState(updated).catch(() => {})
+    await clearBuzzPending().catch(() => {})
+    deliver(safeForViewers(updated))
+  }, 500)
+
   return {
     unsubscribe: () => {
       destroyed = true
       supabase.removeChannel(ch)
       clearInterval(poll)
+      clearInterval(buzzBackup)
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', onVisible)
       }
     },
 
-    sendBuzz: (team: 'a' | 'b') => {
+    sendBuzz: (team: 'a' | 'b', qIndex?: number) => {
       if (destroyed) return
-      // Guard: only buzz when question is showing (use local known state)
-      if (lastKnownState?.bz_phase !== 'showing') return
-      // Write a lightweight buzz record to DB.
-      // Admin polls every 200 ms, sees it, processes it, and broadcasts
-      // the updated match state to all pages — no broadcast needed here.
-      const qIdx = lastKnownState.bz_q_index
+      // Prefer qIndex from caller (React state) over lastKnownState which may lag.
+      const qIdx = qIndex ?? lastKnownState?.bz_q_index ?? 0
+      const payload: BuzzPending = { team, q_index: qIdx, time: Date.now() }
+      // 1. Broadcast via Realtime — admin listens on same channel.
+      //    This is instant and bypasses RLS entirely.
+      ch.send({ type: 'broadcast', event: 'buzz', payload })
+      // 2. Also write to DB as backup so the admin's poll and the viewer-page
+      //    backup processor can handle it if the broadcast is missed.
       saveBuzzPending(team, qIdx).catch(() => {})
     },
 

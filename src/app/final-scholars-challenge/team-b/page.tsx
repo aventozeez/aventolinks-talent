@@ -27,7 +27,7 @@ export default function TeamBPage() {
   const [buzzed, setBuzzed] = useState(false)
 
   // Subscription functions
-  const sendBuzzRef = useRef<((team: 'a' | 'b') => void) | null>(null)
+  const sendBuzzRef = useRef<((team: 'a' | 'b', qIndex?: number) => void) | null>(null)
   const submitISRef = useRef<((team: 'a' | 'b', problemIndex: number, answer: string[]) => void) | null>(null)
   const stateRef = useRef<FSCState | null>(null)
 
@@ -110,7 +110,7 @@ export default function TeamBPage() {
   const handleBuzz = () => {
     if (buzzed || state?.bz_phase !== 'showing') return
     setBuzzed(true)
-    sendBuzzRef.current?.(TEAM)
+    sendBuzzRef.current?.(TEAM, state.bz_q_index)
   }
 
   const moveStep = (idx: number, dir: -1 | 1) => {
