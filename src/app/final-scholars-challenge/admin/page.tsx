@@ -6,7 +6,7 @@ import {
   Trophy, Users, HelpCircle, Rocket, Radio,
   Plus, Trash2, Check, X, SkipForward,
   Bell, Zap, Lightbulb, Loader2, ChevronDown,
-  ChevronUp, Timer, ArrowRight, RefreshCw,
+  ChevronUp, Timer, ArrowRight, RefreshCw, Layers,
 } from 'lucide-react'
 import {
   FSCState, BZPhase,
@@ -18,11 +18,13 @@ import {
   RF_Q_COUNT, RF_TIME_MS, RF_CORRECT_PTS,
   BZ_Q_COUNT, BZ_CORRECT_PTS, BZ_PENALTY_PTS, BZ_TIME_MS,
   IS_PROB_COUNT, IS_TIME_MS, IS_STEP_PTS, IS_BONUS_PTS,
+  QuestionPool, SavedMatch, PoolType,
+  getPools, savePools, getSavedMatches, saveSavedMatchesList,
 } from '@/lib/fsc-live'
 import { supabase } from '@/lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type Tab = 'teams' | 'questions' | 'launch' | 'live'
+type Tab = 'teams' | 'questions' | 'pools' | 'matches' | 'live'
 
 type FSCTeam = {
   id: string
@@ -96,6 +98,29 @@ export default function AdminPage() {
   const [launchTeamA, setLaunchTeamA] = useState('')
   const [launchTeamB, setLaunchTeamB] = useState('')
   const [launching, setLaunching] = useState(false)
+
+  // ── Pools ──────────────────────────────────────────────────────────────────
+  const [pools, setPools] = useState<QuestionPool[]>([])
+  const [poolsLoading, setPoolsLoading] = useState(false)
+  const [showAddPool, setShowAddPool] = useState(false)
+  const [newPoolName, setNewPoolName] = useState('')
+  const [newPoolType, setNewPoolType] = useState<PoolType>('rapid_fire')
+  const [poolSaving, setPoolSaving] = useState(false)
+  const [managingPool, setManagingPool] = useState<QuestionPool | null>(null)
+  const [managingPoolIds, setManagingPoolIds] = useState<Set<string>>(new Set())
+  const [managingPoolSaving, setManagingPoolSaving] = useState(false)
+
+  // ── Saved Matches ──────────────────────────────────────────────────────────
+  const [savedMatches, setSavedMatches] = useState<SavedMatch[]>([])
+  const [matchesLoading, setMatchesLoading] = useState(false)
+  const [showAddMatch, setShowAddMatch] = useState(false)
+  const [newMatchName, setNewMatchName] = useState('')
+  const [newMatchTeamA, setNewMatchTeamA] = useState('')
+  const [newMatchTeamB, setNewMatchTeamB] = useState('')
+  const [newMatchRFPool, setNewMatchRFPool] = useState('')
+  const [newMatchBZPool, setNewMatchBZPool] = useState('')
+  const [newMatchISPool, setNewMatchISPool] = useState('')
+  const [matchSaving, setMatchSaving] = useState(false)
 
   // ── Sync ref ───────────────────────────────────────────────────────────────
   useEffect(() => { fscRef.current = fscState }, [fscState])
@@ -176,6 +201,18 @@ export default function AdminPage() {
     setFscLoading(false)
   }, [])
 
+  const loadPools = useCallback(async () => {
+    setPoolsLoading(true)
+    setPools(await getPools())
+    setPoolsLoading(false)
+  }, [])
+
+  const loadSavedMatches = useCallback(async () => {
+    setMatchesLoading(true)
+    setSavedMatches(await getSavedMatches())
+    setMatchesLoading(false)
+  }, [])
+
   // ── Buzz poll — admin checks DB every 200 ms during 'showing' phase ─────────
   useEffect(() => {
     const id = setInterval(async () => {
@@ -236,9 +273,9 @@ export default function AdminPage() {
       })
       .subscribe((status: string) => { if (status === 'SUBSCRIBED') channelRef.current = ch })
 
-    loadTeams(); loadQuestions(); loadFSCState()
+    loadTeams(); loadQuestions(); loadFSCState(); loadPools(); loadSavedMatches()
     return () => { supabase.removeChannel(ch); channelRef.current = null }
-  }, [authChecked, loadTeams, loadQuestions, loadFSCState, applyState])
+  }, [authChecked, loadTeams, loadQuestions, loadFSCState, loadPools, loadSavedMatches, applyState])
 
   // ── Timer tick ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -363,6 +400,140 @@ export default function AdminPage() {
     }
     await applyState(matchState)
     setLaunching(false)
+    setActiveTab('live')
+  }
+
+  // ── Pool actions ──────────────────────────────────────────────────────────
+  const genId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
+
+  const createPool = async () => {
+    if (!newPoolName.trim()) return
+    setPoolSaving(true)
+    const newPool: QuestionPool = {
+      id: genId(), name: newPoolName.trim(), type: newPoolType, question_ids: [],
+      created_at: new Date().toISOString(),
+    }
+    const updated = [...pools, newPool]
+    setPools(updated)
+    await savePools(updated)
+    setNewPoolName(''); setShowAddPool(false); setPoolSaving(false)
+  }
+
+  const deletePool = async (id: string) => {
+    if (!confirm('Delete this question pool?')) return
+    const updated = pools.filter(p => p.id !== id)
+    setPools(updated)
+    await savePools(updated)
+    // Remove pool references from any saved match
+    const updatedMatches = savedMatches.map(m => ({
+      ...m,
+      rf_pool_id: m.rf_pool_id === id ? null : m.rf_pool_id,
+      bz_pool_id: m.bz_pool_id === id ? null : m.bz_pool_id,
+      is_pool_id: m.is_pool_id === id ? null : m.is_pool_id,
+    }))
+    setSavedMatches(updatedMatches)
+    await saveSavedMatchesList(updatedMatches)
+  }
+
+  const openManagePool = (pool: QuestionPool) => {
+    setManagingPool(pool)
+    setManagingPoolIds(new Set(pool.question_ids))
+  }
+
+  const savePoolQuestions = async () => {
+    if (!managingPool) return
+    setManagingPoolSaving(true)
+    const updated = pools.map(p =>
+      p.id === managingPool.id ? { ...p, question_ids: Array.from(managingPoolIds) } : p
+    )
+    setPools(updated)
+    await savePools(updated)
+    setManagingPool(null); setManagingPoolIds(new Set()); setManagingPoolSaving(false)
+  }
+
+  // ── Saved match actions ────────────────────────────────────────────────────
+  const createSavedMatch = async () => {
+    if (!newMatchName.trim() || !newMatchTeamA.trim() || !newMatchTeamB.trim()) return
+    if (!newMatchRFPool || !newMatchBZPool || !newMatchISPool) {
+      alert('Please select a pool for each round.'); return
+    }
+    setMatchSaving(true)
+    const newMatch: SavedMatch = {
+      id: genId(), name: newMatchName.trim(),
+      team_a_name: newMatchTeamA.trim(), team_b_name: newMatchTeamB.trim(),
+      rf_pool_id: newMatchRFPool, bz_pool_id: newMatchBZPool, is_pool_id: newMatchISPool,
+      status: 'draft', created_at: new Date().toISOString(),
+    }
+    const updated = [...savedMatches, newMatch]
+    setSavedMatches(updated)
+    await saveSavedMatchesList(updated)
+    setNewMatchName(''); setNewMatchTeamA(''); setNewMatchTeamB('')
+    setNewMatchRFPool(''); setNewMatchBZPool(''); setNewMatchISPool('')
+    setShowAddMatch(false); setMatchSaving(false)
+  }
+
+  const deleteSavedMatch = async (id: string) => {
+    if (!confirm('Delete this match?')) return
+    const updated = savedMatches.filter(m => m.id !== id)
+    setSavedMatches(updated)
+    await saveSavedMatchesList(updated)
+  }
+
+  const launchSavedMatch = async (match: SavedMatch) => {
+    const rfPool = pools.find(p => p.id === match.rf_pool_id)
+    const bzPool = pools.find(p => p.id === match.bz_pool_id)
+    const isPool = pools.find(p => p.id === match.is_pool_id)
+
+    const rfPoolQs = rfPool
+      ? questions.filter(q => rfPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular'))
+      : regularQs
+    const bzPoolQs = bzPool
+      ? questions.filter(q => bzPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular'))
+      : regularQs
+    const isPoolQs = isPool
+      ? questions.filter(q => isPool.question_ids.includes(q.id) && q.type === 'sprint')
+      : sprintQs
+
+    if (rfPoolQs.length < RF_Q_COUNT) {
+      alert(`RF pool needs at least ${RF_Q_COUNT} regular questions (has ${rfPoolQs.length}).`); return
+    }
+    if (bzPoolQs.length < BZ_Q_COUNT) {
+      alert(`Buzzer pool needs at least ${BZ_Q_COUNT} regular questions (has ${bzPoolQs.length}).`); return
+    }
+    if (isPoolQs.length < IS_PROB_COUNT) {
+      alert(`Sprint pool needs at least ${IS_PROB_COUNT} sprint problems (has ${isPoolQs.length}).`); return
+    }
+
+    setMatchSaving(true)
+    const shuffledRF = [...rfPoolQs].sort(() => Math.random() - 0.5)
+    const rfQs: FSCQuestion[] = shuffledRF.slice(0, RF_Q_COUNT).map(q => ({
+      id: q.id, question: q.question, answer: q.answer ?? '', category: q.category,
+    }))
+    const shuffledBZ = [...bzPoolQs].sort(() => Math.random() - 0.5)
+    const bzQs: FSCQuestion[] = shuffledBZ.slice(0, BZ_Q_COUNT).map(q => ({
+      id: q.id, question: q.question, answer: q.answer ?? '', category: q.category,
+    }))
+    const shuffledIS = [...isPoolQs].sort(() => Math.random() - 0.5)
+    const isProbs: ISProblem[] = shuffledIS.slice(0, IS_PROB_COUNT).map(q => ({
+      id: q.id, statement: q.question, steps: q.steps ?? [],
+      steps_shuffled: [...(q.steps ?? [])].sort(() => Math.random() - 0.5),
+    }))
+
+    buzzLockRef.current = false
+    setIsAnswers(null); setIsGrades(null)
+    await applyState({
+      ...makeDefaultState(match.team_a_name, match.team_b_name),
+      round: 'rapid_fire', rf_questions: rfQs, bz_questions: bzQs, is_problems: isProbs,
+    })
+
+    // Mark this match live, any previously live match → completed
+    const updatedMatches = savedMatches.map(m =>
+      m.id === match.id ? { ...m, status: 'live' as const } :
+      m.status === 'live' ? { ...m, status: 'completed' as const } : m
+    )
+    setSavedMatches(updatedMatches)
+    await saveSavedMatchesList(updatedMatches)
+    setMatchSaving(false)
     setActiveTab('live')
   }
 
@@ -576,7 +747,8 @@ export default function AdminPage() {
   const TABS = [
     { key: 'teams'     as Tab, label: 'Teams',        Icon: Users      },
     { key: 'questions' as Tab, label: 'Questions',    Icon: HelpCircle },
-    { key: 'launch'    as Tab, label: 'Launch Match', Icon: Rocket     },
+    { key: 'pools'     as Tab, label: 'Pools',        Icon: Layers     },
+    { key: 'matches'   as Tab, label: 'Matches',      Icon: Rocket     },
     { key: 'live'      as Tab, label: 'Live Control', Icon: Radio      },
   ]
 
@@ -840,67 +1012,298 @@ export default function AdminPage() {
           )}
         </>}
 
-        {/* ════════════════ LAUNCH ════════════════ */}
-        {activeTab === 'launch' && <>
+        {/* ════════════════ POOLS ════════════════ */}
+        {activeTab === 'pools' && <>
+          {managingPool ? (<>
+            {/* ── Managing questions in a pool ── */}
+            <div className="flex items-center gap-3">
+              <button onClick={() => { setManagingPool(null); setManagingPoolIds(new Set()) }}
+                className="px-3 py-1.5 bg-white/10 text-slate-400 hover:text-white rounded-xl text-xs border border-white/10 transition-colors">
+                ← Back
+              </button>
+              <div>
+                <p className="font-black text-white text-sm">{managingPool.name}</p>
+                <p className="text-[10px] text-slate-500">
+                  {managingPool.type === 'rapid_fire' ? '⚡ Rapid Fire' : managingPool.type === 'buzzer' ? '🔔 Buzzer' : '💡 Sprint'}
+                  {' · '}{managingPoolIds.size} selected
+                </p>
+              </div>
+            </div>
 
-          {(round === 'rapid_fire' || round === 'buzzer' || round === 'innovation_sprint') && (
+            <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
+              {(managingPool.type === 'sprint' ? sprintQs : regularQs).map(q => {
+                const checked = managingPoolIds.has(q.id)
+                return (
+                  <button key={q.id} onClick={() => {
+                    const next = new Set(managingPoolIds)
+                    checked ? next.delete(q.id) : next.add(q.id)
+                    setManagingPoolIds(next)
+                  }} className={`w-full flex items-start gap-3 rounded-xl px-3 py-2.5 border text-left transition-all ${
+                    checked ? 'border-[#f5a623]/40 bg-[#f5a623]/10' : 'border-white/10 bg-[#0a1628] hover:border-white/20'
+                  }`}>
+                    <span className={`shrink-0 mt-0.5 text-sm ${checked ? 'text-[#f5a623]' : 'text-slate-600'}`}>
+                      {checked ? '☑' : '☐'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white leading-snug">{q.question}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{q.category}</p>
+                    </div>
+                  </button>
+                )
+              })}
+              {(managingPool.type === 'sprint' ? sprintQs : regularQs).length === 0 && (
+                <p className="text-center text-slate-600 text-sm py-8">
+                  No {managingPool.type === 'sprint' ? 'sprint problems' : 'regular questions'} — add them in the Questions tab first
+                </p>
+              )}
+            </div>
+
+            <button onClick={savePoolQuestions} disabled={managingPoolSaving}
+              className="w-full py-3 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-sm hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
+              {managingPoolSaving ? <Loader2 size={16} className="animate-spin mx-auto" /> : `Save — ${managingPoolIds.size} questions selected`}
+            </button>
+          </>) : (<>
+            {/* ── Pool list ── */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-black text-white text-sm">Question Pools</h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">{pools.length} pools — group questions per round</p>
+              </div>
+              <button onClick={() => setShowAddPool(v => !v)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-[#0a1628] rounded-xl text-xs font-black hover:bg-[#e0941a] transition-colors">
+                <Plus size={12} /> New Pool
+              </button>
+            </div>
+
+            {showAddPool && (
+              <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-2xl p-4 space-y-3">
+                <p className="text-xs font-bold text-[#f5a623]">New Question Pool</p>
+                <input placeholder="Pool name (e.g. Science Finals RF)" value={newPoolName}
+                  onChange={e => setNewPoolName(e.target.value)}
+                  className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+                <div className="grid grid-cols-3 gap-2">
+                  {([['rapid_fire', '⚡ Rapid Fire'], ['buzzer', '🔔 Buzzer'], ['sprint', '💡 Sprint']] as [PoolType, string][]).map(([t, label]) => (
+                    <button key={t} onClick={() => setNewPoolType(t)}
+                      className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                        newPoolType === t ? 'border-[#f5a623] bg-[#f5a623]/15 text-[#f5a623]' : 'border-white/10 text-slate-400 hover:text-white'
+                      }`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={createPool} disabled={poolSaving || !newPoolName.trim()}
+                    className="flex-1 py-2.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-sm disabled:opacity-40 hover:bg-[#e0941a] transition-colors">
+                    {poolSaving ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Create Pool'}
+                  </button>
+                  <button onClick={() => { setShowAddPool(false); setNewPoolName('') }}
+                    className="px-4 py-2.5 bg-white/10 text-white rounded-xl text-sm hover:bg-white/20 transition-colors">Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {poolsLoading
+              ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-500" /></div>
+              : pools.length === 0
+              ? (
+                <div className="text-center py-12 space-y-2">
+                  <div className="text-4xl">🗂️</div>
+                  <p className="text-slate-400 text-sm">No pools yet</p>
+                  <p className="text-slate-600 text-xs">Create pools to group questions per round, then assign them to matches</p>
+                </div>
+              ) : pools.map(pool => {
+                const typeLabel = pool.type === 'rapid_fire' ? '⚡ Rapid Fire' : pool.type === 'buzzer' ? '🔔 Buzzer' : '💡 Sprint'
+                const typeColor = pool.type === 'rapid_fire' ? 'text-[#f5a623]' : pool.type === 'buzzer' ? 'text-blue-400' : 'text-purple-400'
+                const borderColor = pool.type === 'rapid_fire' ? 'border-[#f5a623]/30' : pool.type === 'buzzer' ? 'border-blue-500/30' : 'border-purple-500/30'
+                return (
+                  <div key={pool.id} className="bg-[#0a1628] border border-white/10 rounded-2xl p-4">
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-xl border ${borderColor} bg-white/5 shrink-0`}>
+                        <Layers size={14} className={typeColor} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-black text-white text-sm truncate">{pool.name}</p>
+                        <p className={`text-[10px] font-bold mt-0.5 ${typeColor}`}>{typeLabel}</p>
+                        <p className="text-xs text-slate-500 mt-1">{pool.question_ids.length} questions assigned</p>
+                      </div>
+                      <button onClick={() => deletePool(pool.id)} className="p-1.5 text-slate-600 hover:text-red-400 transition-colors shrink-0">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <button onClick={() => openManagePool(pool)}
+                      className="mt-3 w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-slate-300 transition-colors">
+                      Manage Questions →
+                    </button>
+                  </div>
+                )
+              })
+            }
+          </>)}
+        </>}
+
+        {/* ════════════════ MATCHES ════════════════ */}
+        {activeTab === 'matches' && <>
+
+          {matchActive && s && (
             <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-bold text-green-400 uppercase tracking-widest">Match In Progress</p>
-                <p className="text-sm text-white mt-0.5">{s?.team_a_name} vs {s?.team_b_name}</p>
-                <p className="text-xs text-slate-500 mt-0.5 capitalize">{round.replace('_', ' ')} round</p>
+                <p className="text-sm text-white mt-0.5">{s.team_a_name} vs {s.team_b_name}</p>
+                <p className="text-xs text-slate-500 mt-0.5 capitalize">{round.replace(/_/g, ' ')}</p>
               </div>
-              <button onClick={endMatchEarly}
-                className="px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-xl text-xs font-bold text-red-400 hover:bg-red-500/30 transition-colors">
-                End Match
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setActiveTab('live')}
+                  className="px-3 py-2 bg-green-500/20 border border-green-500/30 rounded-xl text-xs font-bold text-green-400 hover:bg-green-500/30 transition-colors">
+                  Live Control
+                </button>
+                <button onClick={endMatchEarly}
+                  className="px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-xl text-xs font-bold text-red-400 hover:bg-red-500/30 transition-colors">
+                  End
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Team selectors */}
-          <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-3">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Select Teams</p>
-            {(['a', 'b'] as const).map(side => (
-              <div key={side}>
-                <label className="text-xs text-slate-400 block mb-1.5">Team {side.toUpperCase()}</label>
-                <div className="relative">
-                  <select value={side === 'a' ? launchTeamA : launchTeamB}
-                    onChange={e => side === 'a' ? setLaunchTeamA(e.target.value) : setLaunchTeamB(e.target.value)}
-                    className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] appearance-none">
-                    <option value="">— Select Team {side.toUpperCase()} —</option>
-                    {activeTeams.filter(t => t.id !== (side === 'a' ? launchTeamB : launchTeamA)).map(t => (
-                      <option key={t.id} value={t.id}>{t.name}{t.school ? ` (${t.school})` : ''}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-black text-white text-sm">Saved Matches</h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">{savedMatches.length} matches — launch when ready</p>
+            </div>
+            <button onClick={() => setShowAddMatch(v => !v)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-[#0a1628] rounded-xl text-xs font-black hover:bg-[#e0941a] transition-colors">
+              <Plus size={12} /> New Match
+            </button>
+          </div>
+
+          {pools.length === 0 && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 flex items-start gap-2">
+              <span className="text-yellow-400 shrink-0 mt-0.5">⚠️</span>
+              <div>
+                <p className="text-xs font-bold text-yellow-400">No pools yet</p>
+                <p className="text-xs text-yellow-600 mt-0.5">Create question pools in the Pools tab first, then build matches.</p>
+              </div>
+            </div>
+          )}
+
+          {showAddMatch && (
+            <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-2xl p-4 space-y-3">
+              <p className="text-xs font-bold text-[#f5a623]">New Match</p>
+              <input placeholder="Match name (e.g. Semifinal A)" value={newMatchName}
+                onChange={e => setNewMatchName(e.target.value)}
+                className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+              <div className="grid grid-cols-2 gap-2">
+                <input placeholder="Team A name" value={newMatchTeamA} onChange={e => setNewMatchTeamA(e.target.value)}
+                  className="bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+                <input placeholder="Team B name" value={newMatchTeamB} onChange={e => setNewMatchTeamB(e.target.value)}
+                  className="bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+              </div>
+              {([
+                ['⚡ Rapid Fire Pool', newMatchRFPool, setNewMatchRFPool, 'rapid_fire'],
+                ['🔔 Buzzer Pool',     newMatchBZPool, setNewMatchBZPool, 'buzzer'],
+                ['💡 Sprint Pool',     newMatchISPool, setNewMatchISPool, 'sprint'],
+              ] as [string, string, (v: string) => void, PoolType][]).map(([label, val, setter, type]) => (
+                <div key={type}>
+                  <label className="text-xs text-slate-400 block mb-1">{label}</label>
+                  <div className="relative">
+                    <select value={val} onChange={e => setter(e.target.value)}
+                      className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] appearance-none">
+                      <option value="">— Select Pool —</option>
+                      {pools.filter(p => p.type === type).map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.question_ids.length} questions)</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
+              ))}
+              <div className="flex gap-2">
+                <button onClick={createSavedMatch}
+                  disabled={matchSaving || !newMatchName.trim() || !newMatchTeamA.trim() || !newMatchTeamB.trim() || !newMatchRFPool || !newMatchBZPool || !newMatchISPool}
+                  className="flex-1 py-2.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-sm disabled:opacity-40 hover:bg-[#e0941a] transition-colors">
+                  {matchSaving ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Save Match'}
+                </button>
+                <button onClick={() => { setShowAddMatch(false); setNewMatchName(''); setNewMatchTeamA(''); setNewMatchTeamB(''); setNewMatchRFPool(''); setNewMatchBZPool(''); setNewMatchISPool('') }}
+                  className="px-4 py-2.5 bg-white/10 text-white rounded-xl text-sm hover:bg-white/20 transition-colors">Cancel</button>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
 
-          {/* Requirements */}
-          <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-2">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Question Pool</p>
-            {[
-              { label: `Rapid Fire (needs ${RF_Q_COUNT})`, ok: regularQs.length >= RF_Q_COUNT, count: regularQs.length, icon: <Zap size={12} /> },
-              { label: `Buzzer Round (needs ${BZ_Q_COUNT} more)`, ok: regularQs.length >= RF_Q_COUNT + BZ_Q_COUNT, count: Math.max(0, regularQs.length - RF_Q_COUNT), icon: <Bell size={12} /> },
-              { label: `Innovation Sprint (needs ${IS_PROB_COUNT})`, ok: sprintQs.length >= IS_PROB_COUNT, count: sprintQs.length, icon: <Lightbulb size={12} /> },
-            ].map(r => (
-              <div key={r.label} className="flex items-center gap-2">
-                <span className={r.ok ? 'text-green-400' : 'text-red-400'}>{r.ok ? '✅' : '❌'}</span>
-                <span className="text-xs text-slate-400">{r.label}</span>
-                <span className={`ml-auto text-xs font-bold ${r.ok ? 'text-green-400' : 'text-red-400'}`}>{r.count}</span>
+          {matchesLoading
+            ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-500" /></div>
+            : savedMatches.length === 0
+            ? (
+              <div className="text-center py-12 space-y-2">
+                <div className="text-4xl">🏆</div>
+                <p className="text-slate-400 text-sm">No matches yet</p>
+                <p className="text-slate-600 text-xs">Create a match and launch it when ready</p>
               </div>
-            ))}
-          </div>
-
-          <button onClick={launchMatch}
-            disabled={launching || !launchTeamA || !launchTeamB || launchTeamA === launchTeamB
-              || regularQs.length < RF_Q_COUNT + BZ_Q_COUNT || sprintQs.length < IS_PROB_COUNT}
-            className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl hover:bg-[#e0941a] disabled:opacity-40 text-base transition-colors shadow-lg shadow-[#f5a623]/20">
-            {launching ? <Loader2 size={20} className="animate-spin" /> : <Rocket size={20} />}
-            🚀 Launch Match
-          </button>
+            ) : [...savedMatches].reverse().map(match => {
+              const rfPool = pools.find(p => p.id === match.rf_pool_id)
+              const bzPool = pools.find(p => p.id === match.bz_pool_id)
+              const isPool = pools.find(p => p.id === match.is_pool_id)
+              const rfQCount = rfPool ? questions.filter(q => rfPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).length : 0
+              const bzQCount = bzPool ? questions.filter(q => bzPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).length : 0
+              const isQCount = isPool ? questions.filter(q => isPool.question_ids.includes(q.id) && q.type === 'sprint').length : 0
+              const canLaunch = !!match.rf_pool_id && !!match.bz_pool_id && !!match.is_pool_id
+                && rfQCount >= RF_Q_COUNT && bzQCount >= BZ_Q_COUNT && isQCount >= IS_PROB_COUNT
+              const isLive = match.status === 'live'
+              return (
+                <div key={match.id} className={`bg-[#0a1628] border rounded-2xl p-4 ${
+                  isLive ? 'border-green-500/40 ring-1 ring-green-500/20' : 'border-white/10'
+                }`}>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-black text-white text-sm">{match.name}</p>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          isLive ? 'text-green-400 border-green-500/30 bg-green-500/10' :
+                          match.status === 'completed' ? 'text-slate-500 border-slate-600/30 bg-white/5' :
+                          'text-[#f5a623] border-[#f5a623]/30 bg-[#f5a623]/10'
+                        }`}>
+                          {isLive ? '● LIVE' : match.status === 'completed' ? 'Completed' : 'Draft'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {match.team_a_name} <span className="text-slate-600">vs</span> {match.team_b_name}
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${rfPool ? 'bg-[#f5a623]/10 text-[#f5a623]/80' : 'bg-red-500/10 text-red-400'}`}>
+                          ⚡ {rfPool ? rfPool.name : 'No pool'}
+                        </span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${bzPool ? 'bg-blue-500/10 text-blue-400/80' : 'bg-red-500/10 text-red-400'}`}>
+                          🔔 {bzPool ? bzPool.name : 'No pool'}
+                        </span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${isPool ? 'bg-purple-500/10 text-purple-400/80' : 'bg-red-500/10 text-red-400'}`}>
+                          💡 {isPool ? isPool.name : 'No pool'}
+                        </span>
+                      </div>
+                    </div>
+                    <button onClick={() => deleteSavedMatch(match.id)} className="p-1.5 text-slate-600 hover:text-red-400 transition-colors shrink-0">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  {match.status === 'draft' && !canLaunch && (
+                    <p className="text-[10px] text-red-400/70 mt-2">
+                      ⚠ Pools need: RF≥{RF_Q_COUNT} ({rfQCount}), BZ≥{BZ_Q_COUNT} ({bzQCount}), IS≥{IS_PROB_COUNT} ({isQCount})
+                    </p>
+                  )}
+                  {match.status === 'draft' && (
+                    <button onClick={() => launchSavedMatch(match)} disabled={!canLaunch || matchSaving}
+                      className="mt-3 w-full flex items-center justify-center gap-2 py-3 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-sm hover:bg-[#e0941a] disabled:opacity-40 transition-colors">
+                      {matchSaving ? <Loader2 size={15} className="animate-spin" /> : <Rocket size={15} />}
+                      🚀 Launch Match
+                    </button>
+                  )}
+                  {isLive && (
+                    <button onClick={() => setActiveTab('live')}
+                      className="mt-3 w-full py-2.5 bg-green-500/20 border border-green-500/30 text-green-400 font-bold rounded-xl text-xs hover:bg-green-500/30 transition-colors">
+                      → Go to Live Control
+                    </button>
+                  )}
+                </div>
+              )
+            })
+          }
         </>}
 
         {/* ════════════════ LIVE CONTROL ════════════════ */}
@@ -910,10 +1313,10 @@ export default function AdminPage() {
             <div className="text-center py-16 space-y-4">
               <div className="text-6xl">📡</div>
               <p className="text-white font-bold text-lg">No match in progress</p>
-              <p className="text-slate-400 text-sm">Go to Launch Match to start</p>
-              <button onClick={() => setActiveTab('launch')}
+              <p className="text-slate-400 text-sm">Go to Matches to launch one</p>
+              <button onClick={() => setActiveTab('matches')}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-sm hover:bg-[#e0941a] transition-colors">
-                <Rocket size={14} /> Launch Match
+                <Rocket size={14} /> Go to Matches
               </button>
             </div>
           )}

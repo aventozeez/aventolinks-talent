@@ -168,6 +168,61 @@ export async function getISAnswers(problemIndex: number): Promise<{ a: string[] 
   }
 }
 
+// ── Pools & Saved Matches ─────────────────────────────────────────────────────
+
+export type PoolType = 'rapid_fire' | 'buzzer' | 'sprint'
+
+export type QuestionPool = {
+  id: string
+  name: string
+  type: PoolType
+  question_ids: string[]
+  created_at: string
+}
+
+export type SavedMatch = {
+  id: string
+  name: string
+  team_a_name: string
+  team_b_name: string
+  rf_pool_id: string | null
+  bz_pool_id: string | null
+  is_pool_id: string | null
+  status: 'draft' | 'live' | 'completed'
+  created_at: string
+}
+
+const POOLS_ROW_ID   = 'fsc_pools_config'
+const MATCHES_ROW_ID = 'fsc_saved_matches'
+
+export async function getPools(): Promise<QuestionPool[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from('fsc_match_state').select('data').eq('id', POOLS_ROW_ID).maybeSingle()
+  return (data?.data?.pools as QuestionPool[]) ?? []
+}
+
+export async function savePools(pools: QuestionPool[]): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from('fsc_match_state')
+    .upsert({ id: POOLS_ROW_ID, data: { pools }, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+}
+
+export async function getSavedMatches(): Promise<SavedMatch[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from('fsc_match_state').select('data').eq('id', MATCHES_ROW_ID).maybeSingle()
+  return (data?.data?.matches as SavedMatch[]) ?? []
+}
+
+export async function saveSavedMatchesList(matches: SavedMatch[]): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from('fsc_match_state')
+    .upsert({ id: MATCHES_ROW_ID, data: { matches }, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+}
+
 // ── Change signature (poll dedup) ─────────────────────────────────────────────
 export const stateSig = (s: FSCState) =>
   [s.round, s.rf_phase, s.rf_q_index, s.rf_correct_a, s.rf_correct_b,
