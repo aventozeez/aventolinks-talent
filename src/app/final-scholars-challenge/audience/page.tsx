@@ -91,7 +91,7 @@ export default function AudiencePage() {
           <div className="text-center space-y-5">
             <div className="text-9xl">🎓</div>
             <h1 className="text-5xl font-black text-white tracking-tight">Final Scholars Challenge</h1>
-            <p className="text-slate-400 text-xl">Get ready — the quiz is about to begin</p>
+            <p className="text-slate-400 text-xl">Waiting for the admin to launch a match…</p>
           </div>
         )}
 

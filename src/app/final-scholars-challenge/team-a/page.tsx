@@ -86,8 +86,8 @@ export default function TeamAPage() {
         {phase === 'idle' && (
           <div className="text-center space-y-4">
             <div className="text-7xl">🏆</div>
-            <h2 className="text-2xl font-black text-white">Good luck, {myName}!</h2>
-            <p className="text-slate-400 text-lg">Waiting for the quiz to begin…</p>
+            <h2 className="text-2xl font-black text-white">{myName}</h2>
+            <p className="text-slate-400 text-lg">Waiting for the admin to launch the match…</p>
           </div>
         )}
 
