@@ -366,7 +366,7 @@ export default function AudiencePage() {
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-black text-white">💡 Innovation Sprint</h2>
               <span className="text-slate-400 bg-white/5 border border-white/10 px-3 py-1 rounded-full text-sm">
-                Problem {(s?.is_problem_index ?? 0) + 1} / {s?.is_problems?.length ?? 2}
+                Problem {(s?.is_problem_index ?? 0) + 1} / {s?.is_problems?.length ?? 1}
               </span>
             </div>
 
