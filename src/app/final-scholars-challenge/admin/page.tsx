@@ -188,7 +188,7 @@ export default function AdminPage() {
   const loadQuestions = useCallback(async () => {
     setQsLoading(true)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any).from('fsc_questions').select('*').order('created_at')
+    const { data } = await (supabase as any).from('fsc_questions').select('*').order('created_at').limit(5000)
     setQuestions((data as DBQuestion[]) || [])
     setQsLoading(false)
   }, [])
