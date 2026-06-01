@@ -130,6 +130,7 @@ export default function AdminPage() {
   const [newMatchRFPool, setNewMatchRFPool] = useState('')
   const [newMatchBZPool, setNewMatchBZPool] = useState('')
   const [newMatchISPool, setNewMatchISPool] = useState('')
+  const [newMatchISPool2, setNewMatchISPool2] = useState('')
   const [matchSaving, setMatchSaving] = useState(false)
 
   // ── Sync ref ───────────────────────────────────────────────────────────────
@@ -546,21 +547,25 @@ export default function AdminPage() {
   // ── Saved match actions ────────────────────────────────────────────────────
   const createSavedMatch = async () => {
     if (!newMatchName.trim() || !newMatchTeamA.trim() || !newMatchTeamB.trim()) return
-    if (!newMatchRFPool || !newMatchBZPool || !newMatchISPool) {
-      alert('Please select a pool for each round.'); return
+    if (!newMatchRFPool || !newMatchBZPool || !newMatchISPool || !newMatchISPool2) {
+      alert('Please select a pool for every round (including both IS pools).'); return
+    }
+    if (newMatchISPool === newMatchISPool2) {
+      alert('Please select two different pools for Innovation Sprint Problem 1 and Problem 2.'); return
     }
     setMatchSaving(true)
     const newMatch: SavedMatch = {
       id: genId(), name: newMatchName.trim(),
       team_a_name: newMatchTeamA.trim(), team_b_name: newMatchTeamB.trim(),
-      rf_pool_id: newMatchRFPool, bz_pool_id: newMatchBZPool, is_pool_id: newMatchISPool,
+      rf_pool_id: newMatchRFPool, bz_pool_id: newMatchBZPool,
+      is_pool_id: newMatchISPool, is_pool_id_2: newMatchISPool2,
       status: 'draft', created_at: new Date().toISOString(),
     }
     const updated = [...savedMatches, newMatch]
     setSavedMatches(updated)
     await saveSavedMatchesList(updated)
     setNewMatchName(''); setNewMatchTeamA(''); setNewMatchTeamB('')
-    setNewMatchRFPool(''); setNewMatchBZPool(''); setNewMatchISPool('')
+    setNewMatchRFPool(''); setNewMatchBZPool(''); setNewMatchISPool(''); setNewMatchISPool2('')
     setShowAddMatch(false); setMatchSaving(false)
   }
 
@@ -572,9 +577,10 @@ export default function AdminPage() {
   }
 
   const launchSavedMatch = async (match: SavedMatch) => {
-    const rfPool = pools.find(p => p.id === match.rf_pool_id)
-    const bzPool = pools.find(p => p.id === match.bz_pool_id)
-    const isPool = pools.find(p => p.id === match.is_pool_id)
+    const rfPool  = pools.find(p => p.id === match.rf_pool_id)
+    const bzPool  = pools.find(p => p.id === match.bz_pool_id)
+    const isPool1 = pools.find(p => p.id === match.is_pool_id)
+    const isPool2 = pools.find(p => p.id === match.is_pool_id_2)
 
     const rfPoolQs = rfPool
       ? questions.filter(q => rfPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular'))
@@ -582,9 +588,11 @@ export default function AdminPage() {
     const bzPoolQs = bzPool
       ? questions.filter(q => bzPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular'))
       : regularQs
-    const isPoolQs = isPool
-      ? questions.filter(q => isPool.question_ids.includes(q.id) && q.type === 'sprint')
-      : sprintQs
+    // Combine both IS pools — each contributes 1 problem
+    const isPoolQs = [
+      ...(isPool1 ? questions.filter(q => isPool1.question_ids.includes(q.id) && q.type === 'sprint') : []),
+      ...(isPool2 ? questions.filter(q => isPool2.question_ids.includes(q.id) && q.type === 'sprint') : []),
+    ]
 
     if (rfPoolQs.length < RF_Q_COUNT) {
       alert(`RF pool needs at least ${RF_Q_COUNT} regular questions (has ${rfPoolQs.length}).`); return
@@ -593,7 +601,7 @@ export default function AdminPage() {
       alert(`Buzzer pool needs at least ${BZ_Q_COUNT} regular questions (has ${bzPoolQs.length}).`); return
     }
     if (isPoolQs.length < IS_PROB_COUNT) {
-      alert(`Sprint pool needs at least ${IS_PROB_COUNT} sprint problems (has ${isPoolQs.length}).`); return
+      alert(`Select two IS pools with at least 1 problem each (have ${isPoolQs.length} total).`); return
     }
 
     setMatchSaving(true)
@@ -1421,18 +1429,19 @@ export default function AdminPage() {
                 })}
               </div>
               {([
-                ['⚡ Rapid Fire Pool', newMatchRFPool, setNewMatchRFPool, 'rapid_fire'],
-                ['🔔 Buzzer Pool',     newMatchBZPool, setNewMatchBZPool, 'buzzer'],
-                ['💡 Sprint Pool',     newMatchISPool, setNewMatchISPool, 'sprint'],
-              ] as [string, string, (v: string) => void, PoolType][]).map(([label, val, setter, type]) => (
-                <div key={type}>
+                ['⚡ Rapid Fire Pool',       newMatchRFPool,   setNewMatchRFPool,   'rapid_fire', null],
+                ['🔔 Buzzer Pool',            newMatchBZPool,   setNewMatchBZPool,   'buzzer',     null],
+                ['💡 Sprint Pool — Problem 1', newMatchISPool,   setNewMatchISPool,   'sprint',     newMatchISPool2],
+                ['💡 Sprint Pool — Problem 2', newMatchISPool2,  setNewMatchISPool2,  'sprint',     newMatchISPool],
+              ] as [string, string, (v: string) => void, PoolType, string | null][]).map(([label, val, setter, type, exclude]) => (
+                <div key={label}>
                   <label className="text-xs text-slate-400 block mb-1">{label}</label>
                   <div className="relative">
                     <select value={val} onChange={e => setter(e.target.value)}
                       className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] appearance-none">
                       <option value="">— Select Pool —</option>
-                      {pools.filter(p => p.type === type).map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.question_ids.length} questions)</option>
+                      {pools.filter(p => p.type === type && p.id !== (exclude ?? '')).map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.question_ids.length} {type === 'sprint' ? 'problem' : 'question'}{p.question_ids.length !== 1 ? 's' : ''})</option>
                       ))}
                     </select>
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -1441,11 +1450,11 @@ export default function AdminPage() {
               ))}
               <div className="flex gap-2">
                 <button onClick={createSavedMatch}
-                  disabled={matchSaving || !newMatchName.trim() || !newMatchTeamA.trim() || !newMatchTeamB.trim() || !newMatchRFPool || !newMatchBZPool || !newMatchISPool}
+                  disabled={matchSaving || !newMatchName.trim() || !newMatchTeamA.trim() || !newMatchTeamB.trim() || !newMatchRFPool || !newMatchBZPool || !newMatchISPool || !newMatchISPool2}
                   className="flex-1 py-2.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-sm disabled:opacity-40 hover:bg-[#e0941a] transition-colors">
                   {matchSaving ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Save Match'}
                 </button>
-                <button onClick={() => { setShowAddMatch(false); setNewMatchName(''); setNewMatchTeamA(''); setNewMatchTeamB(''); setNewMatchRFPool(''); setNewMatchBZPool(''); setNewMatchISPool('') }}
+                <button onClick={() => { setShowAddMatch(false); setNewMatchName(''); setNewMatchTeamA(''); setNewMatchTeamB(''); setNewMatchRFPool(''); setNewMatchBZPool(''); setNewMatchISPool(''); setNewMatchISPool2('') }}
                   className="px-4 py-2.5 bg-white/10 text-white rounded-xl text-sm hover:bg-white/20 transition-colors">Cancel</button>
               </div>
             </div>
@@ -1461,13 +1470,15 @@ export default function AdminPage() {
                 <p className="text-slate-600 text-xs">Create a match and launch it when ready</p>
               </div>
             ) : [...savedMatches].reverse().map(match => {
-              const rfPool = pools.find(p => p.id === match.rf_pool_id)
-              const bzPool = pools.find(p => p.id === match.bz_pool_id)
-              const isPool = pools.find(p => p.id === match.is_pool_id)
+              const rfPool  = pools.find(p => p.id === match.rf_pool_id)
+              const bzPool  = pools.find(p => p.id === match.bz_pool_id)
+              const isPool1 = pools.find(p => p.id === match.is_pool_id)
+              const isPool2 = pools.find(p => p.id === match.is_pool_id_2)
               const rfQCount = rfPool ? questions.filter(q => rfPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).length : 0
               const bzQCount = bzPool ? questions.filter(q => bzPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).length : 0
-              const isQCount = isPool ? questions.filter(q => isPool.question_ids.includes(q.id) && q.type === 'sprint').length : 0
-              const canLaunch = !!match.rf_pool_id && !!match.bz_pool_id && !!match.is_pool_id
+              const isQCount = (isPool1 ? questions.filter(q => isPool1.question_ids.includes(q.id) && q.type === 'sprint').length : 0)
+                             + (isPool2 ? questions.filter(q => isPool2.question_ids.includes(q.id) && q.type === 'sprint').length : 0)
+              const canLaunch = !!match.rf_pool_id && !!match.bz_pool_id && !!match.is_pool_id && !!match.is_pool_id_2
                 && rfQCount >= RF_Q_COUNT && bzQCount >= BZ_Q_COUNT && isQCount >= IS_PROB_COUNT
               const isLive = match.status === 'live'
               return (
@@ -1496,8 +1507,11 @@ export default function AdminPage() {
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${bzPool ? 'bg-blue-500/10 text-blue-400/80' : 'bg-red-500/10 text-red-400'}`}>
                           🔔 {bzPool ? bzPool.name : 'No pool'}
                         </span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${isPool ? 'bg-purple-500/10 text-purple-400/80' : 'bg-red-500/10 text-red-400'}`}>
-                          💡 {isPool ? isPool.name : 'No pool'}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${isPool1 ? 'bg-purple-500/10 text-purple-400/80' : 'bg-red-500/10 text-red-400'}`}>
+                          💡 P1: {isPool1 ? isPool1.name : 'No pool'}
+                        </span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${isPool2 ? 'bg-purple-500/10 text-purple-400/80' : 'bg-red-500/10 text-red-400'}`}>
+                          💡 P2: {isPool2 ? isPool2.name : 'No pool'}
                         </span>
                       </div>
                     </div>

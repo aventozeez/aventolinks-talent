@@ -412,7 +412,7 @@ export default function TeamAPage() {
           <div className="w-full space-y-4">
             <div className="flex items-center justify-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl">
               <span className="text-[#f5a623] text-sm font-black">💡 Innovation Sprint</span>
-              <span className="text-slate-500 text-xs">Problem {(s?.is_problem_index ?? 0) + 1} of {s?.is_problems?.length ?? 1}</span>
+              <span className="text-slate-500 text-xs">Problem {(s?.is_problem_index ?? 0) + 1} of {s?.is_problems?.length ?? 2}</span>
             </div>
 
             {s?.is_phase === 'idle' && (

@@ -1,0 +1,126 @@
+Domain.com Infrastructure & Configuration Archive
+Last updated: March 2026
+
+1. DOMAIN — Namecheap (Domain.com)
+DNS Records
+Type	Host	Value	TTL
+A Record	@	216.198.79.1	Automatic
+CNAME	www	XXXXXXX.vercel-dns-017.com.	Automatic
+CNAME	brevo1._domainkey	b1.Domain-com.dkim.brevo.com.	5 min
+CNAME	brevo2._domainkey	b2.Domain-com.dkim.brevo.com.	5 min
+TXT	@	brevo-code:XXXXXXXXXXXXXX	5 min
+TXT	_dmarc	v=DMARC1; p=none; rua=mailto:rua@dmarc.brevo.com	5 min
+Mail Settings (auto-managed by Namecheap)
+Type	Host	Value
+TXT	@	v=spf1 include:spf.efwd.registrar-servers.com ~all
+Email Forwarding
+All *@Domain.com addresses forward to your personal Gmail
+Managed under: Namecheap → Domain → Mail Settings → Email Forwarding
+This is how verification emails from Brevo/Gmail reach you even without a real mailbox
+2. EMAIL — Brevo (smtp-relay.brevo.com)
+Account
+Field	Value
+Account login	XXXX1@smtp-brevo.com
+SMTP Server	smtp-relay.brevo.com
+Port	587
+SMTP Key name	JP Guide (Active)
+Domain Authentication Status (all ✅ verified)
+Record	Type	Status
+Brevo code	TXT	✅ Verified
+DKIM 1	CNAME	✅ Verified
+DKIM 2	CNAME	✅ Verified
+DMARC	TXT	✅ Verified
+How it was set up
+Created Brevo account → Settings → Senders, Domains, IPs → Domains → Add Domain.com
+Brevo generated 4 DNS records
+Records added manually to Namecheap Advanced DNS
+Clicked "Verify" in Brevo — all 4 passed ✅
+3. SUPABASE — Auth & SMTP
+SMTP Settings (Auth → Email → SMTP Settings)
+Field	Value
+Enable custom SMTP	✅ On
+Sender email	noreply@Domain.com
+Sender name	Domain Guide
+Host	smtp-relay.brevo.com
+Port	587
+Username	XXXXXX@smtp-brevo.com
+Password	Brevo SMTP key (stored encrypted)
+Auth → URL Configuration
+Setting	Value
+Site URL	https://Domain.com
+Redirect URLs	https://Domain.com/** (wildcard — covers all pages)
+How it connects
+User triggers auth email (e.g. password reset)
+        ↓
+Supabase Auth uses custom SMTP settings
+        ↓
+Brevo SMTP server (smtp-relay.brevo.com:587)
+        ↓
+Brevo authenticates via DKIM (Domain.com domain verified)
+        ↓
+Email delivered to user FROM noreply@Domain.com
+
+4. VERCEL — Frontend Hosting
+Domain Setup (in Vercel Dashboard)
+Setting	Value
+Production domain	Domain.com
+www redirect	www.Domain.com → Domain.com
+Deployment branch	main
+Framework	Vite (React)
+Namecheap side
+Record	Points to
+A @	246.158.75.1 (Vercel IP)
+CNAME www	ad1ccee8b35bXXX.vercel-dns-017.com.
+Environment Variables (in Vercel → Project → Settings → Environment Variables)
+Variable	Description
+VITE_SUPABASE_URL	Your Supabase project URL
+VITE_SUPABASE_PUBLISHABLE_KEY	Supabase anon/public key
+5. GMAIL — "Send As" (Personal email setup)
+Allows sending FROM @Domain.com addresses directly in Gmail
+
+Setup path
+Gmail → Settings → See all settings → Accounts and Import → Send mail as → Add another email address
+
+Configured addresses (repeat for each)
+Address	Purpose
+noreply@Domain.com	Matches Supabase sender
+admin@Domain.com	Personal replies to users
+(add more as needed)	support@, hello@, etc.
+SMTP credentials used (same for all)
+Field	Value
+SMTP Server	smtp-relay.brevo.com
+Port	436
+Username	XXXXXX@smtp-brevo.com
+Password	Brevo SMTP key
+Security	TLS
+How verification works
+Gmail sends a verification email to e.g. admin@Domain.com
+Namecheap forwarding delivers it to your Gmail inbox
+You click the verification link
+Address is now available in Gmail's "From" dropdown
+6. Full Email Flow Diagram
+INCOMING (someone emails you@Domain.com)
+────────────────────────────────────────
+External sender
+      ↓
+Namecheap MX / Email Forwarding
+      ↓
+Your personal Gmail inbox ✅
+
+OUTGOING — System emails (password reset, welcome, etc.)
+─────────────────────────────────────────────────────────
+Supabase Auth event
+      ↓
+Brevo SMTP (smtp-relay.brevo.com:587)
+      ↓  authenticated via DKIM (Domain.com)
+User's inbox ← FROM: noreply@Domain.com ✅
+
+OUTGOING — Personal replies
+────────────────────────────
+You compose/reply in Gmail
+      ↓  select From: admin@Domain.com
+Brevo SMTP (same credentials)
+      ↓  authenticated via DKIM
+Recipient inbox ← FROM: admin@Domain.com ✅
+
+Keep this document safe — these are all the credentials and DNS settings needed to rebuild the email/hosting infrastructure from scratch.

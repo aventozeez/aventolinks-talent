@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Grand Finale – Scholars Challenge</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+
+  *{margin:0;padding:0;box-sizing:border-box;}
+
+  body{
+    font-family:'Inter',sans-serif;
+    background:#070f20;
+    display:flex;align-items:center;justify-content:center;
+    min-height:100vh;
+    padding:32px 24px;
+  }
+
+  .poster{
+    width:900px;
+    background:linear-gradient(145deg,#0a1628 0%,#0d1f3c 60%,#0a1628 100%);
+    border:2px solid rgba(245,166,35,0.4);
+    border-radius:20px;
+    overflow:hidden;
+    position:relative;
+    box-shadow:0 0 80px rgba(245,166,35,0.15), 0 0 0 1px rgba(245,166,35,0.1);
+  }
+
+  /* decorative glow blobs */
+  .poster::before{
+    content:'';position:absolute;
+    top:-120px;right:-120px;
+    width:400px;height:400px;
+    background:radial-gradient(circle,rgba(245,166,35,0.12) 0%,transparent 70%);
+    pointer-events:none;
+  }
+  .poster::after{
+    content:'';position:absolute;
+    bottom:-120px;left:-120px;
+    width:400px;height:400px;
+    background:radial-gradient(circle,rgba(245,166,35,0.08) 0%,transparent 70%);
+    pointer-events:none;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────────── */
+  .header{
+    text-align:center;
+    padding:36px 32px 24px;
+    border-bottom:1px solid rgba(245,166,35,0.2);
+    position:relative;
+  }
+  .badge{
+    display:inline-block;
+    background:rgba(245,166,35,0.12);
+    border:1px solid rgba(245,166,35,0.35);
+    color:#f5a623;
+    font-size:11px;font-weight:700;
+    letter-spacing:0.18em;text-transform:uppercase;
+    padding:5px 16px;border-radius:99px;
+    margin-bottom:14px;
+  }
+  .title{
+    font-size:52px;font-weight:900;
+    background:linear-gradient(135deg,#f5a623 0%,#ffd166 55%,#f5a623 100%);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;
+    line-height:1.05;
+    letter-spacing:-1px;
+    margin-bottom:10px;
+  }
+  .subtitle{
+    font-size:15px;font-weight:600;
+    color:rgba(255,255,255,0.55);
+    letter-spacing:0.06em;text-transform:uppercase;
+  }
+  .divider{
+    width:60px;height:3px;
+    background:linear-gradient(90deg,transparent,#f5a623,transparent);
+    margin:16px auto 0;
+    border-radius:99px;
+  }
+
+  /* ── Section label ───────────────────────────────────────────────────── */
+  .section-label{
+    text-align:center;
+    padding:18px 32px 0;
+    font-size:11px;font-weight:700;
+    letter-spacing:0.2em;text-transform:uppercase;
+    color:rgba(255,255,255,0.3);
+  }
+
+  /* ── Matchup grid ────────────────────────────────────────────────────── */
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    padding:16px 28px 28px;
+  }
+
+  .match{
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.07);
+    border-radius:12px;
+    overflow:hidden;
+    transition:border-color .2s;
+  }
+  .match:hover{border-color:rgba(245,166,35,0.35);}
+
+  .match-header{
+    display:flex;align-items:center;
+    padding:7px 12px 6px;
+    border-bottom:1px solid rgba(255,255,255,0.05);
+  }
+  .match-label{
+    font-size:10px;font-weight:700;
+    letter-spacing:0.15em;text-transform:uppercase;
+    color:#f5a623;opacity:0.7;
+    margin-right:auto;
+  }
+  .vs-badge{
+    font-size:9px;font-weight:800;
+    background:rgba(245,166,35,0.15);
+    color:#f5a623;
+    padding:2px 7px;border-radius:99px;
+    letter-spacing:0.1em;
+  }
+
+  .team{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;
+  }
+  .team+.team{
+    border-top:1px solid rgba(255,255,255,0.04);
+  }
+  .seed{
+    flex-shrink:0;
+    width:22px;height:22px;
+    background:rgba(245,166,35,0.12);
+    border:1px solid rgba(245,166,35,0.25);
+    border-radius:6px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:700;color:#f5a623;
+  }
+  .team-name{
+    font-size:12.5px;font-weight:600;
+    color:rgba(255,255,255,0.85);
+    line-height:1.3;
+  }
+
+  /* colour accent bars per match */
+  .m1{border-left:3px solid #ef4444;}
+  .m2{border-left:3px solid #f97316;}
+  .m3{border-left:3px solid #eab308;}
+  .m4{border-left:3px solid #22c55e;}
+  .m5{border-left:3px solid #14b8a6;}
+  .m6{border-left:3px solid #3b82f6;}
+  .m7{border-left:3px solid #a855f7;}
+  .m8{border-left:3px solid #ec4899;}
+
+  /* ── Footer ─────────────────────────────────────────────────────────── */
+  .footer{
+    border-top:1px solid rgba(245,166,35,0.15);
+    padding:14px 32px;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .footer-logo{
+    font-size:13px;font-weight:800;
+    background:linear-gradient(90deg,#f5a623,#ffd166);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;
+    letter-spacing:0.04em;
+  }
+  .footer-dot{color:rgba(255,255,255,0.2);font-size:11px;}
+  .footer-text{font-size:11px;color:rgba(255,255,255,0.3);font-weight:500;}
+
+  /* trophy icon */
+  .trophy{font-size:38px;line-height:1;}
+</style>
+</head>
+<body>
+<div class="poster">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="badge">Scholars Challenge</div>
+    <div class="trophy">🏆</div>
+    <div class="title">Grand Finale</div>
+    <div class="subtitle">The 16 Competing Schools</div>
+    <div class="divider"></div>
+  </div>
+
+  <div class="section-label">Round of 16 — Match Fixtures</div>
+
+  <!-- 8 Matchups in 2-col grid -->
+  <div class="grid">
+
+    <!-- M1 -->
+    <div class="match m1">
+      <div class="match-header">
+        <span class="match-label">Match 1</span>
+        <span class="vs-badge">VS</span>
+      </div>
+      <div class="team"><div class="seed">1</div><div class="team-name">Ibadan Grammar School</div></div>
+      <div class="team"><div class="seed">16</div><div class="team-name">His Marvelous Model College</div></div>
+    </div>
+
+    <!-- M2 -->
+    <div class="match m2">
+      <div class="match-header">
+        <span class="match-label">Match 2</span>
+        <span class="vs-badge">VS</span>
+      </div>
+      <div class="team"><div class="seed">8</div><div class="team-name">Sharon Rose Schools and College</div></div>
+      <div class="team"><div class="seed">9</div><div class="team-name">Olivet Baptist Academy</div></div>
+    </div>
+
+    <!-- M3 -->
+    <div class="match m3">
+      <div class="match-header">
+        <span class="match-label">Match 3</span>
+        <span class="vs-badge">VS</span>
+      </div>
+      <div class="team"><div class="seed">4</div><div class="team-name">Greater Love Model College</div></div>
+      <div class="team"><div class="seed">13</div><div class="team-name">The Smart School</div></div>
+    </div>
+
+    <!-- M4 -->
+    <div class="match m4">
+      <div class="match-header">
+        <span class="match-label">Match 4</span>
+        <span class="vs-badge">VS</span>
+      </div>
+      <div class="team"><div class="seed">5</div><div class="team-name">Maceland Academy</div></div>
+      <div class="team"><div class="seed">12</div><div class="team-name">Learning Cloud Academy</div></div>
+    </div>
+
+    <!-- M5 -->
+    <div class="match m5">
+      <div class="match-header">
+        <span class="match-label">Match 5</span>
+        <span class="vs-badge">VS</span>
+      </div>
+      <div class="team"><div class="seed">3</div><div class="team-name">The International School, University of Ibadan</div></div>
+      <div class="team"><div class="seed">14</div><div class="team-name">Aseda Private School of Science</div></div>
+    </div>
+
+    <!-- M6 -->
+    <div class="match m6">
+      <div class="match-header">
+        <span class="match-label">Match 6</span>
+        <span class="vs-badge">VS</span>
+      </div>
+      <div class="team"><div class="seed">6</div><div class="team-name">Ibadan Grammar School 2 – Molete</div></div>
+      <div class="team"><div class="seed">11</div><div class="team-name">Besley Schools</div></div>
+    </div>
+
+    <!-- M7 -->
+    <div class="match m7">
+      <div class="match-header">
+        <span class="match-label">Match 7</span>
+        <span class="vs-badge">VS</span>
+      </div>
+      <div class="team"><div class="seed">7</div><div class="team-name">Olivet Baptist High School</div></div>
+      <div class="team"><div class="seed">10</div><div class="team-name">Community High School</div></div>
+    </div>
+
+    <!-- M8 -->
+    <div class="match m8">
+      <div class="match-header">
+        <span class="match-label">Match 8</span>
+        <span class="vs-badge">VS</span>
+      </div>
+      <div class="team"><div class="seed">2</div><div class="team-name">Front Model College</div></div>
+      <div class="team"><div class="seed">15</div><div class="team-name">Ibadan Boys High School</div></div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span class="footer-logo">AventoLinks</span>
+    <span class="footer-dot">•</span>
+    <span class="footer-text">Scholars Challenge — Grand Finale</span>
+  </div>
+
+</div>
+</body>
+</html>

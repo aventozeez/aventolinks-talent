@@ -13,7 +13,7 @@ export const BZ_CORRECT_PTS = 10
 export const BZ_PENALTY_PTS = 5       // first buzzer wrong → -5
 export const BZ_TIME_MS     = 10_000  // 10 s countdown after buzz
 
-export const IS_PROB_COUNT  = 1
+export const IS_PROB_COUNT  = 2
 export const IS_TIME_MS     = 60_000  // 60 s to arrange
 export const IS_STEP_PTS    = 10      // per correct step (5 steps max = 50)
 export const IS_BONUS_PTS   = 20      // bonus if ALL steps correct
@@ -187,7 +187,8 @@ export type SavedMatch = {
   team_b_name: string
   rf_pool_id: string | null
   bz_pool_id: string | null
-  is_pool_id: string | null
+  is_pool_id: string | null    // Sprint Problem 1
+  is_pool_id_2: string | null  // Sprint Problem 2
   status: 'draft' | 'live' | 'completed'
   created_at: string
 }
