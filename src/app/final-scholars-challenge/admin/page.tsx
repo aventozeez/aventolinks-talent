@@ -1366,10 +1366,26 @@ export default function AdminPage() {
                 onChange={e => setNewMatchName(e.target.value)}
                 className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
               <div className="grid grid-cols-2 gap-2">
-                <input placeholder="Team A name" value={newMatchTeamA} onChange={e => setNewMatchTeamA(e.target.value)}
-                  className="bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
-                <input placeholder="Team B name" value={newMatchTeamB} onChange={e => setNewMatchTeamB(e.target.value)}
-                  className="bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+                {(['a', 'b'] as const).map(side => {
+                  const val = side === 'a' ? newMatchTeamA : newMatchTeamB
+                  const other = side === 'a' ? newMatchTeamB : newMatchTeamA
+                  const setter = side === 'a' ? setNewMatchTeamA : setNewMatchTeamB
+                  return (
+                    <div key={side} className="relative">
+                      <select value={val} onChange={e => setter(e.target.value)}
+                        className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] appearance-none">
+                        <option value="">— Team {side.toUpperCase()} —</option>
+                        {teams
+                          .filter(t => t.name !== other)
+                          .map(t => (
+                            <option key={t.id} value={t.name}>{t.name}{t.school ? ` (${t.school})` : ''}</option>
+                          ))
+                        }
+                      </select>
+                      <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+                  )
+                })}
               </div>
               {([
                 ['⚡ Rapid Fire Pool', newMatchRFPool, setNewMatchRFPool, 'rapid_fire'],
