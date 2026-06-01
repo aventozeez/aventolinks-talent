@@ -52,7 +52,8 @@ export type FSCState = {
   // ── Rapid Fire ──
   rf_phase: RFPhase
   rf_q_index: number          // 0-9, which question is showing
-  rf_questions: FSCQuestion[]
+  rf_questions: FSCQuestion[]   // Team A's questions
+  rf_questions_b: FSCQuestion[] // Team B's questions (separate pool)
   rf_timer_start: number | null   // ms timestamp
   rf_correct_a: number
   rf_correct_b: number
@@ -83,7 +84,7 @@ export const makeDefaultState = (a = 'Team A', b = 'Team B'): FSCState => ({
   rf_score_a: 0, rf_score_b: 0,
   bz_score_a: 0, bz_score_b: 0,
   is_score_a: 0, is_score_b: 0,
-  rf_phase: 'idle', rf_q_index: 0, rf_questions: [],
+  rf_phase: 'idle', rf_q_index: 0, rf_questions: [], rf_questions_b: [],
   rf_timer_start: null, rf_correct_a: 0, rf_correct_b: 0,
   bz_phase: 'idle', bz_q_index: 0, bz_questions: [],
   bz_buzz_start: null, bz_second_chance_team: null, bz_last_result: null,
@@ -95,9 +96,10 @@ export const makeDefaultState = (a = 'Team A', b = 'Team B'): FSCState => ({
 /** Strip correct step order before broadcasting to viewers */
 export const safeForViewers = (s: FSCState): FSCState => ({
   ...s,
-  rf_questions:  s.rf_questions.map(q => ({ ...q, answer: '' })),
-  bz_questions:  s.bz_questions.map(q => ({ ...q, answer: '' })),
-  is_problems:   s.is_problems.map(p => ({ ...p, steps: [] })),
+  rf_questions:   s.rf_questions.map(q => ({ ...q, answer: '' })),
+  rf_questions_b: (s.rf_questions_b ?? []).map(q => ({ ...q, answer: '' })),
+  bz_questions:   s.bz_questions.map(q => ({ ...q, answer: '' })),
+  is_problems:    s.is_problems.map(p => ({ ...p, steps: [] })),
 })
 
 // ── DB ────────────────────────────────────────────────────────────────────────
@@ -185,7 +187,8 @@ export type SavedMatch = {
   name: string
   team_a_name: string
   team_b_name: string
-  rf_pool_id: string | null
+  rf_pool_id: string | null    // Team A's RF pool
+  rf_pool_id_b: string | null  // Team B's RF pool
   bz_pool_id: string | null
   is_pool_id: string | null    // Sprint Problem 1
   is_pool_id_2: string | null  // Sprint Problem 2

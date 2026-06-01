@@ -194,11 +194,11 @@ export default function AudiencePage() {
                     </p>
                   </div>
                 )}
-                {s.rf_phase === 'b_playing' && s.rf_questions?.[s.rf_q_index] && (
+                {s.rf_phase === 'b_playing' && (s.rf_questions_b ?? s.rf_questions)?.[s.rf_q_index] && (
                   <div className="bg-[#0a1628] border border-white/10 rounded-3xl p-8 shadow-2xl">
-                    <p className="text-xs text-slate-500 mb-3">{s.rf_questions[s.rf_q_index].category}</p>
+                    <p className="text-xs text-slate-500 mb-3">{(s.rf_questions_b ?? s.rf_questions)[s.rf_q_index].category}</p>
                     <p className="text-3xl md:text-4xl font-bold text-white text-center leading-snug">
-                      {s.rf_questions[s.rf_q_index].question}
+                      {(s.rf_questions_b ?? s.rf_questions)[s.rf_q_index].question}
                     </p>
                   </div>
                 )}

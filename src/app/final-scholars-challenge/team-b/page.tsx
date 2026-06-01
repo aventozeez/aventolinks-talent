@@ -247,9 +247,9 @@ export default function TeamBPage() {
 
                 {s.rf_phase === 'b_playing' && (
                   <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-5">
-                    <p className="text-[10px] text-slate-500 mb-1">{s.rf_questions?.[s.rf_q_index]?.category}</p>
+                    <p className="text-[10px] text-slate-500 mb-1">{(s.rf_questions_b ?? s.rf_questions)?.[s.rf_q_index]?.category}</p>
                     <p className="text-xl font-bold text-white leading-snug">
-                      {s.rf_questions?.[s.rf_q_index]?.question ?? ''}
+                      {(s.rf_questions_b ?? s.rf_questions)?.[s.rf_q_index]?.question ?? ''}
                     </p>
                   </div>
                 )}

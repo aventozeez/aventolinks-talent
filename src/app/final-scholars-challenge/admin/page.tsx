@@ -128,6 +128,7 @@ export default function AdminPage() {
   const [newMatchTeamA, setNewMatchTeamA] = useState('')
   const [newMatchTeamB, setNewMatchTeamB] = useState('')
   const [newMatchRFPool, setNewMatchRFPool] = useState('')
+  const [newMatchRFPoolB, setNewMatchRFPoolB] = useState('')
   const [newMatchBZPool, setNewMatchBZPool] = useState('')
   const [newMatchISPool, setNewMatchISPool] = useState('')
   const [newMatchISPool2, setNewMatchISPool2] = useState('')
@@ -547,8 +548,11 @@ export default function AdminPage() {
   // ── Saved match actions ────────────────────────────────────────────────────
   const createSavedMatch = async () => {
     if (!newMatchName.trim() || !newMatchTeamA.trim() || !newMatchTeamB.trim()) return
-    if (!newMatchRFPool || !newMatchBZPool || !newMatchISPool || !newMatchISPool2) {
-      alert('Please select a pool for every round (including both IS pools).'); return
+    if (!newMatchRFPool || !newMatchRFPoolB || !newMatchBZPool || !newMatchISPool || !newMatchISPool2) {
+      alert('Please select pools for every slot (including both RF pools and both IS pools).'); return
+    }
+    if (newMatchRFPool === newMatchRFPoolB) {
+      alert('Team A and Team B must have different RF pools.'); return
     }
     if (newMatchISPool === newMatchISPool2) {
       alert('Please select two different pools for Innovation Sprint Problem 1 and Problem 2.'); return
@@ -557,7 +561,8 @@ export default function AdminPage() {
     const newMatch: SavedMatch = {
       id: genId(), name: newMatchName.trim(),
       team_a_name: newMatchTeamA.trim(), team_b_name: newMatchTeamB.trim(),
-      rf_pool_id: newMatchRFPool, bz_pool_id: newMatchBZPool,
+      rf_pool_id: newMatchRFPool, rf_pool_id_b: newMatchRFPoolB,
+      bz_pool_id: newMatchBZPool,
       is_pool_id: newMatchISPool, is_pool_id_2: newMatchISPool2,
       status: 'draft', created_at: new Date().toISOString(),
     }
@@ -565,7 +570,7 @@ export default function AdminPage() {
     setSavedMatches(updated)
     await saveSavedMatchesList(updated)
     setNewMatchName(''); setNewMatchTeamA(''); setNewMatchTeamB('')
-    setNewMatchRFPool(''); setNewMatchBZPool(''); setNewMatchISPool(''); setNewMatchISPool2('')
+    setNewMatchRFPool(''); setNewMatchRFPoolB(''); setNewMatchBZPool(''); setNewMatchISPool(''); setNewMatchISPool2('')
     setShowAddMatch(false); setMatchSaving(false)
   }
 
@@ -577,45 +582,50 @@ export default function AdminPage() {
   }
 
   const launchSavedMatch = async (match: SavedMatch) => {
-    const rfPool  = pools.find(p => p.id === match.rf_pool_id)
+    const rfPoolA = pools.find(p => p.id === match.rf_pool_id)
+    const rfPoolB = pools.find(p => p.id === match.rf_pool_id_b)
     const bzPool  = pools.find(p => p.id === match.bz_pool_id)
     const isPool1 = pools.find(p => p.id === match.is_pool_id)
     const isPool2 = pools.find(p => p.id === match.is_pool_id_2)
 
-    const rfPoolQs = rfPool
-      ? questions.filter(q => rfPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular'))
+    const rfPoolQsA = rfPoolA
+      ? questions.filter(q => rfPoolA.question_ids.includes(q.id) && (!q.type || q.type === 'regular'))
+      : regularQs
+    const rfPoolQsB = rfPoolB
+      ? questions.filter(q => rfPoolB.question_ids.includes(q.id) && (!q.type || q.type === 'regular'))
       : regularQs
     const bzPoolQs = bzPool
       ? questions.filter(q => bzPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular'))
       : regularQs
-    // Combine both IS pools — each contributes 1 problem
     const isPoolQs = [
       ...(isPool1 ? questions.filter(q => isPool1.question_ids.includes(q.id) && q.type === 'sprint') : []),
       ...(isPool2 ? questions.filter(q => isPool2.question_ids.includes(q.id) && q.type === 'sprint') : []),
     ]
 
-    if (rfPoolQs.length < RF_Q_COUNT) {
-      alert(`RF pool needs at least ${RF_Q_COUNT} regular questions (has ${rfPoolQs.length}).`); return
+    if (rfPoolQsA.length < RF_Q_COUNT) {
+      alert(`Team A RF pool needs at least ${RF_Q_COUNT} questions (has ${rfPoolQsA.length}).`); return
+    }
+    if (rfPoolQsB.length < RF_Q_COUNT) {
+      alert(`Team B RF pool needs at least ${RF_Q_COUNT} questions (has ${rfPoolQsB.length}).`); return
     }
     if (bzPoolQs.length < BZ_Q_COUNT) {
-      alert(`Buzzer pool needs at least ${BZ_Q_COUNT} regular questions (has ${bzPoolQs.length}).`); return
+      alert(`Buzzer pool needs at least ${BZ_Q_COUNT} questions (has ${bzPoolQs.length}).`); return
     }
     if (isPoolQs.length < IS_PROB_COUNT) {
       alert(`Select two IS pools with at least 1 problem each (have ${isPoolQs.length} total).`); return
     }
 
     setMatchSaving(true)
-    const shuffledRF = [...rfPoolQs].sort(() => Math.random() - 0.5)
-    const rfQs: FSCQuestion[] = shuffledRF.slice(0, RF_Q_COUNT).map(q => ({
+    const toQ = (q: typeof regularQs[0]): FSCQuestion => ({
       id: q.id, question: q.question, answer: q.answer ?? '', category: q.category,
-    }))
-    const shuffledBZ = [...bzPoolQs].sort(() => Math.random() - 0.5)
-    const bzQs: FSCQuestion[] = shuffledBZ.slice(0, BZ_Q_COUNT).map(q => ({
-      id: q.id, question: q.question, answer: q.answer ?? '', category: q.category,
-    }))
-    const shuffledIS = [...isPoolQs].sort(() => Math.random() - 0.5)
-    const isProbs: ISProblem[] = shuffledIS.slice(0, IS_PROB_COUNT).map(q => ({
-      id: q.id, statement: q.question, steps: q.steps ?? [],
+    })
+    const rfQsA: FSCQuestion[] = [...rfPoolQsA].sort(() => Math.random() - 0.5).slice(0, RF_Q_COUNT).map(toQ)
+    const rfQsB: FSCQuestion[] = [...rfPoolQsB].sort(() => Math.random() - 0.5).slice(0, RF_Q_COUNT).map(toQ)
+    const bzQs: FSCQuestion[]  = [...bzPoolQs].sort(() => Math.random() - 0.5).slice(0, BZ_Q_COUNT).map(toQ)
+    const isProbs: ISProblem[] = [...isPoolQs].sort(() => Math.random() - 0.5).slice(0, IS_PROB_COUNT).map(q => ({
+      id: q.id,
+      statement: q.answer?.trim() ? q.answer : q.question,
+      steps: q.steps ?? [],
       steps_shuffled: [...(q.steps ?? [])].sort(() => Math.random() - 0.5),
     }))
 
@@ -623,7 +633,7 @@ export default function AdminPage() {
     setIsAnswers(null); setIsGrades(null)
     await applyState({
       ...makeDefaultState(match.team_a_name, match.team_b_name),
-      round: 'rapid_fire', rf_questions: rfQs, bz_questions: bzQs, is_problems: isProbs,
+      round: 'rapid_fire', rf_questions: rfQsA, rf_questions_b: rfQsB, bz_questions: bzQs, is_problems: isProbs,
     })
 
     // Mark this match live, any previously live match → completed
@@ -652,24 +662,21 @@ export default function AdminPage() {
     const correct = result === 'correct'
     const newCorrectA = (isA && correct) ? s.rf_correct_a + 1 : s.rf_correct_a
     const newCorrectB = (!isA && correct) ? s.rf_correct_b + 1 : s.rf_correct_b
-    // Wrong or skipped → recycle: append current question to end of the queue
-    const newQuestions = [...s.rf_questions]
-    if (result !== 'correct') {
-      newQuestions.push(newQuestions[s.rf_q_index])
-    }
+    // Use each team's own question list; wrong/skip → recycle to end
+    const currentQs = isA ? [...s.rf_questions] : [...(s.rf_questions_b ?? [])]
+    if (result !== 'correct') currentQs.push(currentQs[s.rf_q_index])
     const nextIdx = s.rf_q_index + 1
-    // Turn ends only when all (unrecycled) questions are answered correctly —
-    // normal end-of-turn is handled by the 60 s timer auto-end.
-    const done = nextIdx >= newQuestions.length
-    // Update live score after every click so viewers see it immediately
+    const done = nextIdx >= currentQs.length
+    // Cap score at RF_Q_COUNT × RF_CORRECT_PTS = 100 max
     const newState: FSCState = {
       ...s,
-      rf_questions: newQuestions,
+      rf_questions:   isA ? currentQs : s.rf_questions,
+      rf_questions_b: isA ? s.rf_questions_b : currentQs,
       rf_correct_a: newCorrectA,
       rf_correct_b: newCorrectB,
       rf_q_index: nextIdx,
-      rf_score_a: isA  ? newCorrectA * RF_CORRECT_PTS : s.rf_score_a,
-      rf_score_b: !isA ? newCorrectB * RF_CORRECT_PTS : s.rf_score_b,
+      rf_score_a: isA  ? Math.min(newCorrectA, RF_Q_COUNT) * RF_CORRECT_PTS : s.rf_score_a,
+      rf_score_b: !isA ? Math.min(newCorrectB, RF_Q_COUNT) * RF_CORRECT_PTS : s.rf_score_b,
     }
     if (done) {
       applyState({ ...newState, rf_phase: isA ? 'break' : 'done' })
@@ -837,7 +844,12 @@ export default function AdminPage() {
   const totalA = (s?.rf_score_a ?? 0) + (s?.bz_score_a ?? 0) + (s?.is_score_a ?? 0)
   const totalB = (s?.rf_score_b ?? 0) + (s?.bz_score_b ?? 0) + (s?.is_score_b ?? 0)
 
-  const currentRFQ = s?.rf_questions?.[s?.rf_q_index ?? 0] ?? null
+  // Pick the correct team's question list for display
+  const currentRFQ = s
+    ? (s.rf_phase === 'b_playing'
+        ? (s.rf_questions_b ?? s.rf_questions)?.[s.rf_q_index ?? 0]
+        : s.rf_questions?.[s.rf_q_index ?? 0]) ?? null
+    : null
   const currentBZQ = s?.bz_questions?.[s?.bz_q_index ?? 0] ?? null
   const currentISP = s?.is_problems?.[s?.is_problem_index ?? 0] ?? null
 
@@ -1429,8 +1441,9 @@ export default function AdminPage() {
                 })}
               </div>
               {([
-                ['⚡ Rapid Fire Pool',       newMatchRFPool,   setNewMatchRFPool,   'rapid_fire', null],
-                ['🔔 Buzzer Pool',            newMatchBZPool,   setNewMatchBZPool,   'buzzer',     null],
+                ['⚡ RF Pool — Team A',        newMatchRFPool,   setNewMatchRFPool,   'rapid_fire', newMatchRFPoolB],
+                ['⚡ RF Pool — Team B',        newMatchRFPoolB,  setNewMatchRFPoolB,  'rapid_fire', newMatchRFPool],
+                ['🔔 Buzzer Pool',             newMatchBZPool,   setNewMatchBZPool,   'buzzer',     null],
                 ['💡 Sprint Pool — Problem 1', newMatchISPool,   setNewMatchISPool,   'sprint',     newMatchISPool2],
                 ['💡 Sprint Pool — Problem 2', newMatchISPool2,  setNewMatchISPool2,  'sprint',     newMatchISPool],
               ] as [string, string, (v: string) => void, PoolType, string | null][]).map(([label, val, setter, type, exclude]) => (
@@ -1450,11 +1463,11 @@ export default function AdminPage() {
               ))}
               <div className="flex gap-2">
                 <button onClick={createSavedMatch}
-                  disabled={matchSaving || !newMatchName.trim() || !newMatchTeamA.trim() || !newMatchTeamB.trim() || !newMatchRFPool || !newMatchBZPool || !newMatchISPool || !newMatchISPool2}
+                  disabled={matchSaving || !newMatchName.trim() || !newMatchTeamA.trim() || !newMatchTeamB.trim() || !newMatchRFPool || !newMatchRFPoolB || !newMatchBZPool || !newMatchISPool || !newMatchISPool2}
                   className="flex-1 py-2.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-sm disabled:opacity-40 hover:bg-[#e0941a] transition-colors">
                   {matchSaving ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Save Match'}
                 </button>
-                <button onClick={() => { setShowAddMatch(false); setNewMatchName(''); setNewMatchTeamA(''); setNewMatchTeamB(''); setNewMatchRFPool(''); setNewMatchBZPool(''); setNewMatchISPool(''); setNewMatchISPool2('') }}
+                <button onClick={() => { setShowAddMatch(false); setNewMatchName(''); setNewMatchTeamA(''); setNewMatchTeamB(''); setNewMatchRFPool(''); setNewMatchRFPoolB(''); setNewMatchBZPool(''); setNewMatchISPool(''); setNewMatchISPool2('') }}
                   className="px-4 py-2.5 bg-white/10 text-white rounded-xl text-sm hover:bg-white/20 transition-colors">Cancel</button>
               </div>
             </div>
@@ -1470,16 +1483,18 @@ export default function AdminPage() {
                 <p className="text-slate-600 text-xs">Create a match and launch it when ready</p>
               </div>
             ) : [...savedMatches].reverse().map(match => {
-              const rfPool  = pools.find(p => p.id === match.rf_pool_id)
+              const rfPoolA = pools.find(p => p.id === match.rf_pool_id)
+              const rfPoolB = pools.find(p => p.id === match.rf_pool_id_b)
               const bzPool  = pools.find(p => p.id === match.bz_pool_id)
               const isPool1 = pools.find(p => p.id === match.is_pool_id)
               const isPool2 = pools.find(p => p.id === match.is_pool_id_2)
-              const rfQCount = rfPool ? questions.filter(q => rfPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).length : 0
+              const rfACount = rfPoolA ? questions.filter(q => rfPoolA.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).length : 0
+              const rfBCount = rfPoolB ? questions.filter(q => rfPoolB.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).length : 0
               const bzQCount = bzPool ? questions.filter(q => bzPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).length : 0
               const isQCount = (isPool1 ? questions.filter(q => isPool1.question_ids.includes(q.id) && q.type === 'sprint').length : 0)
                              + (isPool2 ? questions.filter(q => isPool2.question_ids.includes(q.id) && q.type === 'sprint').length : 0)
-              const canLaunch = !!match.rf_pool_id && !!match.bz_pool_id && !!match.is_pool_id && !!match.is_pool_id_2
-                && rfQCount >= RF_Q_COUNT && bzQCount >= BZ_Q_COUNT && isQCount >= IS_PROB_COUNT
+              const canLaunch = !!match.rf_pool_id && !!match.rf_pool_id_b && !!match.bz_pool_id && !!match.is_pool_id && !!match.is_pool_id_2
+                && rfACount >= RF_Q_COUNT && rfBCount >= RF_Q_COUNT && bzQCount >= BZ_Q_COUNT && isQCount >= IS_PROB_COUNT
               const isLive = match.status === 'live'
               return (
                 <div key={match.id} className={`bg-[#0a1628] border rounded-2xl p-4 ${
@@ -1501,8 +1516,11 @@ export default function AdminPage() {
                         {match.team_a_name} <span className="text-slate-600">vs</span> {match.team_b_name}
                       </p>
                       <div className="flex flex-wrap gap-1 mt-2">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${rfPool ? 'bg-[#f5a623]/10 text-[#f5a623]/80' : 'bg-red-500/10 text-red-400'}`}>
-                          ⚡ {rfPool ? rfPool.name : 'No pool'}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${rfPoolA ? 'bg-[#f5a623]/10 text-[#f5a623]/80' : 'bg-red-500/10 text-red-400'}`}>
+                          ⚡ A: {rfPoolA ? rfPoolA.name : 'No pool'}
+                        </span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${rfPoolB ? 'bg-[#f5a623]/10 text-[#f5a623]/80' : 'bg-red-500/10 text-red-400'}`}>
+                          ⚡ B: {rfPoolB ? rfPoolB.name : 'No pool'}
                         </span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${bzPool ? 'bg-blue-500/10 text-blue-400/80' : 'bg-red-500/10 text-red-400'}`}>
                           🔔 {bzPool ? bzPool.name : 'No pool'}
@@ -1521,7 +1539,7 @@ export default function AdminPage() {
                   </div>
                   {match.status === 'draft' && !canLaunch && (
                     <p className="text-[10px] text-red-400/70 mt-2">
-                      ⚠ Pools need: RF≥{RF_Q_COUNT} ({rfQCount}), BZ≥{BZ_Q_COUNT} ({bzQCount}), IS≥{IS_PROB_COUNT} ({isQCount})
+                      ⚠ Pools need: RF-A≥{RF_Q_COUNT} ({rfACount}), RF-B≥{RF_Q_COUNT} ({rfBCount}), BZ≥{BZ_Q_COUNT} ({bzQCount}), IS≥{IS_PROB_COUNT} ({isQCount})
                     </p>
                   )}
                   {match.status === 'draft' && (
