@@ -102,7 +102,7 @@ export default function AdminPage() {
   // ── Pools ──────────────────────────────────────────────────────────────────
   const [pools, setPools] = useState<QuestionPool[]>([])
   const [poolsLoading, setPoolsLoading] = useState(false)
-  const [showAddPool, setShowAddPool] = useState(false)
+  const [showAddPool, setShowAddPool] = useState<PoolType | null>(null)
   const [newPoolName, setNewPoolName] = useState('')
   const [newPoolType, setNewPoolType] = useState<PoolType>('rapid_fire')
   const [poolSaving, setPoolSaving] = useState(false)
@@ -415,17 +415,17 @@ export default function AdminPage() {
   // ── Pool actions ──────────────────────────────────────────────────────────
   const genId = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
-  const createPool = async () => {
+  const createPool = async (typeOverride?: PoolType) => {
     if (!newPoolName.trim()) return
     setPoolSaving(true)
     const newPool: QuestionPool = {
-      id: genId(), name: newPoolName.trim(), type: newPoolType, question_ids: [],
+      id: genId(), name: newPoolName.trim(), type: typeOverride ?? newPoolType, question_ids: [],
       created_at: new Date().toISOString(),
     }
     const updated = [...pools, newPool]
     setPools(updated)
     await savePools(updated)
-    setNewPoolName(''); setShowAddPool(false); setPoolSaving(false)
+    setNewPoolName(''); setShowAddPool(null); setPoolSaving(false)
   }
 
   const deletePool = async (id: string) => {
@@ -1217,80 +1217,84 @@ export default function AdminPage() {
               </p>
             )}
           </>) : (<>
-            {/* ── Pool list ── */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-black text-white text-sm">Question Pools</h2>
-                <p className="text-[11px] text-slate-500 mt-0.5">{pools.length} pools — group questions per round</p>
-              </div>
-              <button onClick={() => setShowAddPool(v => !v)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-[#0a1628] rounded-xl text-xs font-black hover:bg-[#e0941a] transition-colors">
-                <Plus size={12} /> New Pool
-              </button>
-            </div>
-
-            {showAddPool && (
-              <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-2xl p-4 space-y-3">
-                <p className="text-xs font-bold text-[#f5a623]">New Question Pool</p>
-                <input placeholder="Pool name (e.g. Science Finals RF)" value={newPoolName}
-                  onChange={e => setNewPoolName(e.target.value)}
-                  className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
-                <div className="grid grid-cols-3 gap-2">
-                  {([['rapid_fire', '⚡ Rapid Fire'], ['buzzer', '🔔 Buzzer'], ['sprint', '💡 Sprint']] as [PoolType, string][]).map(([t, label]) => (
-                    <button key={t} onClick={() => setNewPoolType(t)}
-                      className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                        newPoolType === t ? 'border-[#f5a623] bg-[#f5a623]/15 text-[#f5a623]' : 'border-white/10 text-slate-400 hover:text-white'
-                      }`}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={createPool} disabled={poolSaving || !newPoolName.trim()}
-                    className="flex-1 py-2.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-sm disabled:opacity-40 hover:bg-[#e0941a] transition-colors">
-                    {poolSaving ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Create Pool'}
-                  </button>
-                  <button onClick={() => { setShowAddPool(false); setNewPoolName('') }}
-                    className="px-4 py-2.5 bg-white/10 text-white rounded-xl text-sm hover:bg-white/20 transition-colors">Cancel</button>
-                </div>
-              </div>
-            )}
-
+            {/* ── Three round-type sections ── */}
+            <h2 className="font-black text-white text-sm">Question Pools</h2>
             {poolsLoading
               ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-500" /></div>
-              : pools.length === 0
-              ? (
-                <div className="text-center py-12 space-y-2">
-                  <div className="text-4xl">🗂️</div>
-                  <p className="text-slate-400 text-sm">No pools yet</p>
-                  <p className="text-slate-600 text-xs">Create pools to group questions per round, then assign them to matches</p>
+              : (
+                <div className="space-y-4">
+                  {(([
+                    ['rapid_fire', '⚡', 'Rapid Fire',        `${RF_Q_COUNT} questions needed`, 'border-[#f5a623]/25', 'text-[#f5a623]', 'bg-[#f5a623]/5'],
+                    ['buzzer',     '🔔', 'Buzzer Round',      `${BZ_Q_COUNT} questions needed`, 'border-blue-500/25',  'text-blue-400',  'bg-blue-500/5' ],
+                    ['sprint',     '💡', 'Innovation Sprint', `${IS_PROB_COUNT} problems needed`, 'border-purple-500/25','text-purple-400','bg-purple-500/5'],
+                  ] as [PoolType, string, string, string, string, string, string][]).map(([type, icon, title, hint, borderCls, textCls, bgCls]) => {
+                    const sectionPools = pools.filter(p => p.type === type)
+                    const isAdding = showAddPool === type
+                    return (
+                      <div key={type} className={`border ${borderCls} ${bgCls} rounded-2xl p-4 space-y-3`}>
+                        {/* Section header */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`text-xs font-black ${textCls}`}>{icon} {title}</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              {hint} · {sectionPools.length} pool{sectionPools.length !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => { setShowAddPool(isAdding ? null : type); setNewPoolName('') }}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-black transition-colors ${
+                              isAdding ? 'bg-white/10 text-slate-400 border border-white/10' : 'bg-[#f5a623] text-[#0a1628] hover:bg-[#e0941a]'
+                            }`}>
+                            {isAdding ? 'Cancel' : <><Plus size={10} />New Pool</>}
+                          </button>
+                        </div>
+
+                        {/* Inline create form */}
+                        {isAdding && (
+                          <div className="flex gap-2">
+                            <input placeholder="Pool name *" value={newPoolName}
+                              onChange={e => setNewPoolName(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && createPool(type)}
+                              className="flex-1 bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+                            <button onClick={() => createPool(type)} disabled={poolSaving || !newPoolName.trim()}
+                              className="px-4 py-2 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-sm disabled:opacity-40 hover:bg-[#e0941a] transition-colors whitespace-nowrap">
+                              {poolSaving ? <Loader2 size={13} className="animate-spin" /> : 'Create'}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Pools in this section */}
+                        {sectionPools.length > 0 && (
+                          <div className="space-y-2">
+                            {sectionPools.map(pool => (
+                              <div key={pool.id} className="flex items-center gap-2 bg-[#060f1f]/60 border border-white/10 rounded-xl px-3 py-2.5">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-bold text-white truncate">{pool.name}</p>
+                                  <p className="text-[10px] text-slate-500">
+                                    {pool.question_ids.length} {type === 'sprint' ? 'problem' : 'question'}{pool.question_ids.length !== 1 ? 's' : ''}
+                                  </p>
+                                </div>
+                                <button onClick={() => openManagePool(pool)}
+                                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-bold text-slate-300 transition-colors shrink-0">
+                                  Edit →
+                                </button>
+                                <button onClick={() => deletePool(pool.id)}
+                                  className="p-1 text-slate-600 hover:text-red-400 transition-colors shrink-0">
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {sectionPools.length === 0 && !isAdding && (
+                          <p className="text-center text-slate-700 text-xs py-1">No pools yet</p>
+                        )}
+                      </div>
+                    )
+                  }))}
                 </div>
-              ) : pools.map(pool => {
-                const typeLabel = pool.type === 'rapid_fire' ? '⚡ Rapid Fire' : pool.type === 'buzzer' ? '🔔 Buzzer' : '💡 Sprint'
-                const typeColor = pool.type === 'rapid_fire' ? 'text-[#f5a623]' : pool.type === 'buzzer' ? 'text-blue-400' : 'text-purple-400'
-                const borderColor = pool.type === 'rapid_fire' ? 'border-[#f5a623]/30' : pool.type === 'buzzer' ? 'border-blue-500/30' : 'border-purple-500/30'
-                return (
-                  <div key={pool.id} className="bg-[#0a1628] border border-white/10 rounded-2xl p-4">
-                    <div className="flex items-start gap-3">
-                      <div className={`p-2 rounded-xl border ${borderColor} bg-white/5 shrink-0`}>
-                        <Layers size={14} className={typeColor} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-black text-white text-sm truncate">{pool.name}</p>
-                        <p className={`text-[10px] font-bold mt-0.5 ${typeColor}`}>{typeLabel}</p>
-                        <p className="text-xs text-slate-500 mt-1">{pool.question_ids.length} questions assigned</p>
-                      </div>
-                      <button onClick={() => deletePool(pool.id)} className="p-1.5 text-slate-600 hover:text-red-400 transition-colors shrink-0">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                    <button onClick={() => openManagePool(pool)}
-                      className="mt-3 w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-slate-300 transition-colors">
-                      Manage Questions →
-                    </button>
-                  </div>
-                )
-              })
+              )
             }
           </>)}
         </>}
