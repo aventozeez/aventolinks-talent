@@ -831,7 +831,7 @@ export default function AdminPage() {
   const TABS = [
     { key: 'teams'     as Tab, label: 'Teams',        Icon: Users      },
     { key: 'questions' as Tab, label: 'Questions',    Icon: HelpCircle },
-    { key: 'pools'     as Tab, label: 'Pools',        Icon: Layers     },
+    { key: 'pools'     as Tab, label: 'Question Banks', Icon: Layers     },
     { key: 'matches'   as Tab, label: 'Matches',      Icon: Rocket     },
     { key: 'live'      as Tab, label: 'Live Control', Icon: Radio      },
   ]
@@ -1108,8 +1108,8 @@ export default function AdminPage() {
               <div>
                 <p className="font-black text-white text-sm">{managingPool.name}</p>
                 <p className="text-[10px] text-slate-500">
-                  {managingPool.type === 'rapid_fire' ? '⚡ Rapid Fire' : managingPool.type === 'buzzer' ? '🔔 Buzzer' : '💡 Sprint'}
-                  {' · '}{managingPool.question_ids.length} questions in pool
+                  {managingPool.type === 'rapid_fire' ? '⚡ Rapid Fire' : managingPool.type === 'buzzer' ? '🔔 Buzzer Round' : '💡 Innovation Sprint'}
+                  {' · '}{managingPool.question_ids.length}{managingPool.type !== 'sprint' ? '/10' : ''} {managingPool.type === 'sprint' ? 'problems' : 'questions'}
                 </p>
               </div>
             </div>
@@ -1118,7 +1118,7 @@ export default function AdminPage() {
             {(managingPool.type === 'rapid_fire' || managingPool.type === 'buzzer') && (
               <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-2">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-bold text-[#f5a623]">Add Questions</p>
+                  <p className="text-xs font-bold text-[#f5a623]">Add Questions (10 per pool)</p>
                   <button onClick={() => setBulkQs(prev => [...prev, { q: '', a: '' }])}
                     className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 transition-colors">
                     <Plus size={10} /> Add row
@@ -1159,7 +1159,7 @@ export default function AdminPage() {
             {/* ── Sprint: inline problem entry ── */}
             {managingPool.type === 'sprint' && (
               <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-3">
-                <p className="text-xs font-bold text-[#f5a623]">Add Sprint Problem</p>
+                <p className="text-xs font-bold text-[#f5a623]">Add Sprint Problem (5 steps)</p>
                 <textarea value={sprintStmt} onChange={e => setSprintStmt(e.target.value)}
                   placeholder="Problem statement *" rows={3}
                   className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] resize-none" />
@@ -1186,7 +1186,7 @@ export default function AdminPage() {
             {managingPool.question_ids.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  In Pool ({managingPool.question_ids.length})
+                  {managingPool.type === 'sprint' ? 'Problems' : 'Questions'} in this pool ({managingPool.question_ids.length}{managingPool.type !== 'sprint' ? '/10' : ''})
                 </p>
                 {questions
                   .filter(q => managingPool.question_ids.includes(q.id))
@@ -1218,15 +1218,15 @@ export default function AdminPage() {
             )}
           </>) : (<>
             {/* ── Three round-type sections ── */}
-            <h2 className="font-black text-white text-sm">Question Pools</h2>
+            <h2 className="font-black text-white text-sm">Question Banks</h2>
             {poolsLoading
               ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-500" /></div>
               : (
                 <div className="space-y-4">
                   {(([
-                    ['rapid_fire', '⚡', 'Rapid Fire',        `${RF_Q_COUNT} questions needed`, 'border-[#f5a623]/25', 'text-[#f5a623]', 'bg-[#f5a623]/5'],
-                    ['buzzer',     '🔔', 'Buzzer Round',      `${BZ_Q_COUNT} questions needed`, 'border-blue-500/25',  'text-blue-400',  'bg-blue-500/5' ],
-                    ['sprint',     '💡', 'Innovation Sprint', `${IS_PROB_COUNT} problems needed`, 'border-purple-500/25','text-purple-400','bg-purple-500/5'],
+                    ['rapid_fire', '⚡', 'Rapid Fire',        '10 questions per pool · create as many pools as needed', 'border-[#f5a623]/25', 'text-[#f5a623]', 'bg-[#f5a623]/5'],
+                    ['buzzer',     '🔔', 'Buzzer Round',      '10 questions per pool · create as many pools as needed', 'border-blue-500/25',  'text-blue-400',  'bg-blue-500/5' ],
+                    ['sprint',     '💡', 'Innovation Sprint', '5-step problems per pool · create as many pools as needed', 'border-purple-500/25','text-purple-400','bg-purple-500/5'],
                   ] as [PoolType, string, string, string, string, string, string][]).map(([type, icon, title, hint, borderCls, textCls, bgCls]) => {
                     const sectionPools = pools.filter(p => p.type === type)
                     const isAdding = showAddPool === type
@@ -1237,12 +1237,21 @@ export default function AdminPage() {
                           <div>
                             <p className={`text-xs font-black ${textCls}`}>{icon} {title}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">
-                              {hint} · {sectionPools.length} pool{sectionPools.length !== 1 ? 's' : ''}
+                              {hint}
+                            </p>
+                            <p className="text-[10px] text-slate-600 mt-0.5">
+                              {sectionPools.length} pool{sectionPools.length !== 1 ? 's' : ''} created
                             </p>
                           </div>
                           <button
-                            onClick={() => { setShowAddPool(isAdding ? null : type); setNewPoolName('') }}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-black transition-colors ${
+                            onClick={() => {
+                              if (isAdding) { setShowAddPool(null); setNewPoolName('') }
+                              else {
+                                setShowAddPool(type)
+                                setNewPoolName(`Pool ${sectionPools.length + 1}`)
+                              }
+                            }}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-black transition-colors shrink-0 ${
                               isAdding ? 'bg-white/10 text-slate-400 border border-white/10' : 'bg-[#f5a623] text-[#0a1628] hover:bg-[#e0941a]'
                             }`}>
                             {isAdding ? 'Cancel' : <><Plus size={10} />New Pool</>}
@@ -1266,29 +1275,36 @@ export default function AdminPage() {
                         {/* Pools in this section */}
                         {sectionPools.length > 0 && (
                           <div className="space-y-2">
-                            {sectionPools.map(pool => (
-                              <div key={pool.id} className="flex items-center gap-2 bg-[#060f1f]/60 border border-white/10 rounded-xl px-3 py-2.5">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-bold text-white truncate">{pool.name}</p>
-                                  <p className="text-[10px] text-slate-500">
-                                    {pool.question_ids.length} {type === 'sprint' ? 'problem' : 'question'}{pool.question_ids.length !== 1 ? 's' : ''}
-                                  </p>
+                            {sectionPools.map((pool) => {
+                              const qCount = pool.question_ids.length
+                              const isReady = type === 'sprint' ? qCount >= IS_PROB_COUNT : qCount >= (type === 'rapid_fire' ? RF_Q_COUNT : BZ_Q_COUNT)
+                              return (
+                                <div key={pool.id} className="flex items-center gap-2 bg-[#060f1f]/60 border border-white/10 rounded-xl px-3 py-2.5">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-white truncate">{pool.name}</p>
+                                    <p className={`text-[10px] mt-0.5 ${isReady ? 'text-green-400' : 'text-slate-500'}`}>
+                                      {type === 'sprint'
+                                        ? `${qCount} problem${qCount !== 1 ? 's' : ''}${isReady ? ' ✓' : ''}`
+                                        : `${qCount}/10 questions${isReady ? ' ✓' : ''}`
+                                      }
+                                    </p>
+                                  </div>
+                                  <button onClick={() => openManagePool(pool)}
+                                    className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-bold text-slate-300 transition-colors shrink-0">
+                                    Edit →
+                                  </button>
+                                  <button onClick={() => deletePool(pool.id)}
+                                    className="p-1 text-slate-600 hover:text-red-400 transition-colors shrink-0">
+                                    <Trash2 size={12} />
+                                  </button>
                                 </div>
-                                <button onClick={() => openManagePool(pool)}
-                                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-bold text-slate-300 transition-colors shrink-0">
-                                  Edit →
-                                </button>
-                                <button onClick={() => deletePool(pool.id)}
-                                  className="p-1 text-slate-600 hover:text-red-400 transition-colors shrink-0">
-                                  <Trash2 size={12} />
-                                </button>
-                              </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         )}
 
                         {sectionPools.length === 0 && !isAdding && (
-                          <p className="text-center text-slate-700 text-xs py-1">No pools yet</p>
+                          <p className="text-center text-slate-700 text-xs py-1">No pools yet — create one above</p>
                         )}
                       </div>
                     )
@@ -1337,8 +1353,8 @@ export default function AdminPage() {
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 flex items-start gap-2">
               <span className="text-yellow-400 shrink-0 mt-0.5">⚠️</span>
               <div>
-                <p className="text-xs font-bold text-yellow-400">No pools yet</p>
-                <p className="text-xs text-yellow-600 mt-0.5">Create question pools in the Pools tab first, then build matches.</p>
+                <p className="text-xs font-bold text-yellow-400">No question banks yet</p>
+                <p className="text-xs text-yellow-600 mt-0.5">Create question banks first (Question Banks tab), then build matches.</p>
               </div>
             </div>
           )}
