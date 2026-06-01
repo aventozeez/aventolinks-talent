@@ -115,6 +115,7 @@ export default function AdminPage() {
   )
   const [bulkSaving, setBulkSaving] = useState(false)
   // Inline entry for Sprint pools
+  const [sprintTitle, setSprintTitle] = useState('')
   const [sprintStmt, setSprintStmt] = useState('')
   const [sprintSteps, setSprintSteps] = useState(['', '', '', '', ''])
   const [sprintProbSaving, setSprintProbSaving] = useState(false)
@@ -393,7 +394,7 @@ export default function AdminPage() {
     const shuffledSprint = [...sprintQs].sort(() => Math.random() - 0.5)
     const isProbs: ISProblem[] = shuffledSprint.slice(0, IS_PROB_COUNT).map(q => ({
       id: q.id,
-      statement: q.question,
+      statement: q.answer?.trim() ? q.answer : q.question,
       steps: q.steps ?? [],
       steps_shuffled: [...(q.steps ?? [])].sort(() => Math.random() - 0.5),
     }))
@@ -449,7 +450,7 @@ export default function AdminPage() {
     setManagingPoolIds(new Set(pool.question_ids))
     // reset inline entry forms
     setBulkQs(Array.from({ length: 10 }, () => ({ q: '', a: '' })))
-    setSprintStmt(''); setSprintSteps(['', '', '', '', ''])
+    setSprintTitle(''); setSprintStmt(''); setSprintSteps(['', '', '', '', ''])
   }
 
   const savePoolQuestions = async () => {
@@ -495,17 +496,24 @@ export default function AdminPage() {
 
   /** Insert a sprint problem into fsc_questions AND add to pool */
   const addSprintProblemToPool = async () => {
-    if (!managingPool || !sprintStmt.trim()) return
+    if (!managingPool) return
+    if (!sprintTitle.trim()) { alert('Please enter a problem title.'); return }
+    if (!sprintStmt.trim()) { alert('Please enter the full problem statement.'); return }
     const filledSteps = sprintSteps.filter(s => s.trim())
-    if (filledSteps.length < 2) { alert('Add at least 2 steps'); return }
+    if (filledSteps.length < 2) { alert('Add at least 2 steps (up to 5).'); return }
     setSprintProbSaving(true)
+    // Store title in `question`, full statement in `answer`, steps in `steps`
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from('fsc_questions')
-      .insert({ question: sprintStmt.trim(), answer: '', category: 'Sprint', type: 'sprint', steps: filledSteps })
+      .insert({
+        question: sprintTitle.trim(),
+        answer: sprintStmt.trim(),
+        category: 'Sprint', type: 'sprint', steps: filledSteps,
+      })
       .select('id')
       .single()
-    if (error) { alert('Error saving problem'); setSprintProbSaving(false); return }
+    if (error) { alert(`Error saving problem: ${error.message}`); setSprintProbSaving(false); return }
     const newId: string = (data as { id: string }).id
     const updatedPool: QuestionPool = {
       ...managingPool,
@@ -517,7 +525,7 @@ export default function AdminPage() {
     setPools(updatedPools)
     await savePools(updatedPools)
     await loadQuestions()
-    setSprintStmt(''); setSprintSteps(['', '', '', '', ''])
+    setSprintTitle(''); setSprintStmt(''); setSprintSteps(['', '', '', '', ''])
     setSprintProbSaving(false)
   }
 
@@ -1159,12 +1167,27 @@ export default function AdminPage() {
             {/* ── Sprint: inline problem entry ── */}
             {managingPool.type === 'sprint' && (
               <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-3">
-                <p className="text-xs font-bold text-[#f5a623]">Add Sprint Problem (5 steps)</p>
-                <textarea value={sprintStmt} onChange={e => setSprintStmt(e.target.value)}
-                  placeholder="Problem statement *" rows={3}
-                  className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] resize-none" />
+                <p className="text-xs font-bold text-[#f5a623]">Add Sprint Problem</p>
+
+                {/* Title */}
+                <div>
+                  <label className="text-[10px] text-slate-400 font-semibold block mb-1">Title *</label>
+                  <input value={sprintTitle} onChange={e => setSprintTitle(e.target.value)}
+                    placeholder="Short title (e.g. School Safety Challenge)"
+                    className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+                </div>
+
+                {/* Full problem statement */}
+                <div>
+                  <label className="text-[10px] text-slate-400 font-semibold block mb-1">Full Problem Statement *</label>
+                  <textarea value={sprintStmt} onChange={e => setSprintStmt(e.target.value)}
+                    placeholder="Write the full problem description that teams will read…" rows={4}
+                    className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] resize-none" />
+                </div>
+
+                {/* Steps */}
                 <div className="space-y-1.5">
-                  <p className="text-[10px] text-slate-400 font-semibold">Steps in correct order (up to 5):</p>
+                  <p className="text-[10px] text-slate-400 font-semibold">Steps in correct order (min 2, max 5):</p>
                   {sprintSteps.map((step, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <span className="text-xs text-slate-600 w-4 shrink-0">{i + 1}.</span>
@@ -1173,9 +1196,13 @@ export default function AdminPage() {
                         className="flex-1 bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
                     </div>
                   ))}
+                  {sprintSteps.filter(s => s.trim()).length < 2 && (
+                    <p className="text-[10px] text-slate-600 italic">Add at least 2 steps to enable the button</p>
+                  )}
                 </div>
+
                 <button onClick={addSprintProblemToPool}
-                  disabled={sprintProbSaving || !sprintStmt.trim() || sprintSteps.filter(s => s.trim()).length < 2}
+                  disabled={sprintProbSaving || !sprintTitle.trim() || !sprintStmt.trim() || sprintSteps.filter(s => s.trim()).length < 2}
                   className="w-full py-2.5 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-sm hover:bg-[#e0941a] disabled:opacity-40 transition-colors">
                   {sprintProbSaving ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Add Problem to Pool'}
                 </button>
@@ -1194,12 +1221,18 @@ export default function AdminPage() {
                     <div key={q.id} className="flex items-start gap-2 bg-[#0a1628] border border-white/10 rounded-xl px-3 py-2.5">
                       <span className="text-[10px] text-slate-600 font-bold mt-0.5 shrink-0 w-5 text-center">{idx + 1}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white leading-snug">{q.question}</p>
-                        {q.answer && <p className="text-[10px] text-[#f5a623]/60 mt-0.5">✓ {q.answer}</p>}
-                        {q.steps && q.steps.length > 0 && (
-                          <p className="text-[10px] text-slate-500 mt-0.5">{q.steps.length} steps</p>
+                        <p className="text-sm font-bold text-white leading-snug">{q.question}</p>
+                        {/* For sprint: show full statement preview */}
+                        {q.type === 'sprint' && q.answer && (
+                          <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{q.answer}</p>
                         )}
-                        <span className="text-[10px] text-slate-600">{q.category}</span>
+                        {/* For RF/BZ: show answer */}
+                        {q.type !== 'sprint' && q.answer && (
+                          <p className="text-[10px] text-[#f5a623]/60 mt-0.5">✓ {q.answer}</p>
+                        )}
+                        {q.steps && q.steps.length > 0 && (
+                          <p className="text-[10px] text-purple-400/60 mt-0.5">{q.steps.length} steps</p>
+                        )}
                       </div>
                       <button onClick={() => removeFromPool(q.id)}
                         className="p-1 text-slate-600 hover:text-red-400 transition-colors shrink-0 mt-0.5">
