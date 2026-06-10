@@ -7,7 +7,7 @@ import {
   Trophy, Users, HelpCircle, Rocket, Radio,
   Plus, Trash2, Check, X, SkipForward,
   Bell, Zap, Lightbulb, Loader2, ChevronDown,
-  ChevronUp, Timer, ArrowRight, RefreshCw, Layers, Pencil, Zap,
+  ChevronUp, Timer, ArrowRight, RefreshCw, Layers, Pencil,
 } from 'lucide-react'
 import {
   FSCState, BZPhase,
@@ -461,7 +461,7 @@ export default function AdminPage() {
       const existing = pool.question_ids
         .map(id => allQuestions.find(q => q.id === id))
         .filter(Boolean) as DBQuestion[]
-      const rows = existing.map(q => ({ id: q.id, q: q.question, a: q.answer ?? '' }))
+      const rows: {id?: string; q: string; a: string}[] = existing.map(q => ({ id: q.id, q: q.question, a: q.answer ?? '' }))
       // Pad to at least 10 empty rows after existing
       while (rows.length < 10) rows.push({ q: '', a: '' })
       setBulkQs(rows)
@@ -528,7 +528,7 @@ export default function AdminPage() {
     const refreshed = updatedPool.question_ids
       .map(id => questions.find(q => q.id === id) ?? null)
       .filter(Boolean) as DBQuestion[]
-    const rows = refreshed.map(q => ({ id: q.id, q: q.question, a: q.answer ?? '' }))
+    const rows: {id?: string; q: string; a: string}[] = refreshed.map(q => ({ id: q.id, q: q.question, a: q.answer ?? '' }))
     while (rows.length < 10) rows.push({ q: '', a: '' })
     setBulkQs(rows)
     setBulkSaving(false)
