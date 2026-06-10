@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import SimulatorTab from './SimulatorTab'
+import EmergencyTab from './EmergencyTab'
 import {
   Trophy, Users, HelpCircle, Rocket, Radio,
   Plus, Trash2, Check, X, SkipForward,
@@ -948,7 +948,7 @@ export default function AdminPage() {
     { key: 'pools'     as Tab, label: 'Question Banks', Icon: Layers     },
     { key: 'matches'   as Tab, label: 'Matches',      Icon: Rocket     },
     { key: 'live'      as Tab, label: 'Live Control', Icon: Radio      },
-    { key: 'simulator' as Tab, label: 'Simulator',    Icon: Zap        },
+    { key: 'simulator' as Tab, label: 'Emergency',     Icon: Zap        },
   ]
 
   // ── Score display helper ────────────────────────────────────────────────────
@@ -2180,7 +2180,7 @@ export default function AdminPage() {
         </>}
 
         {/* ════════════════ SIMULATOR ════════════════ */}
-        {activeTab === 'simulator' && <SimulatorTab />}
+        {activeTab === 'simulator' && <EmergencyTab />}
 
       </div>
     </div>
