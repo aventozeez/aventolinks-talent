@@ -183,8 +183,9 @@ export function subscribeToEmergency(cb: (s: EmergencyState) => void): { unsubsc
 
   const poll = async () => {
     const s = await getEmergencyState()
-    const j = JSON.stringify(s)
-    if (j !== lastJson) { lastJson = j; if (s && alive) cb(s) }
+    const effective = s ?? defaultEmergencyState()   // always fire, even when no DB row yet
+    const j = JSON.stringify(effective)
+    if (j !== lastJson) { lastJson = j; if (alive) cb(effective) }
   }
 
   poll()
