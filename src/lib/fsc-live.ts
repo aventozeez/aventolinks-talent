@@ -8,10 +8,11 @@ export const RF_Q_COUNT     = 10
 export const RF_TIME_MS     = 60_000   // 60 s per team
 export const RF_CORRECT_PTS = 10
 
-export const BZ_Q_COUNT     = 10
-export const BZ_CORRECT_PTS = 10
-export const BZ_PENALTY_PTS = 5       // first buzzer wrong → -5
-export const BZ_TIME_MS     = 10_000  // 10 s countdown after buzz
+export const BZ_Q_COUNT            = 10
+export const BZ_CORRECT_PTS        = 10
+export const BZ_PENALTY_PTS        = 5   // first buzzer wrong → -5
+export const BZ_SECOND_CHANCE_PTS  = 5   // opponent answers correctly on second chance → +5
+export const BZ_TIME_MS            = 10_000  // 10 s countdown after buzz
 
 export const IS_PROB_COUNT  = 2
 export const IS_TIME_MS     = 60_000  // 60 s to arrange
@@ -23,7 +24,7 @@ export type FSCRound  = 'idle' | 'rapid_fire' | 'buzzer' | 'innovation_sprint' |
 export type RFPhase   = 'idle' | 'a_playing' | 'break' | 'b_playing' | 'done'
 export type BZPhase   = 'idle' | 'showing' | 'buzzed_a' | 'buzzed_b' | 'second_chance' | 'revealed' | 'done'
 export type ISPhase   = 'idle' | 'working' | 'collecting' | 'revealed' | 'done'
-export type BZResult  = null | 'correct_a' | 'correct_b' | 'penalty_a' | 'penalty_b' | 'skip'
+export type BZResult  = null | 'correct_a' | 'correct_b' | 'penalty_a' | 'penalty_b' | 'bonus_a' | 'bonus_b' | 'skip'
 
 export type FSCQuestion = {
   id: string

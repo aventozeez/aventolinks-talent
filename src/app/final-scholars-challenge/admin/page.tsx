@@ -6,7 +6,7 @@ import {
   Trophy, Users, HelpCircle, Rocket, Radio,
   Plus, Trash2, Check, X, SkipForward,
   Bell, Zap, Lightbulb, Loader2, ChevronDown,
-  ChevronUp, Timer, ArrowRight, RefreshCw, Layers,
+  ChevronUp, Timer, ArrowRight, RefreshCw, Layers, Pencil,
 } from 'lucide-react'
 import {
   FSCState, BZPhase,
@@ -119,6 +119,11 @@ export default function AdminPage() {
   const [sprintStmt, setSprintStmt] = useState('')
   const [sprintSteps, setSprintSteps] = useState(['', '', '', '', ''])
   const [sprintProbSaving, setSprintProbSaving] = useState(false)
+
+  // ── Inline question editing (pool view) ───────────────────────────────────
+  const [editingQId, setEditingQId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<{ q: string; a: string; steps: string[] }>({ q: '', a: '', steps: ['', '', '', '', ''] })
+  const [editSaving, setEditSaving] = useState(false)
 
   // ── Saved Matches ──────────────────────────────────────────────────────────
   const [savedMatches, setSavedMatches] = useState<SavedMatch[]>([])
@@ -529,6 +534,35 @@ export default function AdminPage() {
     await loadQuestions()
     setSprintTitle(''); setSprintStmt(''); setSprintSteps(['', '', '', '', ''])
     setSprintProbSaving(false)
+  }
+
+  const startEditQ = (q: DBQuestion) => {
+    setEditingQId(q.id)
+    setEditDraft({
+      q: q.question,
+      a: q.answer ?? '',
+      steps: q.steps ? [...q.steps, ...Array(5).fill('')].slice(0, 5) : ['', '', '', '', ''],
+    })
+  }
+
+  const saveEditQ = async (q: DBQuestion) => {
+    if (!editDraft.q.trim()) return
+    setEditSaving(true)
+    const updates: Record<string, unknown> = { question: editDraft.q.trim() }
+    if (q.type === 'sprint') {
+      const filledSteps = editDraft.steps.filter(s => s.trim())
+      if (filledSteps.length < 2) { alert('Add at least 2 steps'); setEditSaving(false); return }
+      updates.answer = editDraft.a.trim()
+      updates.steps = filledSteps
+    } else {
+      updates.answer = editDraft.a.trim()
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from('fsc_questions').update(updates).eq('id', q.id)
+    if (error) { alert('Save failed: ' + error.message); setEditSaving(false); return }
+    await loadQuestions()
+    setEditingQId(null)
+    setEditSaving(false)
   }
 
   /** Remove a question from the pool (does not delete from fsc_questions) */
@@ -1237,29 +1271,96 @@ export default function AdminPage() {
                 </p>
                 {questions
                   .filter(q => managingPool.question_ids.includes(q.id))
-                  .map((q, idx) => (
-                    <div key={q.id} className="flex items-start gap-2 bg-[#0a1628] border border-white/10 rounded-xl px-3 py-2.5">
-                      <span className="text-[10px] text-slate-600 font-bold mt-0.5 shrink-0 w-5 text-center">{idx + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-white leading-snug">{q.question}</p>
-                        {/* For sprint: show full statement preview */}
-                        {q.type === 'sprint' && q.answer && (
-                          <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{q.answer}</p>
-                        )}
-                        {/* For RF/BZ: show answer */}
-                        {q.type !== 'sprint' && q.answer && (
-                          <p className="text-[10px] text-[#f5a623]/60 mt-0.5">✓ {q.answer}</p>
-                        )}
-                        {q.steps && q.steps.length > 0 && (
-                          <p className="text-[10px] text-purple-400/60 mt-0.5">{q.steps.length} steps</p>
+                  .map((q, idx) => {
+                    const isEditing = editingQId === q.id
+                    return (
+                      <div key={q.id} className="bg-[#0a1628] border border-white/10 rounded-xl px-3 py-2.5">
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editDraft.q}
+                              onChange={e => setEditDraft(d => ({ ...d, q: e.target.value }))}
+                              rows={2}
+                              placeholder={q.type === 'sprint' ? 'Title *' : 'Question *'}
+                              className="w-full bg-[#060f1f] border border-[#f5a623]/40 rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] resize-none"
+                            />
+                            {q.type === 'sprint' ? (
+                              <>
+                                <textarea
+                                  value={editDraft.a}
+                                  onChange={e => setEditDraft(d => ({ ...d, a: e.target.value }))}
+                                  rows={3}
+                                  placeholder="Full problem statement *"
+                                  className="w-full bg-[#060f1f] border border-white/20 rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] resize-none"
+                                />
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-slate-400 font-semibold">Steps in correct order:</p>
+                                  {editDraft.steps.map((step, si) => (
+                                    <div key={si} className="flex items-center gap-2">
+                                      <span className="text-[10px] text-slate-600 w-4 shrink-0">{si + 1}.</span>
+                                      <input
+                                        value={step}
+                                        onChange={e => setEditDraft(d => ({ ...d, steps: d.steps.map((s, j) => j === si ? e.target.value : s) }))}
+                                        placeholder={`Step ${si + 1}${si < 2 ? ' *' : ' (optional)'}`}
+                                        className="flex-1 bg-[#060f1f] border border-white/20 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#f5a623]"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            ) : (
+                              <input
+                                value={editDraft.a}
+                                onChange={e => setEditDraft(d => ({ ...d, a: e.target.value }))}
+                                placeholder="Answer (admin only)"
+                                className="w-full bg-[#060f1f] border border-white/20 rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+                              />
+                            )}
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                onClick={() => saveEditQ(q)}
+                                disabled={editSaving || !editDraft.q.trim()}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-lg text-xs hover:bg-[#e0941a] disabled:opacity-40 transition-colors"
+                              >
+                                {editSaving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingQId(null)}
+                                className="px-3 py-1.5 bg-white/10 text-slate-300 rounded-lg text-xs hover:bg-white/20 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-2">
+                            <span className="text-[10px] text-slate-600 font-bold mt-0.5 shrink-0 w-5 text-center">{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-white leading-snug">{q.question}</p>
+                              {q.type === 'sprint' && q.answer && (
+                                <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{q.answer}</p>
+                              )}
+                              {q.type !== 'sprint' && q.answer && (
+                                <p className="text-[10px] text-[#f5a623]/60 mt-0.5">✓ {q.answer}</p>
+                              )}
+                              {q.steps && q.steps.length > 0 && (
+                                <p className="text-[10px] text-purple-400/60 mt-0.5">{q.steps.length} steps</p>
+                              )}
+                            </div>
+                            <button onClick={() => startEditQ(q)}
+                              className="p-1 text-slate-600 hover:text-[#f5a623] transition-colors shrink-0 mt-0.5">
+                              <Pencil size={12} />
+                            </button>
+                            <button onClick={() => removeFromPool(q.id)}
+                              className="p-1 text-slate-600 hover:text-red-400 transition-colors shrink-0 mt-0.5">
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         )}
                       </div>
-                      <button onClick={() => removeFromPool(q.id)}
-                        className="p-1 text-slate-600 hover:text-red-400 transition-colors shrink-0 mt-0.5">
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))
+                    )
+                  })
                 }
               </div>
             )}
