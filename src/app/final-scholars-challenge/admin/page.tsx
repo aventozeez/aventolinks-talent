@@ -1573,9 +1573,17 @@ export default function AdminPage() {
                     <select value={val} onChange={e => setter(e.target.value)}
                       className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] appearance-none">
                       <option value="">— Select Pool —</option>
-                      {pools.filter(p => p.type === type && p.id !== (exclude ?? '')).map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.question_ids.length} {type === 'sprint' ? 'problem' : 'question'}{p.question_ids.length !== 1 ? 's' : ''})</option>
-                      ))}
+                      {(() => {
+                        const usedPoolIds = new Set(savedMatches.flatMap(m => [m.rf_pool_id, m.rf_pool_id_b, m.bz_pool_id, m.is_pool_id, m.is_pool_id_2].filter(Boolean)))
+                        return pools.filter(p => p.type === type && p.id !== (exclude ?? '')).map(p => {
+                          const used = usedPoolIds.has(p.id)
+                          return (
+                            <option key={p.id} value={p.id} disabled={used}>
+                              {used ? '✗ ' : ''}{p.name} ({p.question_ids.length} {type === 'sprint' ? 'problem' : 'question'}{p.question_ids.length !== 1 ? 's' : ''}){used ? ' — already used' : ''}
+                            </option>
+                          )
+                        })
+                      })()}
                     </select>
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   </div>
