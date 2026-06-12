@@ -17,12 +17,13 @@ import {
   getMatchState, saveMatchState, getISAnswers,
   getBuzzPending, clearBuzzPending,
   RF_Q_COUNT, RF_TIME_MS, RF_CORRECT_PTS,
-  BZ_Q_COUNT, BZ_CORRECT_PTS, BZ_PENALTY_PTS, BZ_TIME_MS,
+  BZ_Q_COUNT, BZ_CORRECT_PTS, BZ_SECOND_CHANCE_PTS, BZ_PENALTY_PTS, BZ_TIME_MS,
   IS_PROB_COUNT, IS_TIME_MS, IS_STEP_PTS, IS_BONUS_PTS,
   QuestionPool, SavedMatch, PoolType,
   getPools, savePools, getSavedMatches, saveSavedMatchesList,
 } from '@/lib/fsc-live'
 import { supabase } from '@/lib/supabase'
+import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Tab = 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'simulator'
@@ -80,8 +81,6 @@ export default function AdminPage() {
   const [fscLoading, setFscLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const fscRef = useRef<FSCState | null>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const channelRef = useRef<any>(null)
   const buzzLockRef = useRef(false)
   const autoEndedRFRef = useRef(false)   // prevents double-firing auto-end
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -150,14 +149,14 @@ export default function AdminPage() {
     }
   }, [fscState?.rf_phase])
 
-  // ── Auth ───────────────────────────────────────────────────────────────────
+  // ── Auth (bypassed for local hosting) ────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) { router.push('/login'); return }
+      if (!session?.user) { setAuthChecked(true); return }  // allow local access without login
       const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
       const role = data?.role ?? session.user.user_metadata?.role
       if (role === 'admin' || role === 'moderator') setAuthChecked(true)
-      else router.push('/dashboard')
+      else setAuthChecked(true) // allow all local users
     })
   }, [router])
 
@@ -167,10 +166,7 @@ export default function AdminPage() {
     fscRef.current = newState
     setFscState(newState)
     // 2. Broadcast to viewers instantly — before any DB write
-    channelRef.current?.send({
-      type: 'broadcast', event: 'state',
-      payload: safeForViewers(newState),
-    })
+    wsBroadcast(FSC_CHANNEL + ':state', safeForViewers(newState))
     // 3. Persist to DB in background (keeps poll-based fallback in sync)
     setSaving(true)
     await saveMatchState(newState)
@@ -181,7 +177,7 @@ export default function AdminPage() {
 
   // ── Resync: tell all viewer pages to reload ────────────────────────────────
   const handleResync = useCallback(() => {
-    channelRef.current?.send({ type: 'broadcast', event: 'reload', payload: {} })
+    wsBroadcast(FSC_CHANNEL + ':reload', {})
   }, [])
 
   // ── Loaders ────────────────────────────────────────────────────────────────
@@ -208,13 +204,7 @@ export default function AdminPage() {
       fscRef.current = s
       // Re-broadcast current state so all viewer pages sync immediately
       // (use a short delay to ensure channelRef is set after subscribe)
-      setTimeout(() => {
-        channelRef.current?.send({
-          type: 'broadcast',
-          event: 'state',
-          payload: safeForViewers(s),
-        })
-      }, 500)
+      setTimeout(() => wsBroadcast(FSC_CHANNEL + ':state', safeForViewers(s)), 500)
     }
     setFscLoading(false)
   }, [])
@@ -265,34 +255,29 @@ export default function AdminPage() {
       buzzLockRef.current = true
       fscRef.current = latest
       setFscState(latest)
-      channelRef.current?.send({
-        type: 'broadcast', event: 'state',
-        payload: safeForViewers(latest),
-      })
+      wsBroadcast(FSC_CHANNEL + ':state', safeForViewers(latest))
     }, 500)
     return () => clearInterval(id)
   }, [])
 
-  // ── Channel (admin sends state; also listens for team buzzes) ──────────────
+  // ── WebSocket: listen for team buzzes ──────────────────────────────────────
   useEffect(() => {
     if (!authChecked) return
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ch = (supabase.channel(FSC_CHANNEL) as any)
-      // Team pages broadcast 'buzz' directly — process it immediately here
-      .on('broadcast', { event: 'buzz' }, (msg: { payload: { team: 'a' | 'b'; q_index: number; time: number } }) => {
-        const s = fscRef.current
-        if (!s || s.round !== 'buzzer' || s.bz_phase !== 'showing') return
-        if (buzzLockRef.current) return
-        if (msg.payload.q_index !== s.bz_q_index) return
-        buzzLockRef.current = true
-        clearBuzzPending().catch(() => {})
-        const newPhase: BZPhase = msg.payload.team === 'a' ? 'buzzed_a' : 'buzzed_b'
-        applyStateRef.current?.({ ...s, bz_phase: newPhase, bz_buzz_start: msg.payload.time })
-      })
-      .subscribe((status: string) => { if (status === 'SUBSCRIBED') channelRef.current = ch })
+
+    const unsubBuzz = wsSubscribe(FSC_CHANNEL + ':buzz', (payload) => {
+      const msg = payload as { team: 'a' | 'b'; q_index: number; time: number }
+      const s = fscRef.current
+      if (!s || s.round !== 'buzzer' || s.bz_phase !== 'showing') return
+      if (buzzLockRef.current) return
+      if (msg.q_index !== s.bz_q_index) return
+      buzzLockRef.current = true
+      clearBuzzPending().catch(() => {})
+      const newPhase: BZPhase = msg.team === 'a' ? 'buzzed_a' : 'buzzed_b'
+      applyStateRef.current?.({ ...s, bz_phase: newPhase, bz_buzz_start: msg.time })
+    })
 
     loadTeams(); loadQuestions(); loadFSCState(); loadPools(); loadSavedMatches()
-    return () => { supabase.removeChannel(ch); channelRef.current = null }
+    return unsubBuzz
   }, [authChecked, loadTeams, loadQuestions, loadFSCState, loadPools, loadSavedMatches, applyState])
 
   // ── Timer tick ─────────────────────────────────────────────────────────────
@@ -799,8 +784,8 @@ export default function AdminPage() {
     applyState({
       ...s, bz_phase: 'revealed',
       bz_last_result: team === 'a' ? 'correct_a' : 'correct_b',
-      bz_score_a: team === 'a' ? s.bz_score_a + BZ_CORRECT_PTS : s.bz_score_a,
-      bz_score_b: team === 'b' ? s.bz_score_b + BZ_CORRECT_PTS : s.bz_score_b,
+      bz_score_a: team === 'a' ? s.bz_score_a + (s.bz_phase === 'second_chance' ? BZ_SECOND_CHANCE_PTS : BZ_CORRECT_PTS) : s.bz_score_a,
+      bz_score_b: team === 'b' ? s.bz_score_b + (s.bz_phase === 'second_chance' ? BZ_SECOND_CHANCE_PTS : BZ_CORRECT_PTS) : s.bz_score_b,
     })
   }
   const bzWrong = () => {
@@ -905,6 +890,14 @@ export default function AdminPage() {
     if (!confirm('Finish the match and show final scores?')) return
     const s = fscRef.current; if (!s) return
     applyState({ ...s, round: 'finished' })
+    const totalA = s.rf_score_a + s.bz_score_a + s.is_score_a
+    const totalB = s.rf_score_b + s.bz_score_b + s.is_score_b
+    const winner = totalA > totalB ? s.team_a_name : totalB > totalA ? s.team_b_name : 'Draw'
+    const updatedMatches = savedMatches.map(m =>
+      m.status === 'live' ? { ...m, status: 'completed' as const, final_score_a: totalA, final_score_b: totalB, winner } : m
+    )
+    setSavedMatches(updatedMatches)
+    await saveSavedMatchesList(updatedMatches)
   }
   const endMatchEarly = async () => {
     if (!confirm('End the match?')) return
@@ -1573,9 +1566,17 @@ export default function AdminPage() {
                     <select value={val} onChange={e => setter(e.target.value)}
                       className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#f5a623] appearance-none">
                       <option value="">— Select Pool —</option>
-                      {pools.filter(p => p.type === type && p.id !== (exclude ?? '')).map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.question_ids.length} {type === 'sprint' ? 'problem' : 'question'}{p.question_ids.length !== 1 ? 's' : ''})</option>
-                      ))}
+                      {(() => {
+                        const usedPoolIds = new Set(savedMatches.flatMap(m => [m.rf_pool_id, m.rf_pool_id_b, m.bz_pool_id, m.is_pool_id, m.is_pool_id_2].filter(Boolean)))
+                        return pools.filter(p => p.type === type && p.id !== (exclude ?? '')).map(p => {
+                          const used = usedPoolIds.has(p.id)
+                          return (
+                            <option key={p.id} value={p.id} disabled={used}>
+                              {used ? '✗ ' : ''}{p.name} ({p.question_ids.length} {type === 'sprint' ? 'problem' : 'question'}{p.question_ids.length !== 1 ? 's' : ''}){used ? ' — already used' : ''}
+                            </option>
+                          )
+                        })
+                      })()}
                     </select>
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   </div>
@@ -1635,6 +1636,14 @@ export default function AdminPage() {
                       <p className="text-xs text-slate-400 mt-1">
                         {match.team_a_name} <span className="text-slate-600">vs</span> {match.team_b_name}
                       </p>
+                      {match.status === 'completed' && match.final_score_a !== undefined && (
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="text-xs font-black text-green-400">{match.team_a_name}: {match.final_score_a}</span>
+                          <span className="text-slate-600 text-xs">—</span>
+                          <span className="text-xs font-black text-purple-400">{match.team_b_name}: {match.final_score_b}</span>
+                          {match.winner && <span className="text-[10px] bg-[#f5a623]/15 text-[#f5a623] px-2 py-0.5 rounded-full font-bold">🏆 {match.winner}</span>}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-1 mt-2">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${rfPoolA ? 'bg-[#f5a623]/10 text-[#f5a623]/80' : 'bg-red-500/10 text-red-400'}`}>
                           ⚡ A: {rfPoolA ? rfPoolA.name : 'No pool'}
