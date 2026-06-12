@@ -195,6 +195,9 @@ export type SavedMatch = {
   is_pool_id_2: string | null  // Sprint Problem 2
   status: 'draft' | 'live' | 'completed'
   created_at: string
+  final_score_a?: number
+  final_score_b?: number
+  winner?: string
 }
 
 const POOLS_ROW_ID   = 'fsc_pools_config'

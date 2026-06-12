@@ -17,7 +17,7 @@ import {
   getMatchState, saveMatchState, getISAnswers,
   getBuzzPending, clearBuzzPending,
   RF_Q_COUNT, RF_TIME_MS, RF_CORRECT_PTS,
-  BZ_Q_COUNT, BZ_CORRECT_PTS, BZ_PENALTY_PTS, BZ_TIME_MS,
+  BZ_Q_COUNT, BZ_CORRECT_PTS, BZ_SECOND_CHANCE_PTS, BZ_PENALTY_PTS, BZ_TIME_MS,
   IS_PROB_COUNT, IS_TIME_MS, IS_STEP_PTS, IS_BONUS_PTS,
   QuestionPool, SavedMatch, PoolType,
   getPools, savePools, getSavedMatches, saveSavedMatchesList,
@@ -799,8 +799,8 @@ export default function AdminPage() {
     applyState({
       ...s, bz_phase: 'revealed',
       bz_last_result: team === 'a' ? 'correct_a' : 'correct_b',
-      bz_score_a: team === 'a' ? s.bz_score_a + BZ_CORRECT_PTS : s.bz_score_a,
-      bz_score_b: team === 'b' ? s.bz_score_b + BZ_CORRECT_PTS : s.bz_score_b,
+      bz_score_a: team === 'a' ? s.bz_score_a + (s.bz_phase === 'second_chance' ? BZ_SECOND_CHANCE_PTS : BZ_CORRECT_PTS) : s.bz_score_a,
+      bz_score_b: team === 'b' ? s.bz_score_b + (s.bz_phase === 'second_chance' ? BZ_SECOND_CHANCE_PTS : BZ_CORRECT_PTS) : s.bz_score_b,
     })
   }
   const bzWrong = () => {
@@ -905,6 +905,15 @@ export default function AdminPage() {
     if (!confirm('Finish the match and show final scores?')) return
     const s = fscRef.current; if (!s) return
     applyState({ ...s, round: 'finished' })
+    // Save final scores to the match record
+    const totalA = s.rf_score_a + s.bz_score_a + s.is_score_a
+    const totalB = s.rf_score_b + s.bz_score_b + s.is_score_b
+    const winner = totalA > totalB ? s.team_a_name : totalB > totalA ? s.team_b_name : 'Draw'
+    const updatedMatches = savedMatches.map(m =>
+      m.status === 'live' ? { ...m, status: 'completed' as const, final_score_a: totalA, final_score_b: totalB, winner } : m
+    )
+    setSavedMatches(updatedMatches)
+    await saveSavedMatchesList(updatedMatches)
   }
   const endMatchEarly = async () => {
     if (!confirm('End the match?')) return
@@ -1643,6 +1652,14 @@ export default function AdminPage() {
                       <p className="text-xs text-slate-400 mt-1">
                         {match.team_a_name} <span className="text-slate-600">vs</span> {match.team_b_name}
                       </p>
+                      {match.status === 'completed' && match.final_score_a !== undefined && (
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="text-xs font-black text-green-400">{match.team_a_name}: {match.final_score_a}</span>
+                          <span className="text-slate-600 text-xs">—</span>
+                          <span className="text-xs font-black text-purple-400">{match.team_b_name}: {match.final_score_b}</span>
+                          {match.winner && <span className="text-[10px] bg-[#f5a623]/15 text-[#f5a623] px-2 py-0.5 rounded-full font-bold">🏆 {match.winner}</span>}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-1 mt-2">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${rfPoolA ? 'bg-[#f5a623]/10 text-[#f5a623]/80' : 'bg-red-500/10 text-red-400'}`}>
                           ⚡ A: {rfPoolA ? rfPoolA.name : 'No pool'}
@@ -1938,7 +1955,7 @@ export default function AdminPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={bzCorrect} disabled={saving}
                       className="flex items-center justify-center gap-1.5 py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
-                      <Check size={16} /> Correct (+{BZ_CORRECT_PTS})
+                      <Check size={16} /> Correct (+{s.bz_phase === 'second_chance' ? BZ_SECOND_CHANCE_PTS : BZ_CORRECT_PTS})
                     </button>
                     <button onClick={bzWrong} disabled={saving}
                       className="flex items-center justify-center gap-1.5 py-4 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm border border-white/10 disabled:opacity-50 transition-colors">
