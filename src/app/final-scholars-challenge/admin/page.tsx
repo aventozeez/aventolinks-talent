@@ -79,7 +79,7 @@ export default function AdminPage() {
   // ── FSC Live State ─────────────────────────────────────────────────────────
   const [fscState, setFscState] = useState<FSCState | null>(null)
   const [fscLoading, setFscLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [saving] = useState(false)
   const fscRef = useRef<FSCState | null>(null)
   const buzzLockRef = useRef(false)
   const autoEndedRFRef = useRef(false)   // prevents double-firing auto-end
@@ -167,10 +167,8 @@ export default function AdminPage() {
     setFscState(newState)
     // 2. Broadcast to viewers instantly — before any DB write
     wsBroadcast(FSC_CHANNEL + ':state', safeForViewers(newState))
-    // 3. Persist to DB in background (keeps poll-based fallback in sync)
-    setSaving(true)
-    await saveMatchState(newState)
-    setSaving(false)
+    // 3. Persist to DB in background (non-blocking)
+    saveMatchState(newState).catch(() => {})
   }, [])
   // Keep ref in sync so the timer interval can call applyState
   useEffect(() => { applyStateRef.current = applyState }, [applyState])
@@ -1725,7 +1723,7 @@ export default function AdminPage() {
 
               {/* idle → start A */}
               {s.rf_phase === 'idle' && (
-                <button onClick={startRFTeamA} disabled={saving}
+                <button onClick={startRFTeamA}
                   className="w-full flex items-center justify-center gap-2 py-5 bg-green-600 hover:bg-green-500 text-white font-black rounded-2xl text-base transition-colors disabled:opacity-50">
                   <Timer size={20} /> Start {s.team_a_name}&apos;s Turn (60s)
                 </button>
@@ -1753,21 +1751,21 @@ export default function AdminPage() {
                 )}
 
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => rfAction('correct')} disabled={saving}
+                  <button onClick={() => rfAction('correct')}
                     className="flex items-center justify-center gap-1.5 py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
                     <Check size={16} /> Correct
                   </button>
-                  <button onClick={() => rfAction('wrong')} disabled={saving}
+                  <button onClick={() => rfAction('wrong')}
                     className="flex items-center justify-center gap-1.5 py-4 bg-red-600/60 hover:bg-red-600/80 text-white font-bold rounded-xl text-sm disabled:opacity-50 border border-red-500/30 transition-colors">
                     <X size={16} /> Wrong
                   </button>
-                  <button onClick={() => rfAction('skip')} disabled={saving}
+                  <button onClick={() => rfAction('skip')}
                     className="flex items-center justify-center gap-1.5 py-4 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm disabled:opacity-50 border border-white/10 transition-colors">
                     <SkipForward size={16} /> Skip
                   </button>
                 </div>
 
-                <button onClick={endRFEarly} disabled={saving}
+                <button onClick={endRFEarly}
                   className="w-full py-2.5 bg-white/5 text-slate-500 hover:text-white hover:bg-white/10 rounded-xl text-xs border border-white/10 transition-colors">
                   ⏹ End {s.team_a_name}&apos;s Turn Early
                 </button>
@@ -1781,7 +1779,7 @@ export default function AdminPage() {
                     <p className="text-sm text-green-400 font-semibold mt-1">{s.team_a_name} — {s.rf_score_a} pts</p>
                     <p className="text-xs text-slate-500 mt-2">Team A&apos;s turn complete</p>
                   </div>
-                  <button onClick={startRFTeamB} disabled={saving}
+                  <button onClick={startRFTeamB}
                     className="w-full flex items-center justify-center gap-2 py-5 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-2xl text-base transition-colors disabled:opacity-50">
                     <Timer size={20} /> Start {s.team_b_name}&apos;s Turn (60s)
                   </button>
@@ -1810,21 +1808,21 @@ export default function AdminPage() {
                 )}
 
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => rfAction('correct')} disabled={saving}
+                  <button onClick={() => rfAction('correct')}
                     className="flex items-center justify-center gap-1.5 py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
                     <Check size={16} /> Correct
                   </button>
-                  <button onClick={() => rfAction('wrong')} disabled={saving}
+                  <button onClick={() => rfAction('wrong')}
                     className="flex items-center justify-center gap-1.5 py-4 bg-red-600/60 hover:bg-red-600/80 text-white font-bold rounded-xl text-sm disabled:opacity-50 border border-red-500/30 transition-colors">
                     <X size={16} /> Wrong
                   </button>
-                  <button onClick={() => rfAction('skip')} disabled={saving}
+                  <button onClick={() => rfAction('skip')}
                     className="flex items-center justify-center gap-1.5 py-4 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm disabled:opacity-50 border border-white/10 transition-colors">
                     <SkipForward size={16} /> Skip
                   </button>
                 </div>
 
-                <button onClick={endRFEarly} disabled={saving}
+                <button onClick={endRFEarly}
                   className="w-full py-2.5 bg-white/5 text-slate-500 hover:text-white hover:bg-white/10 rounded-xl text-xs border border-white/10 transition-colors">
                   ⏹ End {s.team_b_name}&apos;s Turn Early
                 </button>
@@ -1845,7 +1843,7 @@ export default function AdminPage() {
                       <p className="text-xs text-slate-500 mt-1">{s.rf_correct_b} correct</p>
                     </div>
                   </div>
-                  <button onClick={proceedToBuzzer} disabled={saving}
+                  <button onClick={proceedToBuzzer}
                     className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
                     <Bell size={20} /> Proceed to Buzzer Round <ArrowRight size={16} />
                   </button>
@@ -1865,7 +1863,7 @@ export default function AdminPage() {
 
               {/* idle → show question */}
               {s.bz_phase === 'idle' && (
-                <button onClick={showBZQuestion} disabled={saving}
+                <button onClick={showBZQuestion}
                   className="w-full flex items-center justify-center gap-2 py-5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl text-base transition-colors disabled:opacity-50">
                   <Bell size={20} /> Show Question {s.bz_q_index + 1}
                 </button>
@@ -1890,7 +1888,7 @@ export default function AdminPage() {
                     <Bell size={18} className="text-[#f5a623] animate-pulse" />
                     <span className="text-[#f5a623]/70 font-semibold text-sm">Waiting for a buzz…</span>
                   </div>
-                  <button onClick={bzSkip} disabled={saving}
+                  <button onClick={bzSkip}
                     className="w-full flex items-center justify-center gap-1.5 py-3 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm border border-white/10 disabled:opacity-50 transition-colors">
                     <SkipForward size={15} /> Skip Question
                   </button>
@@ -1910,11 +1908,11 @@ export default function AdminPage() {
                     <p className={`text-4xl font-black ${timerSecs <= 5 ? 'text-red-400' : 'text-white'}`}>{timerSecs}s</p>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={bzCorrect} disabled={saving}
+                    <button onClick={bzCorrect}
                       className="flex items-center justify-center gap-1.5 py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
                       <Check size={16} /> Correct (+{BZ_CORRECT_PTS})
                     </button>
-                    <button onClick={bzWrong} disabled={saving}
+                    <button onClick={bzWrong}
                       className="flex items-center justify-center gap-1.5 py-4 bg-red-600/60 hover:bg-red-600/80 text-white font-bold rounded-xl text-sm disabled:opacity-50 border border-red-500/30 transition-colors">
                       <X size={16} /> Wrong (−{BZ_PENALTY_PTS})
                     </button>
@@ -1937,11 +1935,11 @@ export default function AdminPage() {
                     <p className="text-4xl font-black text-white">{timerSecs}s</p>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={bzCorrect} disabled={saving}
+                    <button onClick={bzCorrect}
                       className="flex items-center justify-center gap-1.5 py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
                       <Check size={16} /> Correct (+{BZ_CORRECT_PTS})
                     </button>
-                    <button onClick={bzWrong} disabled={saving}
+                    <button onClick={bzWrong}
                       className="flex items-center justify-center gap-1.5 py-4 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm border border-white/10 disabled:opacity-50 transition-colors">
                       <X size={16} /> Wrong / Timeout
                     </button>
@@ -1964,7 +1962,7 @@ export default function AdminPage() {
                     {s.bz_last_result === 'skip' && '⏭ No one answered — no points'}
                     {(s.bz_last_result === 'penalty_a' || s.bz_last_result === 'penalty_b') && `❌ Penalty applied — skip`}
                   </div>
-                  <button onClick={nextBZQuestion} disabled={saving}
+                  <button onClick={nextBZQuestion}
                     className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-sm hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
                     {s.bz_q_index + 1 >= BZ_Q_COUNT ? 'End Buzzer Round' : `Next Question (${s.bz_q_index + 2}/${BZ_Q_COUNT})`}
@@ -1985,7 +1983,7 @@ export default function AdminPage() {
                       <p className="text-3xl font-black text-purple-400 mt-1">{s.bz_score_b}</p>
                     </div>
                   </div>
-                  <button onClick={proceedToIS} disabled={saving}
+                  <button onClick={proceedToIS}
                     className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
                     <Lightbulb size={20} /> Proceed to Innovation Sprint <ArrowRight size={16} />
                   </button>
@@ -2024,7 +2022,7 @@ export default function AdminPage() {
 
               {/* idle → start timer */}
               {s.is_phase === 'idle' && (
-                <button onClick={startISTimer} disabled={saving}
+                <button onClick={startISTimer}
                   className="w-full flex items-center justify-center gap-2 py-5 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
                   <Timer size={20} /> Start Timer (60s)
                 </button>
@@ -2037,7 +2035,7 @@ export default function AdminPage() {
                     <p className="text-xs font-bold text-[#f5a623] uppercase tracking-widest">Teams Arranging Steps</p>
                     <p className={`text-6xl font-black mt-1 ${timerWarn || timerSecs === 0 ? 'text-red-400' : 'text-[#f5a623]'}`}>{fmtTime(timerMs)}</p>
                   </div>
-                  <button onClick={collectISAnswers} disabled={saving}
+                  <button onClick={collectISAnswers}
                     className="w-full flex items-center justify-center gap-2 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl text-sm disabled:opacity-50 transition-colors">
                     <RefreshCw size={16} /> Stop Timer &amp; Collect Answers
                   </button>
@@ -2118,7 +2116,7 @@ export default function AdminPage() {
                       })}
                     </div>
                   )}
-                  <button onClick={nextISProblem} disabled={saving}
+                  <button onClick={nextISProblem}
                     className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
                     {s.is_problem_index + 1 >= IS_PROB_COUNT ? 'Finish Innovation Sprint' : `Next Problem (${s.is_problem_index + 2}/${IS_PROB_COUNT})`}
@@ -2128,7 +2126,7 @@ export default function AdminPage() {
 
               {/* done */}
               {s.is_phase === 'done' && (
-                <button onClick={finishMatch} disabled={saving}
+                <button onClick={finishMatch}
                   className="w-full flex items-center justify-center gap-2 py-5 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-lg hover:bg-[#e0941a] disabled:opacity-50 transition-colors shadow-lg shadow-[#f5a623]/20">
                   🏆 Finish Match &amp; Show Final Scores
                 </button>
