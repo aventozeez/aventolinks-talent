@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react'
 import {
   FSCState,
   getMatchState, subscribeToMatch,
-  RF_Q_COUNT, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS,
+  RF_Q_COUNT, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS, MC_TIME_MS, MC_PUZZLE_COUNT,
 } from '@/lib/fsc-live'
 
 export default function AudiencePage() {
@@ -38,6 +38,10 @@ export default function AudiencePage() {
         setTimerMs(Math.max(0, BZ_TIME_MS - (Date.now() - s.bz_buzz_start)))
       } else if (s.is_phase === 'working' && s.is_timer_start) {
         setTimerMs(Math.max(0, IS_TIME_MS - (Date.now() - s.is_timer_start)))
+      } else if ((s.mc_phase === 'a_playing' || s.mc_phase === 'b_playing' || s.mc_phase === 'c_playing') && s.mc_timer_start) {
+        setTimerMs(Math.max(0, MC_TIME_MS - (Date.now() - s.mc_timer_start)))
+      } else if ((s.av_phase === 'a_playing' || s.av_phase === 'b_playing') && s.av_timer_start) {
+        setTimerMs(Math.max(0, MC_TIME_MS - (Date.now() - s.av_timer_start)))
       } else {
         setTimerMs(0)
       }
@@ -55,17 +59,22 @@ export default function AudiencePage() {
   const round = s?.round ?? 'idle'
   const nameA = s?.team_a_name ?? 'Team A'
   const nameB = s?.team_b_name ?? 'Team B'
-  const totalA = (s?.rf_score_a ?? 0) + (s?.bz_score_a ?? 0) + (s?.is_score_a ?? 0)
-  const totalB = (s?.rf_score_b ?? 0) + (s?.bz_score_b ?? 0) + (s?.is_score_b ?? 0)
+  const totalA = (s?.carried_score_a ?? 0) + (s?.rf_score_a ?? 0) + (s?.bz_score_a ?? 0) + (s?.is_score_a ?? 0) + (s?.mc_score_a ?? 0) + (s?.av_score_a ?? 0)
+  const totalB = (s?.carried_score_b ?? 0) + (s?.rf_score_b ?? 0) + (s?.bz_score_b ?? 0) + (s?.is_score_b ?? 0) + (s?.mc_score_b ?? 0) + (s?.av_score_b ?? 0)
+  const totalC = (s?.carried_score_c ?? 0) + (s?.mc_score_c ?? 0)
   const timerSecs = Math.ceil(timerMs / 1000)
   const timerWarn = timerSecs <= 10 && timerSecs > 0
   const fmtTime = (ms: number) => { const sc = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(sc / 60)}:${String(sc % 60).padStart(2, '0')}` }
+
+  const nameC = s?.team_c_name ?? 'Team C'
 
   const ROUND_LABELS: Record<string, string> = {
     idle: '',
     rapid_fire: '⚡ Rapid Fire',
     buzzer: '🔔 Buzzer Round',
     innovation_sprint: '💡 Innovation Sprint',
+    mystery_chain: '🔮 Mystery Chain',
+    audio_visual: '🎬 Audio Visual — Grand Final',
     finished: '🏆 Final Scores',
   }
 
@@ -85,18 +94,38 @@ export default function AudiencePage() {
       </div>
 
       {/* Score board */}
-      <div className="grid grid-cols-2 border-b border-white/10 shrink-0">
-        <div className="bg-green-950/40 border-r border-white/10 px-8 py-5 text-center">
-          <p className="text-sm font-black text-green-400 uppercase tracking-widest truncate">{nameA}</p>
-          <p className="text-7xl font-black text-green-400 mt-1 leading-none">{totalA}</p>
-          <p className="text-xs text-green-700 mt-1 font-semibold">pts</p>
+      {round === 'mystery_chain' && s?.team_c_name ? (
+        <div className="grid grid-cols-3 border-b border-white/10 shrink-0">
+          <div className="bg-green-950/40 border-r border-white/10 px-4 py-4 text-center">
+            <p className="text-xs font-black text-green-400 uppercase tracking-widest truncate">{nameA}</p>
+            <p className="text-5xl font-black text-green-400 mt-1 leading-none">{totalA}</p>
+            <p className="text-[10px] text-green-700 mt-1 font-semibold">pts</p>
+          </div>
+          <div className="bg-purple-950/40 border-r border-white/10 px-4 py-4 text-center">
+            <p className="text-xs font-black text-purple-400 uppercase tracking-widest truncate">{nameB}</p>
+            <p className="text-5xl font-black text-purple-400 mt-1 leading-none">{totalB}</p>
+            <p className="text-[10px] text-purple-700 mt-1 font-semibold">pts</p>
+          </div>
+          <div className="bg-blue-950/40 px-4 py-4 text-center">
+            <p className="text-xs font-black text-blue-400 uppercase tracking-widest truncate">{nameC}</p>
+            <p className="text-5xl font-black text-blue-400 mt-1 leading-none">{totalC}</p>
+            <p className="text-[10px] text-blue-700 mt-1 font-semibold">pts</p>
+          </div>
         </div>
-        <div className="bg-purple-950/40 px-8 py-5 text-center">
-          <p className="text-sm font-black text-purple-400 uppercase tracking-widest truncate">{nameB}</p>
-          <p className="text-7xl font-black text-purple-400 mt-1 leading-none">{totalB}</p>
-          <p className="text-xs text-purple-700 mt-1 font-semibold">pts</p>
+      ) : (
+        <div className="grid grid-cols-2 border-b border-white/10 shrink-0">
+          <div className="bg-green-950/40 border-r border-white/10 px-8 py-5 text-center">
+            <p className="text-sm font-black text-green-400 uppercase tracking-widest truncate">{nameA}</p>
+            <p className="text-7xl font-black text-green-400 mt-1 leading-none">{totalA}</p>
+            <p className="text-xs text-green-700 mt-1 font-semibold">pts</p>
+          </div>
+          <div className="bg-purple-950/40 px-8 py-5 text-center">
+            <p className="text-sm font-black text-purple-400 uppercase tracking-widest truncate">{nameB}</p>
+            <p className="text-7xl font-black text-purple-400 mt-1 leading-none">{totalB}</p>
+            <p className="text-xs text-purple-700 mt-1 font-semibold">pts</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-5xl mx-auto w-full">
@@ -492,6 +521,117 @@ export default function AudiencePage() {
               <div className="text-center space-y-3">
                 <p className="text-2xl font-black text-white">Innovation Sprint Complete!</p>
                 <p className="text-slate-400">🏆 Final scores incoming…</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── MYSTERY CHAIN ── */}
+        {round === 'mystery_chain' && s && (
+          <div className="w-full space-y-6">
+            {(s.mc_phase === 'idle' || s.mc_phase === 'story') && (
+              <div className="text-center space-y-4">
+                <p className="text-7xl">🔮</p>
+                <h2 className="text-4xl font-black text-white">Mystery Chain</h2>
+                <p className="text-2xl font-bold text-[#f5a623]">{s.mc_scenario_title}</p>
+                <p className="text-slate-300 text-xl max-w-2xl mx-auto leading-relaxed">{s.mc_opening_story}</p>
+              </div>
+            )}
+
+            {(s.mc_phase === 'a_playing' || s.mc_phase === 'b_playing' || s.mc_phase === 'c_playing') && (() => {
+              const isA = s.mc_phase === 'a_playing', isB = s.mc_phase === 'b_playing'
+              const teamName = isA ? nameA : isB ? nameB : nameC
+              const puzzles = isA ? s.mc_puzzles_a : isB ? s.mc_puzzles_b : s.mc_puzzles_c
+              const correct = isA ? s.mc_correct_a : isB ? s.mc_correct_b : s.mc_correct_c
+              const currentPuzzle = puzzles[s.mc_q_index]
+              const colorClass = isA ? 'text-green-400' : isB ? 'text-purple-400' : 'text-blue-400'
+              const borderClass = isA ? 'border-green-400/50 bg-green-500/10' : isB ? 'border-purple-400/50 bg-purple-500/10' : 'border-blue-400/50 bg-blue-500/10'
+              return (
+                <>
+                  <div className={`rounded-3xl p-6 text-center border-2 transition-all ${timerWarn ? 'border-red-400 bg-red-500/10 animate-pulse' : timerSecs === 0 ? 'border-red-600 bg-red-900/20' : borderClass}`}>
+                    <p className={`text-base font-black uppercase tracking-widest ${colorClass}`}>{teamName} — Mystery Chain</p>
+                    <p className={`text-8xl font-black mt-2 ${timerWarn || timerSecs === 0 ? 'text-red-400' : colorClass}`}>{fmtTime(timerMs)}</p>
+                    <p className="text-slate-500 mt-2">Puzzle {Math.min(s.mc_q_index + 1, MC_PUZZLE_COUNT)} · {correct} correct</p>
+                  </div>
+
+                  {currentPuzzle && (
+                    <div className="bg-[#0a1628] border border-white/10 rounded-3xl p-8 shadow-2xl space-y-4">
+                      <p className="text-slate-400 text-lg text-center">{currentPuzzle.clue}</p>
+                      <div className="bg-purple-900/30 border border-purple-500/30 rounded-2xl p-6 text-center">
+                        <p className="text-xs text-purple-400 font-bold uppercase tracking-widest mb-2">Unscramble</p>
+                        <p className="text-5xl md:text-6xl font-black text-purple-200 tracking-[0.4em]">{currentPuzzle.scrambled}</p>
+                      </div>
+                      {s.mc_revealed && (
+                        <div className="bg-green-900/20 border border-green-500/30 rounded-2xl p-4 text-center">
+                          <p className="text-xs text-green-400 font-bold uppercase tracking-widest mb-1">Answer</p>
+                          <p className="text-3xl font-black text-green-300 tracking-widest">{currentPuzzle.answer}</p>
+                          {currentPuzzle.story && <p className="text-slate-300 text-sm mt-2 italic">{currentPuzzle.story}</p>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+
+            {s.mc_phase === 'done' && (
+              <div className="text-center space-y-4">
+                <p className="text-7xl">🎯</p>
+                <h2 className="text-4xl font-black text-white">Mystery Chain Complete!</h2>
+                <p className="text-slate-400 text-xl">Grand Final upcoming…</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── AUDIO VISUAL ── */}
+        {round === 'audio_visual' && s && (
+          <div className="w-full space-y-6">
+            {s.av_phase === 'idle' && (
+              <div className="text-center space-y-4">
+                <p className="text-7xl">🎬</p>
+                <h2 className="text-4xl font-black text-white">Grand Final</h2>
+                <p className="text-slate-400 text-xl">Audio Visual Round — Each team answers 10 questions</p>
+              </div>
+            )}
+
+            {(s.av_phase === 'a_playing' || s.av_phase === 'b_playing') && (() => {
+              const isA = s.av_phase === 'a_playing'
+              const teamName = isA ? nameA : nameB
+              const questions = isA ? s.av_questions_a : s.av_questions_b
+              const correct = isA ? s.av_correct_a : s.av_correct_b
+              const currentQ = questions[s.av_q_index]
+              const colorText = isA ? 'text-green-400' : 'text-purple-400'
+              const borderColor = isA ? 'border-green-400/50 bg-green-500/10' : 'border-purple-400/50 bg-purple-500/10'
+              return (
+                <>
+                  <div className={`rounded-3xl p-6 text-center border-2 ${timerWarn ? 'border-red-400 bg-red-500/10 animate-pulse' : timerSecs === 0 ? 'border-red-600 bg-red-900/20' : borderColor}`}>
+                    <p className={`text-base font-black uppercase tracking-widest ${colorText}`}>{teamName} — Audio Visual</p>
+                    <p className={`text-8xl font-black mt-2 ${timerWarn || timerSecs === 0 ? 'text-red-400' : colorText}`}>{fmtTime(timerMs)}</p>
+                    <p className="text-slate-500 mt-2">Question {Math.min(s.av_q_index + 1, 10)} of 10 · {correct} correct</p>
+                  </div>
+                  {currentQ && (
+                    <div className="bg-[#0a1628] border border-white/10 rounded-3xl p-8 shadow-2xl">
+                      <p className="text-3xl md:text-4xl font-bold text-white text-center leading-snug">{currentQ.question}</p>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+
+            {s.av_phase === 'break' && (
+              <div className="text-center space-y-4">
+                <p className="text-7xl">⏸</p>
+                <h2 className="text-3xl font-black text-white">{nameA} Done!</h2>
+                <p className="text-slate-400 text-xl">Next: {nameB}</p>
+              </div>
+            )}
+
+            {s.av_phase === 'done' && (
+              <div className="text-center space-y-4">
+                <p className="text-7xl">🏆</p>
+                <h2 className="text-4xl font-black text-white">Grand Final Complete!</h2>
+                <p className="text-slate-400 text-xl">Final results loading…</p>
               </div>
             )}
           </div>
