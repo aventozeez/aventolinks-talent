@@ -185,14 +185,8 @@ export default function AdminPage() {
 
   // ── Auth (bypassed for local hosting) ────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) { setAuthChecked(true); return }  // allow local access without login
-      const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
-      const role = data?.role ?? session.user.user_metadata?.role
-      if (role === 'admin' || role === 'moderator') setAuthChecked(true)
-      else setAuthChecked(true) // allow all local users
-    })
-  }, [router])
+    setAuthChecked(true)
+  }, [])
 
   // ── Core: save state + broadcast to all clients ────────────────────────────
   const applyState = useCallback(async (newState: FSCState) => {
