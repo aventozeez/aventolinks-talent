@@ -43,6 +43,15 @@ export type ISProblem = {
   steps_shuffled: string[]  // shown to teams
 }
 
+export type MysteryPuzzle = {
+  id: string
+  clue: string
+  scrambled: string
+  answer: string
+  story: string
+  image_url?: string
+}
+
 export type FSCState = {
   team_a_name: string
   team_b_name: string

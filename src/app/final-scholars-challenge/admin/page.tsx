@@ -10,7 +10,7 @@ import {
   ChevronUp, Timer, ArrowRight, RefreshCw, Layers, Pencil,
 } from 'lucide-react'
 import {
-  FSCState, BZPhase,
+  FSCState, BZPhase, MCPhase, AVPhase,
   FSCQuestion, ISProblem,
   FSC_CHANNEL,
   makeDefaultState, safeForViewers,
@@ -2505,7 +2505,7 @@ export default function AdminPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={bzCorrect}
                       className="flex items-center justify-center gap-1.5 py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm disabled:opacity-50 transition-colors">
-                      <Check size={16} /> Correct (+{BZ_CORRECT_PTS})
+                      <Check size={16} /> Correct (+{s.bz_phase === 'second_chance' ? BZ_SECOND_CHANCE_PTS : BZ_CORRECT_PTS})
                     </button>
                     <button onClick={bzWrong}
                       className="flex items-center justify-center gap-1.5 py-4 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm border border-white/10 disabled:opacity-50 transition-colors">
