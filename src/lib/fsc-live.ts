@@ -20,11 +20,13 @@ export const IS_STEP_PTS    = 10      // per correct step (5 steps max = 50)
 export const IS_BONUS_PTS   = 20      // bonus if ALL steps correct
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-export type FSCRound  = 'idle' | 'rapid_fire' | 'buzzer' | 'innovation_sprint' | 'finished'
+export type FSCRound  = 'idle' | 'rapid_fire' | 'buzzer' | 'innovation_sprint' | 'mystery_chain' | 'audio_visual' | 'finished'
 export type RFPhase   = 'idle' | 'a_playing' | 'break' | 'b_playing' | 'done'
 export type BZPhase   = 'idle' | 'showing' | 'buzzed_a' | 'buzzed_b' | 'second_chance' | 'revealed' | 'done'
 export type ISPhase   = 'idle' | 'working' | 'collecting' | 'revealed' | 'done'
 export type BZResult  = null | 'correct_a' | 'correct_b' | 'penalty_a' | 'penalty_b' | 'bonus_a' | 'bonus_b' | 'skip'
+export type MCPhase   = 'idle' | 'story' | 'a_playing' | 'b_playing' | 'c_playing' | 'done'
+export type AVPhase   = 'idle' | 'a_playing' | 'break' | 'b_playing' | 'done'
 
 export type FSCQuestion = {
   id: string
@@ -40,9 +42,19 @@ export type ISProblem = {
   steps_shuffled: string[]  // shown to teams
 }
 
+export type MysteryPuzzle = {
+  id: string
+  clue: string
+  scrambled: string
+  answer: string
+  story: string
+  image_url?: string
+}
+
 export type FSCState = {
   team_a_name: string
   team_b_name: string
+  team_c_name?: string
   round: FSCRound
 
   // Scores (cumulative per round)
@@ -50,12 +62,17 @@ export type FSCState = {
   bz_score_a: number; bz_score_b: number
   is_score_a: number; is_score_b: number
 
+  // Carried scores (from previous matches)
+  carried_score_a?: number
+  carried_score_b?: number
+  carried_score_c?: number
+
   // ── Rapid Fire ──
   rf_phase: RFPhase
-  rf_q_index: number          // 0-9, which question is showing
-  rf_questions: FSCQuestion[]   // Team A's questions
-  rf_questions_b: FSCQuestion[] // Team B's questions (separate pool)
-  rf_timer_start: number | null   // ms timestamp
+  rf_q_index: number
+  rf_questions: FSCQuestion[]
+  rf_questions_b: FSCQuestion[]
+  rf_timer_start: number | null
   rf_correct_a: number
   rf_correct_b: number
 
@@ -63,24 +80,51 @@ export type FSCState = {
   bz_phase: BZPhase
   bz_q_index: number
   bz_questions: FSCQuestion[]
-  bz_buzz_start: number | null    // ms timestamp when team buzzed
+  bz_buzz_start: number | null
   bz_second_chance_team: 'a' | 'b' | null
   bz_last_result: BZResult
 
   // ── Innovation Sprint ──
   is_phase: ISPhase
-  is_problem_index: number    // 0 or 1
+  is_problem_index: number
   is_problems: ISProblem[]
   is_timer_start: number | null
   is_team_a_answer: string[] | null
   is_team_b_answer: string[] | null
-  // Per-step grading results (broadcast to all screens on reveal)
   is_step_results_a: boolean[] | null
   is_step_results_b: boolean[] | null
+
+  // ── Mystery Chain (3-Team Final) ──
+  mc_phase: MCPhase
+  mc_scenario_title: string
+  mc_opening_story: string
+  mc_puzzles_a: MysteryPuzzle[]
+  mc_puzzles_b: MysteryPuzzle[]
+  mc_puzzles_c: MysteryPuzzle[]
+  mc_q_index: number
+  mc_timer_start: number | null
+  mc_correct_a: number
+  mc_correct_b: number
+  mc_correct_c: number
+  mc_score_a: number
+  mc_score_b: number
+  mc_score_c: number
+  mc_revealed: boolean
+
+  // ── Audio Visual (Grand Final) ──
+  av_phase: AVPhase
+  av_questions_a: FSCQuestion[]
+  av_questions_b: FSCQuestion[]
+  av_q_index: number
+  av_timer_start: number | null
+  av_correct_a: number
+  av_correct_b: number
+  av_score_a: number
+  av_score_b: number
 }
 
-export const makeDefaultState = (a = 'Team A', b = 'Team B'): FSCState => ({
-  team_a_name: a, team_b_name: b,
+export const makeDefaultState = (a = 'Team A', b = 'Team B', c?: string): FSCState => ({
+  team_a_name: a, team_b_name: b, team_c_name: c,
   round: 'idle',
   rf_score_a: 0, rf_score_b: 0,
   bz_score_a: 0, bz_score_b: 0,
@@ -92,15 +136,28 @@ export const makeDefaultState = (a = 'Team A', b = 'Team B'): FSCState => ({
   is_phase: 'idle', is_problem_index: 0, is_problems: [],
   is_timer_start: null, is_team_a_answer: null, is_team_b_answer: null,
   is_step_results_a: null, is_step_results_b: null,
+  mc_phase: 'idle', mc_scenario_title: '', mc_opening_story: '',
+  mc_puzzles_a: [], mc_puzzles_b: [], mc_puzzles_c: [],
+  mc_q_index: 0, mc_timer_start: null,
+  mc_correct_a: 0, mc_correct_b: 0, mc_correct_c: 0,
+  mc_score_a: 0, mc_score_b: 0, mc_score_c: 0,
+  mc_revealed: false,
+  av_phase: 'idle', av_questions_a: [], av_questions_b: [],
+  av_q_index: 0, av_timer_start: null,
+  av_correct_a: 0, av_correct_b: 0, av_score_a: 0, av_score_b: 0,
 })
 
-/** Strip correct step order before broadcasting to viewers */
 export const safeForViewers = (s: FSCState): FSCState => ({
   ...s,
   rf_questions:   s.rf_questions.map(q => ({ ...q, answer: '' })),
   rf_questions_b: (s.rf_questions_b ?? []).map(q => ({ ...q, answer: '' })),
   bz_questions:   s.bz_questions.map(q => ({ ...q, answer: '' })),
   is_problems:    s.is_problems.map(p => ({ ...p, steps: [] })),
+  mc_puzzles_a: s.mc_revealed ? s.mc_puzzles_a : s.mc_puzzles_a.map(p => ({ ...p, answer: '', story: '' })),
+  mc_puzzles_b: s.mc_revealed ? s.mc_puzzles_b : s.mc_puzzles_b.map(p => ({ ...p, answer: '', story: '' })),
+  mc_puzzles_c: s.mc_revealed ? s.mc_puzzles_c : s.mc_puzzles_c.map(p => ({ ...p, answer: '', story: '' })),
+  av_questions_a: s.av_questions_a.map(q => ({ ...q, answer: '' })),
+  av_questions_b: s.av_questions_b.map(q => ({ ...q, answer: '' })),
 })
 
 // ── DB ────────────────────────────────────────────────────────────────────────
@@ -183,7 +240,7 @@ export type QuestionPool = {
   created_at: string
 }
 
-export type MatchStage = 'r16' | 'qf' | 'sf' | '3team' | 'final'
+export type MatchStage = 'r16' | 'qf' | 'sf' | '3team' | 'grand_final'
 
 export type SavedMatch = {
   id: string
@@ -264,7 +321,7 @@ export const BRACKET_TEMPLATE: Array<{
   { match_code: 'SF1', stage: 'sf',    name: 'Semi Final 1', feeds_into: '3TF', feeds_into_slot: 'a' },
   { match_code: 'SF2', stage: 'sf',    name: 'Semi Final 2', feeds_into: '3TF', feeds_into_slot: 'b' },
   { match_code: '3TF', stage: '3team', name: '3-Team Final — Mystery Chain', feeds_into: 'GF', feeds_into_slot: 'a' },
-  { match_code: 'GF',  stage: 'final', name: 'Grand Final — Audio Visual' },
+  { match_code: 'GF',  stage: 'grand_final', name: 'Grand Final — Audio Visual' },
 ]
 
 export function generateBracketMatches(schools: School[]): SavedMatch[] {
@@ -283,7 +340,6 @@ export function generateBracketMatches(schools: School[]): SavedMatch[] {
   }))
 }
 
-export type MysteryPuzzle = { id: string; clue: string; scrambled: string; answer: string; story: string; image_url?: string }
 export type MysteryPack = { id: string; name: string; scenario_title: string; opening_story: string; final_message: string; puzzles: MysteryPuzzle[]; created_at: string }
 
 const MYSTERY_PACKS_ROW_ID = 'fsc_mystery_packs'
@@ -339,6 +395,8 @@ export const stateSig = (s: FSCState) =>
    s.is_phase, s.is_problem_index,
    s.rf_score_a, s.rf_score_b, s.bz_score_a, s.bz_score_b, s.is_score_a, s.is_score_b,
    s.is_team_a_answer?.length ?? -1, s.is_team_b_answer?.length ?? -1,
+   s.mc_phase, s.mc_q_index, s.mc_revealed, s.mc_score_a, s.mc_score_b, s.mc_score_c,
+   s.av_phase, s.av_q_index, s.av_score_a, s.av_score_b,
   ].join('|')
 
 // ── Subscribe (viewers) ───────────────────────────────────────────────────────

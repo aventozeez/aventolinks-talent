@@ -10,7 +10,7 @@ import {
   ChevronUp, Timer, ArrowRight, RefreshCw, Layers, Pencil,
 } from 'lucide-react'
 import {
-  FSCState, BZPhase,
+  FSCState, BZPhase, MCPhase, AVPhase,
   FSCQuestion, ISProblem,
   FSC_CHANNEL,
   makeDefaultState, safeForViewers,
@@ -22,11 +22,13 @@ import {
   QuestionPool, SavedMatch, PoolType,
   getPools, savePools, getSavedMatches, saveSavedMatchesList,
   School, getSchools, saveSchools, generateBracketMatches, BRACKET_TEMPLATE,
+  MysteryPack, MysteryPuzzle, getMysteryPacks, saveMysteryPacks,
+  MC_PUZZLE_COUNT, MC_TIME_MS, MC_CORRECT_PTS,
 } from '@/lib/fsc-live'
 import { supabase } from '@/lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type Tab = 'schools' | 'bracket' | 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'simulator'
+type Tab = 'schools' | 'bracket' | 'mystery' | 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'simulator'
 
 type FSCTeam = {
   id: string
@@ -149,15 +151,36 @@ export default function AdminPage() {
   const [editSlotName, setEditSlotName] = useState('')
   const [editSlotNick, setEditSlotNick] = useState('')
 
+  // ── Mystery Packs ──────────────────────────────────────────────────────────
+  const [mysteryPacks, setMysteryPacks] = useState<MysteryPack[]>([])
+  const [mysteryPacksLoading, setMysteryPacksLoading] = useState(false)
+  const [showAddPack, setShowAddPack] = useState(false)
+  const [editingPack, setEditingPack] = useState<MysteryPack | null>(null)
+  const [packTitle, setPackTitle] = useState('')
+  const [packScenario, setPackScenario] = useState('')
+  const [packStory, setPackStory] = useState('')
+  const [packFinalMsg, setPackFinalMsg] = useState('')
+  const [packPuzzles, setPackPuzzles] = useState<Omit<MysteryPuzzle, 'id'>[]>(
+    () => Array.from({ length: 10 }, () => ({ clue: '', scrambled: '', answer: '', story: '', image_url: '' }))
+  )
+  const [packSaving, setPackSaving] = useState(false)
+  const [launch3TFPackA, setLaunch3TFPackA] = useState('')
+  const [launch3TFPackB, setLaunch3TFPackB] = useState('')
+  const [launch3TFPackC, setLaunch3TFPackC] = useState('')
+  const [launchAVPoolA,  setLaunchAVPoolA]  = useState('')
+  const [launchAVPoolB,  setLaunchAVPoolB]  = useState('')
+
   // ── Sync ref ───────────────────────────────────────────────────────────────
   useEffect(() => { fscRef.current = fscState }, [fscState])
 
-  // Reset auto-end flag whenever a team's RF turn begins
+  // Reset auto-end flag whenever a team's turn begins
   useEffect(() => {
-    if (fscState?.rf_phase === 'a_playing' || fscState?.rf_phase === 'b_playing') {
+    if (fscState?.rf_phase === 'a_playing' || fscState?.rf_phase === 'b_playing' ||
+        fscState?.mc_phase === 'a_playing' || fscState?.mc_phase === 'b_playing' || fscState?.mc_phase === 'c_playing' ||
+        fscState?.av_phase === 'a_playing' || fscState?.av_phase === 'b_playing') {
       autoEndedRFRef.current = false
     }
-  }, [fscState?.rf_phase])
+  }, [fscState?.rf_phase, fscState?.mc_phase, fscState?.av_phase])
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -244,6 +267,12 @@ export default function AdminPage() {
     setSchoolsLoading(false)
   }, [])
 
+  const loadMysteryPacks = useCallback(async () => {
+    setMysteryPacksLoading(true)
+    setMysteryPacks(await getMysteryPacks())
+    setMysteryPacksLoading(false)
+  }, [])
+
   // ── Buzz poll — admin checks DB every 200 ms during 'showing' phase ─────────
   useEffect(() => {
     const id = setInterval(async () => {
@@ -304,9 +333,9 @@ export default function AdminPage() {
       })
       .subscribe((status: string) => { if (status === 'SUBSCRIBED') channelRef.current = ch })
 
-    loadTeams(); loadQuestions(); loadFSCState(); loadPools(); loadSavedMatches(); loadSchools()
+    loadTeams(); loadQuestions(); loadFSCState(); loadPools(); loadSavedMatches(); loadSchools(); loadMysteryPacks()
     return () => { supabase.removeChannel(ch); channelRef.current = null }
-  }, [authChecked, loadTeams, loadQuestions, loadFSCState, loadPools, loadSavedMatches, loadSchools, applyState])
+  }, [authChecked, loadTeams, loadQuestions, loadFSCState, loadPools, loadSavedMatches, loadSchools, loadMysteryPacks, applyState])
 
   // ── Timer tick ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -327,6 +356,22 @@ export default function AdminPage() {
         setTimerMs(Math.max(0, BZ_TIME_MS - (Date.now() - s.bz_buzz_start)))
       } else if (s.is_phase === 'working' && s.is_timer_start) {
         setTimerMs(Math.max(0, IS_TIME_MS - (Date.now() - s.is_timer_start)))
+      } else if ((s.mc_phase === 'a_playing' || s.mc_phase === 'b_playing' || s.mc_phase === 'c_playing') && s.mc_timer_start) {
+        const remaining = Math.max(0, MC_TIME_MS - (Date.now() - s.mc_timer_start))
+        setTimerMs(remaining)
+        if (remaining === 0 && !autoEndedRFRef.current) {
+          autoEndedRFRef.current = true
+          const next: MCPhase = s.mc_phase === 'a_playing' ? 'b_playing' : s.mc_phase === 'b_playing' ? (s.team_c_name ? 'c_playing' : 'done') : 'done'
+          applyStateRef.current?.({ ...s, mc_phase: next, mc_timer_start: Date.now(), mc_q_index: 0, mc_revealed: false })
+        }
+      } else if ((s.av_phase === 'a_playing' || s.av_phase === 'b_playing') && s.av_timer_start) {
+        const remaining = Math.max(0, MC_TIME_MS - (Date.now() - s.av_timer_start))
+        setTimerMs(remaining)
+        if (remaining === 0 && !autoEndedRFRef.current) {
+          autoEndedRFRef.current = true
+          const next: AVPhase = s.av_phase === 'a_playing' ? 'break' : 'done'
+          applyStateRef.current?.({ ...s, av_phase: next })
+        }
       } else {
         setTimerMs(0)
       }
@@ -681,6 +726,61 @@ export default function AdminPage() {
   }
 
   const launchSavedMatch = async (match: SavedMatch) => {
+    if (match.stage === '3team') {
+      if (!launch3TFPackA || !launch3TFPackB || (match.team_c_name && !launch3TFPackC)) {
+        alert('Please select a Mystery Pack for each team.'); return
+      }
+      const packA = mysteryPacks.find(p => p.id === launch3TFPackA)
+      const packB = mysteryPacks.find(p => p.id === launch3TFPackB)
+      const packC = mysteryPacks.find(p => p.id === launch3TFPackC)
+      if (!packA || !packB) { alert('Pack not found.'); return }
+      setMatchSaving(true)
+      const toMZ = (p: MysteryPack) => p.puzzles.map(pz => ({ ...pz }))
+      await applyState({
+        ...makeDefaultState(match.team_a_name, match.team_b_name, match.team_c_name),
+        round: 'mystery_chain',
+        carried_score_a: match.carried_score_a ?? 0,
+        carried_score_b: match.carried_score_b ?? 0,
+        carried_score_c: match.carried_score_c ?? 0,
+        mc_scenario_title: packA.scenario_title,
+        mc_opening_story: packA.opening_story,
+        mc_puzzles_a: toMZ(packA),
+        mc_puzzles_b: toMZ(packB),
+        mc_puzzles_c: packC ? toMZ(packC) : [],
+        mc_phase: 'idle',
+      })
+      const updatedMatches = savedMatches.map(m =>
+        m.id === match.id ? { ...m, status: 'live' as const } :
+        m.status === 'live' ? { ...m, status: 'completed' as const } : m
+      )
+      setSavedMatches(updatedMatches); await saveSavedMatchesList(updatedMatches)
+      setMatchSaving(false); setActiveTab('live'); return
+    }
+
+    if (match.stage === 'grand_final') {
+      if (!launchAVPoolA || !launchAVPoolB) { alert('Please select AV question pools for both teams.'); return }
+      const poolA = pools.find(p => p.id === launchAVPoolA)
+      const poolB = pools.find(p => p.id === launchAVPoolB)
+      const toQ = (q: typeof regularQs[0]): FSCQuestion => ({ id: q.id, question: q.question, answer: q.answer ?? '', category: q.category })
+      const avQsA = poolA ? questions.filter(q => poolA.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).sort(() => Math.random() - 0.5).slice(0, 10).map(toQ) : regularQs.sort(() => Math.random() - 0.5).slice(0, 10).map(toQ)
+      const avQsB = poolB ? questions.filter(q => poolB.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).sort(() => Math.random() - 0.5).slice(0, 10).map(toQ) : regularQs.sort(() => Math.random() - 0.5).slice(0, 10).map(toQ)
+      if (avQsA.length < 10 || avQsB.length < 10) { alert('Each AV pool needs at least 10 questions.'); return }
+      setMatchSaving(true)
+      await applyState({
+        ...makeDefaultState(match.team_a_name, match.team_b_name),
+        round: 'audio_visual',
+        carried_score_a: match.carried_score_a ?? 0,
+        carried_score_b: match.carried_score_b ?? 0,
+        av_questions_a: avQsA, av_questions_b: avQsB, av_phase: 'idle',
+      })
+      const updatedMatches = savedMatches.map(m =>
+        m.id === match.id ? { ...m, status: 'live' as const } :
+        m.status === 'live' ? { ...m, status: 'completed' as const } : m
+      )
+      setSavedMatches(updatedMatches); await saveSavedMatchesList(updatedMatches)
+      setMatchSaving(false); setActiveTab('live'); return
+    }
+
     const rfPoolA = pools.find(p => p.id === match.rf_pool_id)
     const rfPoolB = pools.find(p => p.id === match.rf_pool_id_b)
     const bzPool  = pools.find(p => p.id === match.bz_pool_id)
@@ -979,6 +1079,66 @@ export default function AdminPage() {
     applyState({ ...s, round: 'idle' })
   }
 
+  // ── Mystery Chain actions ──────────────────────────────────────────────────
+  const mcAction = (result: 'correct' | 'wrong' | 'skip') => {
+    const s = fscRef.current; if (!s) return
+    const isA = s.mc_phase === 'a_playing'
+    const isB = s.mc_phase === 'b_playing'
+    const isC = s.mc_phase === 'c_playing'
+    const correct = result === 'correct'
+    const puzzles = isA ? [...s.mc_puzzles_a] : isB ? [...s.mc_puzzles_b] : [...s.mc_puzzles_c]
+    if (result !== 'correct') puzzles.push(puzzles[s.mc_q_index])
+    const nextIdx = s.mc_q_index + 1
+    const newCorrectA = (isA && correct) ? s.mc_correct_a + 1 : s.mc_correct_a
+    const newCorrectB = (isB && correct) ? s.mc_correct_b + 1 : s.mc_correct_b
+    const newCorrectC = (isC && correct) ? s.mc_correct_c + 1 : s.mc_correct_c
+    applyState({
+      ...s,
+      mc_puzzles_a: isA ? puzzles : s.mc_puzzles_a,
+      mc_puzzles_b: isB ? puzzles : s.mc_puzzles_b,
+      mc_puzzles_c: isC ? puzzles : s.mc_puzzles_c,
+      mc_q_index: nextIdx,
+      mc_correct_a: newCorrectA, mc_correct_b: newCorrectB, mc_correct_c: newCorrectC,
+      mc_score_a: Math.min(newCorrectA, MC_PUZZLE_COUNT) * MC_CORRECT_PTS,
+      mc_score_b: Math.min(newCorrectB, MC_PUZZLE_COUNT) * MC_CORRECT_PTS,
+      mc_score_c: Math.min(newCorrectC, MC_PUZZLE_COUNT) * MC_CORRECT_PTS,
+      mc_revealed: false,
+    })
+  }
+
+  const mcReveal = () => {
+    const s = fscRef.current; if (!s) return
+    applyState({ ...s, mc_revealed: true })
+  }
+
+  const mcNextTeam = () => {
+    const s = fscRef.current; if (!s) return
+    const next: MCPhase = s.mc_phase === 'a_playing' ? 'b_playing' : s.mc_phase === 'b_playing' ? (s.team_c_name ? 'c_playing' : 'done') : 'done'
+    autoEndedRFRef.current = false
+    applyState({ ...s, mc_phase: next, mc_q_index: 0, mc_timer_start: Date.now(), mc_revealed: false })
+  }
+
+  // ── Audio Visual actions ───────────────────────────────────────────────────
+  const avAction = (result: 'correct' | 'wrong' | 'skip') => {
+    const s = fscRef.current; if (!s) return
+    const isA = s.av_phase === 'a_playing'
+    const correct = result === 'correct'
+    const questions = isA ? [...s.av_questions_a] : [...s.av_questions_b]
+    if (result !== 'correct') questions.push(questions[s.av_q_index])
+    const nextIdx = s.av_q_index + 1
+    const newCorrectA = (isA && correct) ? s.av_correct_a + 1 : s.av_correct_a
+    const newCorrectB = (!isA && correct) ? s.av_correct_b + 1 : s.av_correct_b
+    applyState({
+      ...s,
+      av_questions_a: isA ? questions : s.av_questions_a,
+      av_questions_b: isA ? s.av_questions_b : questions,
+      av_q_index: nextIdx,
+      av_correct_a: newCorrectA, av_correct_b: newCorrectB,
+      av_score_a: Math.min(newCorrectA, 10) * RF_CORRECT_PTS,
+      av_score_b: Math.min(newCorrectB, 10) * RF_CORRECT_PTS,
+    })
+  }
+
   // ── Loading guard ──────────────────────────────────────────────────────────
   if (!authChecked || fscLoading) return (
     <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
@@ -1010,13 +1170,14 @@ export default function AdminPage() {
   const timerWarn = timerSecs <= 10 && timerSecs > 0
 
   const TABS = [
-    { key: 'schools'   as Tab, label: 'Schools',      Icon: Trophy     },
-    { key: 'bracket'   as Tab, label: 'Bracket',      Icon: ArrowRight },
-    { key: 'teams'     as Tab, label: 'Teams',        Icon: Users      },
-    { key: 'questions' as Tab, label: 'Questions',    Icon: HelpCircle },
-    { key: 'pools'     as Tab, label: 'Question Banks', Icon: Layers     },
-    { key: 'matches'   as Tab, label: 'Matches',      Icon: Rocket     },
-    { key: 'live'      as Tab, label: 'Live Control', Icon: Radio      },
+    { key: 'schools'   as Tab, label: 'Schools',       Icon: Trophy     },
+    { key: 'bracket'   as Tab, label: 'Bracket',       Icon: ArrowRight },
+    { key: 'mystery'   as Tab, label: 'Mystery Packs', Icon: Lightbulb  },
+    { key: 'teams'     as Tab, label: 'Teams',         Icon: Users      },
+    { key: 'questions' as Tab, label: 'Questions',     Icon: HelpCircle },
+    { key: 'pools'     as Tab, label: 'Question Banks',Icon: Layers     },
+    { key: 'matches'   as Tab, label: 'Matches',       Icon: Rocket     },
+    { key: 'live'      as Tab, label: 'Live Control',  Icon: Radio      },
     { key: 'simulator' as Tab, label: 'Emergency',     Icon: Zap        },
   ]
 
@@ -1208,6 +1369,89 @@ export default function AdminPage() {
               <p className="text-xs mt-1">Add all 16 schools then click Generate Bracket.</p>
             </div>
           )}
+        </>}
+
+        {/* ════════════════ MYSTERY PACKS ════════════════ */}
+        {activeTab === 'mystery' && <>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-black text-white text-sm">Mystery Packs ({mysteryPacks.length})</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">Create scenarios for the 3-Team Final Mystery Chain round</p>
+            </div>
+            <button onClick={() => { setShowAddPack(true); setEditingPack(null); setPackTitle(''); setPackScenario(''); setPackStory(''); setPackFinalMsg(''); setPackPuzzles(Array.from({ length: 10 }, () => ({ clue: '', scrambled: '', answer: '', story: '', image_url: '' }))) }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-[#0a1628] rounded-xl text-xs font-black hover:bg-[#e0941a] transition-colors">
+              <Plus size={12} /> New Pack
+            </button>
+          </div>
+          {(showAddPack || editingPack) && (
+            <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-2xl p-4 space-y-3">
+              <p className="text-xs font-bold text-[#f5a623]">{editingPack ? 'Edit Pack' : 'New Mystery Pack'}</p>
+              <input placeholder="Pack name (e.g. Pack A)" value={packTitle} onChange={e => setPackTitle(e.target.value)}
+                className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+              <input placeholder="Scenario title" value={packScenario} onChange={e => setPackScenario(e.target.value)}
+                className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]" />
+              <textarea placeholder="Opening story..." value={packStory} onChange={e => setPackStory(e.target.value)} rows={3}
+                className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] resize-none" />
+              <textarea placeholder="Final message..." value={packFinalMsg} onChange={e => setPackFinalMsg(e.target.value)} rows={2}
+                className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623] resize-none" />
+              <p className="text-[11px] text-slate-400 font-semibold pt-1">10 Puzzles</p>
+              {packPuzzles.map((pz, i) => (
+                <div key={i} className="bg-[#060f1f] border border-white/10 rounded-xl p-3 space-y-2">
+                  <p className="text-[10px] text-[#f5a623] font-bold">Puzzle {i + 1}</p>
+                  <input placeholder="Clue" value={pz.clue} onChange={e => { const p = [...packPuzzles]; p[i] = { ...p[i], clue: e.target.value }; setPackPuzzles(p) }}
+                    className="w-full bg-[#0a1628] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#f5a623]" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input placeholder="Scrambled word" value={pz.scrambled} onChange={e => { const p = [...packPuzzles]; p[i] = { ...p[i], scrambled: e.target.value.toUpperCase() }; setPackPuzzles(p) }}
+                      className="bg-[#0a1628] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#f5a623] uppercase" />
+                    <input placeholder="Answer" value={pz.answer} onChange={e => { const p = [...packPuzzles]; p[i] = { ...p[i], answer: e.target.value.toUpperCase() }; setPackPuzzles(p) }}
+                      className="bg-[#0a1628] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#f5a623] uppercase" />
+                  </div>
+                  <input placeholder="Story line" value={pz.story} onChange={e => { const p = [...packPuzzles]; p[i] = { ...p[i], story: e.target.value }; setPackPuzzles(p) }}
+                    className="w-full bg-[#0a1628] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#f5a623]" />
+                  <input placeholder="Image URL (optional)" value={pz.image_url ?? ''} onChange={e => { const p = [...packPuzzles]; p[i] = { ...p[i], image_url: e.target.value }; setPackPuzzles(p) }}
+                    className="w-full bg-[#0a1628] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#f5a623]" />
+                </div>
+              ))}
+              <div className="flex gap-2 pt-1">
+                <button disabled={packSaving || !packTitle.trim() || !packScenario.trim()} onClick={async () => {
+                  setPackSaving(true)
+                  const pack: MysteryPack = {
+                    id: editingPack?.id ?? `pack_${Date.now()}`,
+                    name: packTitle.trim(), scenario_title: packScenario.trim(),
+                    opening_story: packStory.trim(), final_message: packFinalMsg.trim(),
+                    puzzles: packPuzzles.filter(p => p.clue || p.answer).map((p, i) => ({ ...p, id: `pz_${i}` })),
+                    created_at: editingPack?.created_at ?? new Date().toISOString(),
+                  }
+                  const updated = editingPack ? mysteryPacks.map(p => p.id === editingPack.id ? pack : p) : [...mysteryPacks, pack]
+                  setMysteryPacks(updated); await saveMysteryPacks(updated)
+                  setPackSaving(false); setShowAddPack(false); setEditingPack(null)
+                }} className="flex-1 py-2.5 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-sm disabled:opacity-40 hover:bg-[#e0941a] transition-colors">
+                  {packSaving ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Save Pack'}
+                </button>
+                <button onClick={() => { setShowAddPack(false); setEditingPack(null) }} className="px-4 py-2.5 bg-white/10 text-white rounded-xl text-sm hover:bg-white/20 transition-colors">Cancel</button>
+              </div>
+            </div>
+          )}
+          {mysteryPacksLoading ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-500" /></div>
+            : mysteryPacks.length === 0 ? <p className="text-center text-slate-600 text-sm py-10">No mystery packs yet</p>
+            : mysteryPacks.map(pack => (
+              <div key={pack.id} className="bg-[#0a1628] border border-white/10 rounded-2xl p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-black text-white text-sm">{pack.name}</p>
+                    <p className="text-[11px] text-[#f5a623] mt-0.5">{pack.scenario_title}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">{pack.puzzles.length} puzzles</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setEditingPack(pack); setShowAddPack(false); setPackTitle(pack.name); setPackScenario(pack.scenario_title); setPackStory(pack.opening_story); setPackFinalMsg(pack.final_message); setPackPuzzles(pack.puzzles.map(p => ({ clue: p.clue, scrambled: p.scrambled, answer: p.answer, story: p.story, image_url: p.image_url }))); }}
+                      className="p-1.5 text-slate-400 hover:text-[#f5a623] transition-colors"><Pencil size={13} /></button>
+                    <button onClick={async () => { const updated = mysteryPacks.filter(p => p.id !== pack.id); setMysteryPacks(updated); await saveMysteryPacks(updated) }}
+                      className="p-1.5 text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
+                  </div>
+                </div>
+              </div>
+            ))
+          }
         </>}
 
         {/* ════════════════ TEAMS ════════════════ */}
@@ -1825,8 +2069,14 @@ export default function AdminPage() {
               const bzQCount = bzPool ? questions.filter(q => bzPool.question_ids.includes(q.id) && (!q.type || q.type === 'regular')).length : 0
               const isQCount = (isPool1 ? questions.filter(q => isPool1.question_ids.includes(q.id) && q.type === 'sprint').length : 0)
                              + (isPool2 ? questions.filter(q => isPool2.question_ids.includes(q.id) && q.type === 'sprint').length : 0)
-              const canLaunch = !!match.rf_pool_id && !!match.rf_pool_id_b && !!match.bz_pool_id && !!match.is_pool_id && !!match.is_pool_id_2
-                && rfACount >= RF_Q_COUNT && rfBCount >= RF_Q_COUNT && bzQCount >= BZ_Q_COUNT && isQCount >= IS_PROB_COUNT
+              const is3TF = match.stage === '3team'
+              const isGF  = match.stage === 'grand_final'
+              const canLaunch = is3TF
+                ? (!!launch3TFPackA && !!launch3TFPackB && (!match.team_c_name || !!launch3TFPackC))
+                : isGF
+                ? (!!launchAVPoolA && !!launchAVPoolB)
+                : !!match.rf_pool_id && !!match.rf_pool_id_b && !!match.bz_pool_id && !!match.is_pool_id && !!match.is_pool_id_2
+                  && rfACount >= RF_Q_COUNT && rfBCount >= RF_Q_COUNT && bzQCount >= BZ_Q_COUNT && isQCount >= IS_PROB_COUNT
               const isLive = match.status === 'live'
               return (
                 <div key={match.id} className={`bg-[#0a1628] border rounded-2xl p-4 ${
@@ -1877,16 +2127,53 @@ export default function AdminPage() {
                       <Trash2 size={14} />
                     </button>
                   </div>
-                  {match.status === 'draft' && !canLaunch && (
+                  {match.status === 'draft' && !canLaunch && !is3TF && !isGF && (
                     <p className="text-[10px] text-red-400/70 mt-2">
                       ⚠ Pools need: RF-A≥{RF_Q_COUNT} ({rfACount}), RF-B≥{RF_Q_COUNT} ({rfBCount}), BZ≥{BZ_Q_COUNT} ({bzQCount}), IS≥{IS_PROB_COUNT} ({isQCount})
                     </p>
+                  )}
+                  {match.status === 'draft' && is3TF && (
+                    <div className="mt-3 space-y-2 bg-purple-900/20 border border-purple-500/20 rounded-xl p-3">
+                      <p className="text-[10px] text-purple-400 font-bold uppercase">Select Mystery Packs</p>
+                      {([
+                        { label: match.team_a_name, val: launch3TFPackA, set: setLaunch3TFPackA },
+                        { label: match.team_b_name, val: launch3TFPackB, set: setLaunch3TFPackB },
+                        ...(match.team_c_name ? [{ label: match.team_c_name, val: launch3TFPackC, set: setLaunch3TFPackC }] : []),
+                      ] as { label: string; val: string; set: (v: string) => void }[]).map(t => (
+                        <div key={t.label} className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 w-20 truncate shrink-0">{t.label}</span>
+                          <select value={t.val} onChange={e => t.set(e.target.value)}
+                            className="flex-1 bg-[#060f1f] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-purple-400">
+                            <option value="">— Select pack —</option>
+                            {mysteryPacks.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {match.status === 'draft' && isGF && (
+                    <div className="mt-3 space-y-2 bg-blue-900/20 border border-blue-500/20 rounded-xl p-3">
+                      <p className="text-[10px] text-blue-400 font-bold uppercase">Select AV Question Pools</p>
+                      {([
+                        { label: match.team_a_name, val: launchAVPoolA, set: setLaunchAVPoolA },
+                        { label: match.team_b_name, val: launchAVPoolB, set: setLaunchAVPoolB },
+                      ] as { label: string; val: string; set: (v: string) => void }[]).map(t => (
+                        <div key={t.label} className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 w-20 truncate shrink-0">{t.label}</span>
+                          <select value={t.val} onChange={e => t.set(e.target.value)}
+                            className="flex-1 bg-[#060f1f] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-400">
+                            <option value="">— Select pool —</option>
+                            {pools.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
                   )}
                   {match.status === 'draft' && (
                     <button onClick={() => launchSavedMatch(match)} disabled={!canLaunch || matchSaving}
                       className="mt-3 w-full flex items-center justify-center gap-2 py-3 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-sm hover:bg-[#e0941a] disabled:opacity-40 transition-colors">
                       {matchSaving ? <Loader2 size={15} className="animate-spin" /> : <Rocket size={15} />}
-                      🚀 Launch Match
+                      {is3TF ? '🔮 Launch Mystery Chain' : isGF ? '🎬 Launch Grand Final' : '🚀 Launch Match'}
                     </button>
                   )}
                   {isLive && (
@@ -2343,6 +2630,228 @@ export default function AdminPage() {
                   className="w-full flex items-center justify-center gap-2 py-5 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-lg hover:bg-[#e0941a] disabled:opacity-50 transition-colors shadow-lg shadow-[#f5a623]/20">
                   🏆 Finish Match &amp; Show Final Scores
                 </button>
+              )}
+            </>}
+
+            {/* ══ MYSTERY CHAIN ══ */}
+            {round === 'mystery_chain' && <>
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                <Lightbulb size={16} className="text-purple-400" />
+                <span className="text-sm font-black text-purple-400">Mystery Chain</span>
+                <span className="ml-auto text-xs text-slate-400">
+                  {s.mc_phase === 'idle' && 'Ready'}{s.mc_phase === 'story' && 'Reading story...'}
+                  {s.mc_phase === 'a_playing' && `${s.team_a_name} playing`}
+                  {s.mc_phase === 'b_playing' && `${s.team_b_name} playing`}
+                  {s.mc_phase === 'c_playing' && `${s.team_c_name} playing`}
+                  {s.mc_phase === 'done' && 'Complete'}
+                </span>
+              </div>
+              {(s.carried_score_a !== undefined) && (
+                <div className="bg-[#0a1628] border border-white/10 rounded-xl p-3">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Carried Scores</p>
+                  <div className={`grid gap-2 text-center ${s.team_c_name ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    {[
+                      { name: s.team_a_name, carried: s.carried_score_a ?? 0, mc: s.mc_score_a, color: 'text-green-400' },
+                      { name: s.team_b_name, carried: s.carried_score_b ?? 0, mc: s.mc_score_b, color: 'text-purple-400' },
+                      ...(s.team_c_name ? [{ name: s.team_c_name, carried: s.carried_score_c ?? 0, mc: s.mc_score_c, color: 'text-blue-400' }] : []),
+                    ].map(t => (
+                      <div key={t.name}>
+                        <p className={`text-xs font-bold ${t.color} truncate`}>{t.name}</p>
+                        <p className="text-[10px] text-slate-500">SF: {t.carried} + MC: {t.mc}</p>
+                        <p className={`text-lg font-black ${t.color}`}>{t.carried + t.mc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {s.mc_phase === 'idle' && (
+                <div className="bg-[#0a1628] border border-purple-500/20 rounded-2xl p-4 space-y-3">
+                  <p className="text-[11px] text-purple-400 font-bold uppercase">{s.mc_scenario_title}</p>
+                  <p className="text-sm text-slate-300 leading-relaxed">{s.mc_opening_story}</p>
+                  <button onClick={() => applyState({ ...s, mc_phase: 'story' })}
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-xl text-sm transition-colors">
+                    📖 Read Story — Then Start Team A
+                  </button>
+                </div>
+              )}
+              {s.mc_phase === 'story' && (
+                <button onClick={() => { autoEndedRFRef.current = false; applyState({ ...s, mc_phase: 'a_playing', mc_q_index: 0, mc_timer_start: Date.now(), mc_revealed: false }) }}
+                  className="w-full py-5 bg-green-600 hover:bg-green-500 text-white font-black rounded-2xl text-base transition-colors">
+                  <Timer size={20} className="inline mr-2" /> Start {s.team_a_name}&apos;s Turn (60s)
+                </button>
+              )}
+              {(s.mc_phase === 'a_playing' || s.mc_phase === 'b_playing' || s.mc_phase === 'c_playing') && (() => {
+                const isA = s.mc_phase === 'a_playing', isB = s.mc_phase === 'b_playing'
+                const teamName = isA ? s.team_a_name : isB ? s.team_b_name : (s.team_c_name ?? 'Team C')
+                const puzzles = isA ? s.mc_puzzles_a : isB ? s.mc_puzzles_b : s.mc_puzzles_c
+                const correct = isA ? s.mc_correct_a : isB ? s.mc_correct_b : s.mc_correct_c
+                const currentPuzzle = puzzles[s.mc_q_index]
+                const color = isA ? 'green' : isB ? 'purple' : 'blue'
+                return (
+                  <>
+                    <div className={`rounded-2xl p-4 text-center border-2 ${timerWarn && timerSecs > 0 ? 'border-red-400 bg-red-500/10 animate-pulse' : timerSecs === 0 ? 'border-red-600 bg-red-900/20' : `border-${color}-400/40 bg-${color}-500/10`}`}>
+                      <p className={`text-xs font-bold text-${color}-400 uppercase tracking-widest`}>{teamName} — Time Remaining</p>
+                      <p className={`text-6xl font-black mt-1 ${timerWarn || timerSecs === 0 ? 'text-red-400' : `text-${color}-400`}`}>{fmtTime(timerMs)}</p>
+                      <p className="text-xs text-slate-500 mt-1">Puzzle {Math.min(s.mc_q_index + 1, MC_PUZZLE_COUNT)} · {correct} correct</p>
+                    </div>
+                    {currentPuzzle && (
+                      <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-2">
+                        <p className="text-[10px] text-slate-500 font-bold uppercase">Clue</p>
+                        <p className="text-base font-bold text-white">{currentPuzzle.clue}</p>
+                        <div className="bg-purple-900/30 border border-purple-500/30 rounded-xl p-3 text-center">
+                          <p className="text-[10px] text-purple-400 font-bold uppercase tracking-widest">Scrambled</p>
+                          <p className="text-3xl font-black text-purple-300 tracking-[0.3em] mt-1">{currentPuzzle.scrambled}</p>
+                        </div>
+                        {s.mc_revealed && (
+                          <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-3">
+                            <p className="text-[10px] text-green-400 font-bold uppercase">Answer: <span className="text-green-300 text-sm tracking-widest">{currentPuzzle.answer}</span></p>
+                            <p className="text-xs text-slate-300 mt-1 italic">{currentPuzzle.story}</p>
+                          </div>
+                        )}
+                        {!s.mc_revealed && (
+                          <button onClick={mcReveal} className="w-full py-2 bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl text-sm transition-colors">
+                            Reveal Answer
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={() => mcAction('correct')} className="flex items-center justify-center gap-1.5 py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm transition-colors">
+                        <Check size={16} /> Correct
+                      </button>
+                      <button onClick={() => mcAction('wrong')} className="flex items-center justify-center gap-1.5 py-4 bg-red-600/60 hover:bg-red-600/80 text-white font-bold rounded-xl text-sm border border-red-500/30 transition-colors">
+                        <X size={16} /> Wrong
+                      </button>
+                      <button onClick={() => mcAction('skip')} className="flex items-center justify-center gap-1.5 py-4 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm border border-white/10 transition-colors">
+                        <SkipForward size={16} /> Skip
+                      </button>
+                    </div>
+                    <button onClick={mcNextTeam} className={`w-full py-3 bg-${color}-600/40 hover:bg-${color}-600/60 text-${color}-300 font-bold rounded-xl text-sm border border-${color}-500/30 transition-colors`}>
+                      ⏭ End {teamName}&apos;s Turn → Next Team
+                    </button>
+                  </>
+                )
+              })()}
+              {s.mc_phase === 'done' && (
+                <div className="space-y-3">
+                  <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-widest text-center">Mystery Chain Complete</p>
+                  {[
+                    { name: s.team_a_name, carried: s.carried_score_a ?? 0, mc: s.mc_score_a, color: 'text-green-400' },
+                    { name: s.team_b_name, carried: s.carried_score_b ?? 0, mc: s.mc_score_b, color: 'text-purple-400' },
+                    ...(s.team_c_name ? [{ name: s.team_c_name, carried: s.carried_score_c ?? 0, mc: s.mc_score_c, color: 'text-blue-400' }] : []),
+                  ].sort((a, b) => (b.carried + b.mc) - (a.carried + a.mc)).map((t, i) => (
+                    <div key={t.name} className={`bg-[#0a1628] border ${i === 0 ? 'border-[#f5a623]/40' : i === 2 ? 'border-red-500/20' : 'border-white/10'} rounded-2xl p-4 flex items-center gap-3`}>
+                      <p className={`text-2xl font-black ${i === 0 ? 'text-[#f5a623]' : i === 2 ? 'text-red-400' : 'text-slate-400'}`}>#{i + 1}</p>
+                      <div className="flex-1">
+                        <p className={`font-black text-sm ${t.color}`}>{t.name}</p>
+                        <p className="text-[10px] text-slate-500">SF {t.carried} + MC {t.mc} = {t.carried + t.mc}</p>
+                      </div>
+                      {i === 2 && <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded-full font-bold">2nd Runner Up</span>}
+                    </div>
+                  ))}
+                  <button onClick={finishMatch} className="w-full py-5 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-lg hover:bg-[#e0941a] transition-colors">
+                    🏆 Confirm Results &amp; Advance to Grand Final
+                  </button>
+                </div>
+              )}
+            </>}
+
+            {/* ══ AUDIO VISUAL ══ */}
+            {round === 'audio_visual' && <>
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                <Radio size={16} className="text-blue-400" />
+                <span className="text-sm font-black text-blue-400">Audio Visual Round — Grand Final</span>
+                <span className="ml-auto text-xs text-slate-400">
+                  {s.av_phase === 'idle' && 'Ready'}{s.av_phase === 'a_playing' && `${s.team_a_name} playing`}
+                  {s.av_phase === 'break' && 'Break'}{s.av_phase === 'b_playing' && `${s.team_b_name} playing`}
+                  {s.av_phase === 'done' && 'Complete'}
+                </span>
+              </div>
+              {s.carried_score_a !== undefined && (
+                <div className="bg-[#0a1628] border border-white/10 rounded-xl p-3">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Carried Scores</p>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    {[
+                      { name: s.team_a_name, carried: s.carried_score_a ?? 0, av: s.av_score_a, color: 'text-green-400' },
+                      { name: s.team_b_name, carried: s.carried_score_b ?? 0, av: s.av_score_b, color: 'text-purple-400' },
+                    ].map(t => (
+                      <div key={t.name}>
+                        <p className={`text-xs font-bold ${t.color} truncate`}>{t.name}</p>
+                        <p className="text-[10px] text-slate-500">Prev: {t.carried} + AV: {t.av}</p>
+                        <p className={`text-lg font-black ${t.color}`}>{t.carried + t.av}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {s.av_phase === 'idle' && (
+                <button onClick={() => { autoEndedRFRef.current = false; applyState({ ...s, av_phase: 'a_playing', av_q_index: 0, av_timer_start: Date.now() }) }}
+                  className="w-full py-5 bg-green-600 hover:bg-green-500 text-white font-black rounded-2xl text-base transition-colors">
+                  <Timer size={20} className="inline mr-2" /> Start {s.team_a_name}&apos;s Turn (60s)
+                </button>
+              )}
+              {(s.av_phase === 'a_playing' || s.av_phase === 'b_playing') && (() => {
+                const isA = s.av_phase === 'a_playing'
+                const teamName = isA ? s.team_a_name : s.team_b_name
+                const questions = isA ? s.av_questions_a : s.av_questions_b
+                const correct = isA ? s.av_correct_a : s.av_correct_b
+                const currentQ = questions[s.av_q_index]
+                const color = isA ? 'green' : 'purple'
+                return (
+                  <>
+                    <div className={`rounded-2xl p-4 text-center border-2 ${timerWarn && timerSecs > 0 ? 'border-red-400 bg-red-500/10 animate-pulse' : timerSecs === 0 ? 'border-red-600 bg-red-900/20' : `border-${color}-400/40 bg-${color}-500/10`}`}>
+                      <p className={`text-xs font-bold text-${color}-400 uppercase tracking-widest`}>{teamName} — Time Remaining</p>
+                      <p className={`text-6xl font-black mt-1 ${timerWarn || timerSecs === 0 ? 'text-red-400' : `text-${color}-400`}`}>{fmtTime(timerMs)}</p>
+                      <p className="text-xs text-slate-500 mt-1">Q {Math.min(s.av_q_index + 1, 10)} of 10 · {correct} correct</p>
+                    </div>
+                    {currentQ && (
+                      <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-2">
+                        <p className="text-base font-bold text-white">{currentQ.question}</p>
+                        <p className="text-[11px] text-slate-500">Answer: <span className="text-green-400 font-bold">{currentQ.answer}</span></p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={() => avAction('correct')} className="flex items-center justify-center gap-1.5 py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm transition-colors">
+                        <Check size={16} /> Correct
+                      </button>
+                      <button onClick={() => avAction('wrong')} className="flex items-center justify-center gap-1.5 py-4 bg-red-600/60 hover:bg-red-600/80 text-white font-bold rounded-xl text-sm border border-red-500/30 transition-colors">
+                        <X size={16} /> Wrong
+                      </button>
+                      <button onClick={() => avAction('skip')} className="flex items-center justify-center gap-1.5 py-4 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm border border-white/10 transition-colors">
+                        <SkipForward size={16} /> Skip
+                      </button>
+                    </div>
+                  </>
+                )
+              })()}
+              {s.av_phase === 'break' && (
+                <button onClick={() => { autoEndedRFRef.current = false; applyState({ ...s, av_phase: 'b_playing', av_q_index: 0, av_timer_start: Date.now() }) }}
+                  className="w-full py-5 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-2xl text-base transition-colors">
+                  <Timer size={20} className="inline mr-2" /> Start {s.team_b_name}&apos;s Turn (60s)
+                </button>
+              )}
+              {s.av_phase === 'done' && (
+                <div className="space-y-3">
+                  <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-widest text-center">Grand Final Complete</p>
+                  {[
+                    { name: s.team_a_name, carried: s.carried_score_a ?? 0, av: s.av_score_a, color: 'text-green-400' },
+                    { name: s.team_b_name, carried: s.carried_score_b ?? 0, av: s.av_score_b, color: 'text-purple-400' },
+                  ].sort((a, b) => (b.carried + b.av) - (a.carried + a.av)).map((t, i) => (
+                    <div key={t.name} className={`bg-[#0a1628] border ${i === 0 ? 'border-[#f5a623]/40' : 'border-white/10'} rounded-2xl p-4 flex items-center gap-3`}>
+                      <p className={`text-2xl font-black ${i === 0 ? 'text-[#f5a623]' : 'text-slate-400'}`}>{i === 0 ? '🏆' : '🥈'}</p>
+                      <div className="flex-1">
+                        <p className={`font-black text-sm ${t.color}`}>{t.name}</p>
+                        <p className="text-[10px] text-slate-500">Prev {t.carried} + AV {t.av} = {t.carried + t.av}</p>
+                      </div>
+                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${i === 0 ? 'bg-[#f5a623]/20 text-[#f5a623]' : 'bg-white/10 text-slate-400'}`}>
+                        {i === 0 ? 'Champion' : '1st Runner Up'}
+                      </span>
+                    </div>
+                  ))}
+                  <button onClick={finishMatch} className="w-full py-5 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-lg hover:bg-[#e0941a] transition-colors">
+                    🏆 Save Final Results
+                  </button>
+                </div>
               )}
             </>}
 
