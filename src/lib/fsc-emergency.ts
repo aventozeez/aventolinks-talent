@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { wsSubscribe, wsBroadcast } from './ws-sync'
 
 export const EMRG_CHANNEL     = 'fsc-emergency'
 export const EMRG_ID          = 'emrg_state'
@@ -178,31 +179,15 @@ export async function saveEmergencyState(s: EmergencyState): Promise<void> {
 }
 
 export function subscribeToEmergency(cb: (s: EmergencyState) => void): { unsubscribe: () => void } {
-  let alive = true
-  let lastJson = ''
+  // Fire immediately with default so loading clears right away
+  cb(defaultEmergencyState())
+  // Then update with real DB state in background
+  getEmergencyState().then(s => { if (s) cb(s) })
 
-  const poll = async () => {
-    const s = await getEmergencyState()
-    const effective = s ?? defaultEmergencyState()   // always fire, even when no DB row yet
-    const j = JSON.stringify(effective)
-    if (j !== lastJson) { lastJson = j; if (alive) cb(effective) }
-  }
-
-  poll()
-  const iv = setInterval(poll, 600)
-
-  const ch = supabase.channel(EMRG_CHANNEL)
-  ch.on('broadcast', { event: 'emrg_state' }, ({ payload }) => {
-    if (alive) cb(payload as EmergencyState)
-  }).subscribe()
-
-  return {
-    unsubscribe: () => { alive = false; clearInterval(iv); supabase.removeChannel(ch) },
-  }
+  const unsub = wsSubscribe(EMRG_CHANNEL, (payload) => cb(payload as EmergencyState))
+  return { unsubscribe: unsub }
 }
 
 export function broadcastEmergency(s: EmergencyState) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ch = (supabase.channel(EMRG_CHANNEL) as any)
-  ch.send({ type: 'broadcast', event: 'emrg_state', payload: s })
+  wsBroadcast(EMRG_CHANNEL, s)
 }

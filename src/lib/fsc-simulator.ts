@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { wsSubscribe, wsBroadcast } from './ws-sync'
 
 export const SIM_CHANNEL   = 'fsc-simulator'
 export const SIM_ID        = 'sim_state'
@@ -220,25 +221,15 @@ export function subscribeToSim(cb: (s: SimState) => void): { unsubscribe: () => 
     cb(s)
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ch = (supabase.channel(SIM_CHANNEL) as any)
-    .on('broadcast', { event: 'sim_state' }, (msg: { payload: SimState }) => deliver(msg.payload))
-    .subscribe()
+  // Seed with DB state immediately
+  getSimState().then(s => { if (s && !destroyed) deliver(s) })
 
-  const fetchAndDeliver = async () => {
-    if (destroyed) return
-    const s = await getSimState()
-    if (s && !destroyed) deliver(s)
-  }
-
-  fetchAndDeliver()
-  const poll = setInterval(fetchAndDeliver, 500)
+  const unsubWs = wsSubscribe(SIM_CHANNEL, (payload) => deliver(payload as SimState))
 
   return {
     unsubscribe: () => {
       destroyed = true
-      supabase.removeChannel(ch)
-      clearInterval(poll)
+      unsubWs()
     },
   }
 }

@@ -21,12 +21,13 @@ import {
   IS_PROB_COUNT, IS_TIME_MS, IS_STEP_PTS, IS_BONUS_PTS,
   QuestionPool, SavedMatch, PoolType,
   getPools, savePools, getSavedMatches, saveSavedMatchesList,
+  School, getSchools, saveSchools, generateBracketMatches, BRACKET_TEMPLATE,
 } from '@/lib/fsc-live'
 import { supabase } from '@/lib/supabase'
 import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type Tab = 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'simulator'
+type Tab = 'schools' | 'bracket' | 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'simulator'
 
 type FSCTeam = {
   id: string
@@ -139,6 +140,15 @@ export default function AdminPage() {
   const [newMatchISPool2, setNewMatchISPool2] = useState('')
   const [matchSaving, setMatchSaving] = useState(false)
 
+  // ── Schools / Bracket ─────────────────────────────────────────────────────
+  const [schools, setSchools] = useState<School[]>([])
+  const [schoolsLoading, setSchoolsLoading] = useState(false)
+  const [bracketGenerating, setBracketGenerating] = useState(false)
+  // Editing state for school slots
+  const [editingSlot, setEditingSlot] = useState<number | null>(null)
+  const [editSlotName, setEditSlotName] = useState('')
+  const [editSlotNick, setEditSlotNick] = useState('')
+
   // ── Sync ref ───────────────────────────────────────────────────────────────
   useEffect(() => { fscRef.current = fscState }, [fscState])
 
@@ -219,6 +229,12 @@ export default function AdminPage() {
     setMatchesLoading(false)
   }, [])
 
+  const loadSchools = useCallback(async () => {
+    setSchoolsLoading(true)
+    setSchools(await getSchools())
+    setSchoolsLoading(false)
+  }, [])
+
   // ── Buzz poll — admin checks DB every 200 ms during 'showing' phase ─────────
   useEffect(() => {
     const id = setInterval(async () => {
@@ -274,9 +290,9 @@ export default function AdminPage() {
       applyStateRef.current?.({ ...s, bz_phase: newPhase, bz_buzz_start: msg.time })
     })
 
-    loadTeams(); loadQuestions(); loadFSCState(); loadPools(); loadSavedMatches()
+    loadTeams(); loadQuestions(); loadFSCState(); loadPools(); loadSavedMatches(); loadSchools()
     return unsubBuzz
-  }, [authChecked, loadTeams, loadQuestions, loadFSCState, loadPools, loadSavedMatches, applyState])
+  }, [authChecked, loadTeams, loadQuestions, loadFSCState, loadPools, loadSavedMatches, loadSchools, applyState])
 
   // ── Timer tick ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -891,11 +907,65 @@ export default function AdminPage() {
     const totalA = s.rf_score_a + s.bz_score_a + s.is_score_a
     const totalB = s.rf_score_b + s.bz_score_b + s.is_score_b
     const winner = totalA > totalB ? s.team_a_name : totalB > totalA ? s.team_b_name : 'Draw'
-    const updatedMatches = savedMatches.map(m =>
+    const loser  = winner === s.team_a_name ? s.team_b_name : s.team_a_name
+    const loserScore = winner === s.team_a_name ? totalB : totalA
+
+    let matches = savedMatches.map(m =>
       m.status === 'live' ? { ...m, status: 'completed' as const, final_score_a: totalA, final_score_b: totalB, winner } : m
     )
-    setSavedMatches(updatedMatches)
-    await saveSavedMatchesList(updatedMatches)
+
+    // Auto-propagate winner to next bracket match
+    const liveMatch = savedMatches.find(m => m.status === 'live')
+    if (liveMatch?.feeds_into && liveMatch?.feeds_into_slot) {
+      const { feeds_into, feeds_into_slot } = liveMatch
+      matches = matches.map(m => {
+        if (m.match_code !== feeds_into) return m
+        if (feeds_into_slot === 'a') return { ...m, team_a_name: winner }
+        if (feeds_into_slot === 'b') return { ...m, team_b_name: winner }
+        return m
+      })
+
+      // For SF matches: also check if both SFs done to determine Best Loser for 3TF
+      if (liveMatch.stage === 'sf') {
+        const otherSF = matches.find(m => m.stage === 'sf' && m.match_code !== liveMatch.match_code && m.status === 'completed')
+        if (otherSF) {
+          const otherLoser = otherSF.winner === otherSF.team_a_name ? otherSF.team_b_name : otherSF.team_a_name
+          const otherLoserScore = otherSF.winner === otherSF.team_a_name ? (otherSF.final_score_b ?? 0) : (otherSF.final_score_a ?? 0)
+          const bestLoser = loserScore >= otherLoserScore ? loser : otherLoser
+          // Carry SF winner scores into 3TF
+          const sf1 = liveMatch.match_code === 'SF1' ? { ...liveMatch, final_score_a: totalA, final_score_b: totalB, winner } : otherSF
+          const sf2 = liveMatch.match_code === 'SF2' ? { ...liveMatch, final_score_a: totalA, final_score_b: totalB, winner } : otherSF
+          const sf1WinnerScore = sf1.winner === sf1.team_a_name ? (sf1.final_score_a ?? 0) : (sf1.final_score_b ?? 0)
+          const sf2WinnerScore = sf2.winner === sf2.team_a_name ? (sf2.final_score_a ?? 0) : (sf2.final_score_b ?? 0)
+          matches = matches.map(m => m.match_code === '3TF'
+            ? { ...m, team_c_name: bestLoser, carried_score_a: sf1WinnerScore, carried_score_b: sf2WinnerScore, carried_score_c: Math.max(loserScore, otherLoserScore) }
+            : m
+          )
+        }
+      }
+
+      // For 3TF: carry top-2 scores into GF
+      if (liveMatch.stage === '3team') {
+        const mc_a = liveMatch.mc_score_a ?? 0
+        const mc_b = liveMatch.mc_score_b ?? 0
+        const mc_c = liveMatch.mc_score_c ?? 0
+        const totA = (liveMatch.carried_score_a ?? 0) + mc_a
+        const totB = (liveMatch.carried_score_b ?? 0) + mc_b
+        const totC = (liveMatch.carried_score_c ?? 0) + mc_c
+        const sorted = [
+          { name: s.team_a_name, total: totA },
+          { name: s.team_b_name, total: totB },
+          { name: liveMatch.team_c_name ?? 'TBD', total: totC },
+        ].sort((a, b) => b.total - a.total)
+        matches = matches.map(m => m.match_code === 'GF'
+          ? { ...m, team_a_name: sorted[0].name, team_b_name: sorted[1].name, carried_score_a: sorted[0].total, carried_score_b: sorted[1].total }
+          : m
+        )
+      }
+    }
+
+    setSavedMatches(matches)
+    await saveSavedMatchesList(matches)
   }
   const endMatchEarly = async () => {
     if (!confirm('End the match?')) return
@@ -934,6 +1004,8 @@ export default function AdminPage() {
   const timerWarn = timerSecs <= 10 && timerSecs > 0
 
   const TABS = [
+    { key: 'schools'   as Tab, label: 'Schools',      Icon: Trophy     },
+    { key: 'bracket'   as Tab, label: 'Bracket',      Icon: ArrowRight },
     { key: 'teams'     as Tab, label: 'Teams',        Icon: Users      },
     { key: 'questions' as Tab, label: 'Questions',    Icon: HelpCircle },
     { key: 'pools'     as Tab, label: 'Question Banks', Icon: Layers     },
@@ -996,6 +1068,191 @@ export default function AdminPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-5 max-w-2xl mx-auto w-full space-y-4">
+
+        {/* ════════════════ SCHOOLS ════════════════ */}
+        {activeTab === 'schools' && <>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-black text-white text-sm">Schools ({schools.length}/16)</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">Add all 16 participating schools to their bracket slots</p>
+            </div>
+          </div>
+
+          {schoolsLoading ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-500" /></div> : (
+            <div className="space-y-2">
+              {Array.from({ length: 16 }, (_, i) => i + 1).map(slot => {
+                const school = schools.find(s => s.slot === slot)
+                const isEditing = editingSlot === slot
+                return (
+                  <div key={slot} className="bg-[#0a1628] border border-white/10 rounded-2xl p-4">
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-widest">Slot {slot}</p>
+                        <input
+                          placeholder="Full school name *"
+                          value={editSlotName}
+                          onChange={e => setEditSlotName(e.target.value)}
+                          className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+                        />
+                        <input
+                          placeholder="Nickname / short name (optional)"
+                          value={editSlotNick}
+                          onChange={e => setEditSlotNick(e.target.value)}
+                          className="w-full bg-[#060f1f] border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f5a623]"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            disabled={!editSlotName.trim()}
+                            onClick={async () => {
+                              const updated = schools.filter(s => s.slot !== slot)
+                              updated.push({ id: `slot_${slot}`, name: editSlotName.trim(), nickname: editSlotNick.trim() || undefined, slot })
+                              updated.sort((a, b) => a.slot - b.slot)
+                              setSchools(updated)
+                              await saveSchools(updated)
+                              setEditingSlot(null)
+                            }}
+                            className="flex-1 py-2 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-sm disabled:opacity-40 hover:bg-[#e0941a] transition-colors">
+                            Save
+                          </button>
+                          <button onClick={() => setEditingSlot(null)} className="px-4 py-2 bg-white/10 text-white rounded-xl text-sm hover:bg-white/20 transition-colors">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-[#f5a623]/20 border border-[#f5a623]/30 flex items-center justify-center text-[#f5a623] font-black text-xs shrink-0">{slot}</div>
+                        <div className="flex-1 min-w-0">
+                          {school ? (
+                            <>
+                              <p className="font-bold text-white text-sm truncate">{school.name}</p>
+                              {school.nickname && <p className="text-[11px] text-slate-400">aka &quot;{school.nickname}&quot;</p>}
+                            </>
+                          ) : (
+                            <p className="text-slate-500 text-sm italic">Empty — click Edit to add</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setEditingSlot(slot); setEditSlotName(school?.name ?? ''); setEditSlotNick(school?.nickname ?? '') }}
+                            className="p-1.5 text-slate-400 hover:text-[#f5a623] transition-colors">
+                            <Pencil size={13} />
+                          </button>
+                          {school && (
+                            <button
+                              onClick={async () => {
+                                const updated = schools.filter(s => s.slot !== slot)
+                                setSchools(updated)
+                                await saveSchools(updated)
+                              }}
+                              className="p-1.5 text-slate-600 hover:text-red-400 transition-colors">
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>}
+
+        {/* ════════════════ BRACKET ════════════════ */}
+        {activeTab === 'bracket' && <>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-black text-white text-sm">Tournament Bracket</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">{savedMatches.filter(m => m.match_code).length} / 16 bracket matches</p>
+            </div>
+            <button
+              disabled={schools.length < 16 || bracketGenerating}
+              onClick={async () => {
+                if (!confirm('Generate bracket? This will replace any existing bracket matches.')) return
+                setBracketGenerating(true)
+                const bracketMatches = generateBracketMatches(schools)
+                const nonBracket = savedMatches.filter(m => !m.match_code)
+                const all = [...nonBracket, ...bracketMatches]
+                setSavedMatches(all)
+                await saveSavedMatchesList(all)
+                setBracketGenerating(false)
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#f5a623] text-[#0a1628] rounded-xl text-xs font-black hover:bg-[#e0941a] transition-colors disabled:opacity-40">
+              {bracketGenerating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              {schools.length < 16 ? `Add ${16 - schools.length} more schools` : 'Generate Bracket'}
+            </button>
+          </div>
+
+          {[
+            { stage: 'r16',   label: 'Round of 16',        codes: ['M1','M2','M3','M4','M5','M6','M7','M8'] },
+            { stage: 'qf',    label: 'Quarter Finals',      codes: ['QF1','QF2','QF3','QF4'] },
+            { stage: 'sf',    label: 'Semi Finals',         codes: ['SF1','SF2'] },
+            { stage: '3team', label: '3-Team Final',        codes: ['3TF'] },
+            { stage: 'final', label: 'Grand Final',         codes: ['GF'] },
+          ].map(({ stage, label, codes }) => {
+            const stageMatches = codes.map(code => savedMatches.find(m => m.match_code === code)).filter(Boolean) as SavedMatch[]
+            if (stageMatches.length === 0) return null
+            return (
+              <div key={stage} className="space-y-2">
+                <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-widest">{label}</p>
+                {stageMatches.map(match => {
+                  const statusColor = match.status === 'completed' ? 'border-green-500/40 bg-green-500/5' : match.status === 'live' ? 'border-[#f5a623]/40 bg-[#f5a623]/5' : 'border-white/10'
+                  const isTBD = match.team_a_name === 'TBD' || match.team_b_name === 'TBD'
+                  return (
+                    <div key={match.id} className={`bg-[#0a1628] border rounded-2xl p-4 ${statusColor}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-500 font-bold">{match.match_code}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${match.status === 'completed' ? 'bg-green-500/20 text-green-400' : match.status === 'live' ? 'bg-[#f5a623]/20 text-[#f5a623]' : 'bg-white/5 text-slate-500'}`}>
+                              {match.status === 'completed' ? '✓ Done' : match.status === 'live' ? '● Live' : 'Draft'}
+                            </span>
+                          </div>
+                          <p className="text-sm font-bold text-white mt-1">
+                            {match.team_a_name} <span className="text-slate-500 font-normal">vs</span> {match.team_b_name}
+                            {match.team_c_name && <span className="text-slate-500 font-normal"> vs {match.team_c_name}</span>}
+                          </p>
+                          {match.status === 'completed' && match.winner && (
+                            <p className="text-[11px] text-[#f5a623] mt-0.5">🏆 {match.winner} — {match.final_score_a} vs {match.final_score_b}</p>
+                          )}
+                          {isTBD && match.status === 'draft' && (
+                            <p className="text-[10px] text-slate-600 mt-0.5 italic">Waiting for previous round results</p>
+                          )}
+                        </div>
+                        {!isTBD && match.status !== 'live' && match.status !== 'completed' && (
+                          <button
+                            onClick={async () => {
+                              const updated = savedMatches.map(m => m.id === match.id ? { ...m, status: 'live' as const } : m.status === 'live' ? { ...m, status: 'draft' as const } : m)
+                              setSavedMatches(updated)
+                              await saveSavedMatchesList(updated)
+                              setLaunchTeamA(match.team_a_name)
+                              setLaunchTeamB(match.team_b_name)
+                              setActiveTab('live')
+                            }}
+                            className="px-3 py-1.5 bg-[#f5a623] text-[#0a1628] rounded-xl text-xs font-black hover:bg-[#e0941a] transition-colors whitespace-nowrap">
+                            ▶ Play
+                          </button>
+                        )}
+                        {match.status === 'live' && (
+                          <button onClick={() => setActiveTab('live')} className="px-3 py-1.5 bg-green-600 text-white rounded-xl text-xs font-black hover:bg-green-500 transition-colors whitespace-nowrap">
+                            ● Control
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+
+          {savedMatches.filter(m => m.match_code).length === 0 && (
+            <div className="text-center py-12 text-slate-600">
+              <Trophy size={40} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No bracket yet.</p>
+              <p className="text-xs mt-1">Add all 16 schools then click Generate Bracket.</p>
+            </div>
+          )}
+        </>}
 
         {/* ════════════════ TEAMS ════════════════ */}
         {activeTab === 'teams' && <>

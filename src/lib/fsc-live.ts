@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { wsSubscribe, wsBroadcast } from './ws-sync'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 export const FSC_CHANNEL    = 'fsc-live'
@@ -173,7 +174,7 @@ export async function getISAnswers(problemIndex: number): Promise<{ a: string[] 
 
 // ── Pools & Saved Matches ─────────────────────────────────────────────────────
 
-export type PoolType = 'rapid_fire' | 'buzzer' | 'sprint'
+export type PoolType = 'rapid_fire' | 'buzzer' | 'sprint' | 'audio_visual'
 
 export type QuestionPool = {
   id: string
@@ -183,19 +184,168 @@ export type QuestionPool = {
   created_at: string
 }
 
+export type MatchStage = 'r16' | 'qf' | 'sf' | '3team' | 'final'
+
 export type SavedMatch = {
   id: string
   name: string
   team_a_name: string
   team_b_name: string
-  rf_pool_id: string | null    // Team A's RF pool
-  rf_pool_id_b: string | null  // Team B's RF pool
+  rf_pool_id: string | null
+  rf_pool_id_b: string | null
   bz_pool_id: string | null
-  is_pool_id: string | null    // Sprint Problem 1
-  is_pool_id_2: string | null  // Sprint Problem 2
+  is_pool_id: string | null
+  is_pool_id_2: string | null
   status: 'draft' | 'live' | 'completed'
   created_at: string
+  final_score_a?: number
+  final_score_b?: number
+  winner?: string
+  // Bracket fields
+  stage?: MatchStage
+  match_code?: string           // 'M1'..'M8','QF1'..'QF4','SF1','SF2','3TF','GF'
+  feeds_into?: string           // match_code of next match
+  feeds_into_slot?: 'a' | 'b'  // which slot in the next match
+  // 3-Team Final
+  team_c_name?: string
+  carried_score_a?: number      // scores carried from previous rounds
+  carried_score_b?: number
+  carried_score_c?: number
+  mc_pool_id_a?: string | null  // Mystery Chain puzzle pools
+  mc_pool_id_b?: string | null
+  mc_pool_id_c?: string | null
+  mc_score_a?: number
+  mc_score_b?: number
+  mc_score_c?: number
+  final_score_c?: number
+  winner_2?: string             // second place (for 3TF)
+  // Grand Final
+  av_pool_id_a?: string | null  // Audio Visual question pools
+  av_pool_id_b?: string | null
+  av_score_a?: number
+  av_score_b?: number
 }
+
+// ── Schools ───────────────────────────────────────────────────────────────────
+
+export type School = {
+  id: string
+  name: string
+  nickname?: string
+  slot: number  // 1–16, determines bracket position
+}
+
+const SCHOOLS_ROW_ID = 'fsc_schools'
+
+export async function getSchools(): Promise<School[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from('fsc_match_state').select('data').eq('id', SCHOOLS_ROW_ID).maybeSingle()
+  return (data?.data?.schools as School[]) ?? []
+}
+
+export async function saveSchools(schools: School[]): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from('fsc_match_state')
+    .upsert({ id: SCHOOLS_ROW_ID, data: { schools }, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+}
+
+// ── Bracket template ──────────────────────────────────────────────────────────
+
+export const BRACKET_TEMPLATE: Array<{
+  match_code: string
+  stage: MatchStage
+  name: string
+  slot_a?: number
+  slot_b?: number
+  feeds_into?: string
+  feeds_into_slot?: 'a' | 'b'
+}> = [
+  { match_code: 'M1',  stage: 'r16',    name: 'Round of 16 — Match 1', slot_a: 1,  slot_b: 2,  feeds_into: 'QF1', feeds_into_slot: 'a' },
+  { match_code: 'M2',  stage: 'r16',    name: 'Round of 16 — Match 2', slot_a: 3,  slot_b: 4,  feeds_into: 'QF1', feeds_into_slot: 'b' },
+  { match_code: 'M3',  stage: 'r16',    name: 'Round of 16 — Match 3', slot_a: 5,  slot_b: 6,  feeds_into: 'QF2', feeds_into_slot: 'a' },
+  { match_code: 'M4',  stage: 'r16',    name: 'Round of 16 — Match 4', slot_a: 7,  slot_b: 8,  feeds_into: 'QF2', feeds_into_slot: 'b' },
+  { match_code: 'M5',  stage: 'r16',    name: 'Round of 16 — Match 5', slot_a: 9,  slot_b: 10, feeds_into: 'QF3', feeds_into_slot: 'a' },
+  { match_code: 'M6',  stage: 'r16',    name: 'Round of 16 — Match 6', slot_a: 11, slot_b: 12, feeds_into: 'QF3', feeds_into_slot: 'b' },
+  { match_code: 'M7',  stage: 'r16',    name: 'Round of 16 — Match 7', slot_a: 13, slot_b: 14, feeds_into: 'QF4', feeds_into_slot: 'a' },
+  { match_code: 'M8',  stage: 'r16',    name: 'Round of 16 — Match 8', slot_a: 15, slot_b: 16, feeds_into: 'QF4', feeds_into_slot: 'b' },
+  { match_code: 'QF1', stage: 'qf',     name: 'Quarter Final 1',                               feeds_into: 'SF1', feeds_into_slot: 'a' },
+  { match_code: 'QF2', stage: 'qf',     name: 'Quarter Final 2',                               feeds_into: 'SF1', feeds_into_slot: 'b' },
+  { match_code: 'QF3', stage: 'qf',     name: 'Quarter Final 3',                               feeds_into: 'SF2', feeds_into_slot: 'a' },
+  { match_code: 'QF4', stage: 'qf',     name: 'Quarter Final 4',                               feeds_into: 'SF2', feeds_into_slot: 'b' },
+  { match_code: 'SF1', stage: 'sf',     name: 'Semi Final 1',                                  feeds_into: '3TF', feeds_into_slot: 'a' },
+  { match_code: 'SF2', stage: 'sf',     name: 'Semi Final 2',                                  feeds_into: '3TF', feeds_into_slot: 'b' },
+  { match_code: '3TF', stage: '3team',  name: '3-Team Final — Mystery Chain',                  feeds_into: 'GF',  feeds_into_slot: 'a' },
+  { match_code: 'GF',  stage: 'final',  name: 'Grand Final — Audio Visual' },
+]
+
+export function generateBracketMatches(schools: School[]): SavedMatch[] {
+  const bySlot = Object.fromEntries(schools.map(s => [s.slot, s]))
+  const displayName = (slot: number) => {
+    const sc = bySlot[slot]
+    return sc ? (sc.nickname || sc.name) : `TBD (Slot ${slot})`
+  }
+  return BRACKET_TEMPLATE.map(t => ({
+    id: `bracket_${t.match_code}`,
+    name: t.name,
+    team_a_name: t.slot_a ? displayName(t.slot_a) : 'TBD',
+    team_b_name: t.slot_b ? displayName(t.slot_b) : 'TBD',
+    team_c_name: t.match_code === '3TF' ? 'TBD (Best Loser)' : undefined,
+    rf_pool_id: null,
+    rf_pool_id_b: null,
+    bz_pool_id: null,
+    is_pool_id: null,
+    is_pool_id_2: null,
+    status: 'draft' as const,
+    created_at: new Date().toISOString(),
+    stage: t.stage,
+    match_code: t.match_code,
+    feeds_into: t.feeds_into,
+    feeds_into_slot: t.feeds_into_slot,
+  }))
+}
+
+// ── Mystery Chain ─────────────────────────────────────────────────────────────
+
+export type MysteryPuzzle = {
+  id: string
+  clue: string
+  scrambled: string
+  answer: string
+  story: string
+  image_url?: string
+}
+
+export type MysteryPack = {
+  id: string
+  name: string
+  scenario_title: string
+  opening_story: string
+  final_message: string
+  puzzles: MysteryPuzzle[]
+  created_at: string
+}
+
+const MYSTERY_PACKS_ROW_ID = 'fsc_mystery_packs'
+
+export async function getMysteryPacks(): Promise<MysteryPack[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from('fsc_match_state').select('data').eq('id', MYSTERY_PACKS_ROW_ID).maybeSingle()
+  return (data?.data?.packs as MysteryPack[]) ?? []
+}
+
+export async function saveMysteryPacks(packs: MysteryPack[]): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from('fsc_match_state')
+    .upsert({ id: MYSTERY_PACKS_ROW_ID, data: { packs }, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+}
+
+export const MC_PUZZLE_COUNT = 10
+export const MC_TIME_MS      = 60_000   // 60s per team
+export const MC_CORRECT_PTS  = 10
 
 const POOLS_ROW_ID   = 'fsc_pools_config'
 const MATCHES_ROW_ID = 'fsc_saved_matches'
@@ -246,9 +396,7 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
   let lastSig = ''
   let lastKnownState: FSCState | null = null  // tracks latest delivered state
   let destroyed = false
-  let channelReady = false                    // true once SUBSCRIBED
   let buzzRetry: ReturnType<typeof setInterval> | null = null
-  const mountTime = Date.now()
 
   const deliver = (s: FSCState) => {
     if (destroyed) return
@@ -256,7 +404,6 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
     if (sv === lastSig) return
     lastSig = sv
     lastKnownState = s
-    // If buzz was acknowledged (phase no longer 'showing'), stop retrying
     if (s.bz_phase !== 'showing' && buzzRetry) {
       clearInterval(buzzRetry)
       buzzRetry = null
@@ -264,108 +411,52 @@ export function subscribeToMatch(cb: (s: FSCState) => void): {
     cb(s)
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ch = (supabase.channel(FSC_CHANNEL) as any)
-    .on('broadcast', { event: 'state' }, (msg: { payload: FSCState }) => {
-      deliver(msg.payload)
-    })
-    .on('broadcast', { event: 'reload' }, () => {
-      // Admin sent a resync signal — reload this viewer page.
-      // Guard: ignore if the page just loaded (< 3 s ago) to prevent newly-
-      // opened tabs from immediately reloading when admin sends the signal.
-      if (Date.now() - mountTime > 3000) {
-        if (typeof window !== 'undefined') window.location.reload()
-      }
-    })
-    .subscribe((status: string) => { channelReady = status === 'SUBSCRIBED' })
+  // Seed with current DB state immediately
+  getMatchState().then(s => { if (s && !destroyed) deliver(safeForViewers(s)) })
 
-  const fetchAndDeliver = async () => {
-    if (destroyed) return
-    const s = await getMatchState()
-    if (!s || destroyed) return
-    deliver(safeForViewers(s))
-  }
-
-  // Fetch immediately on subscribe so the page is never blank
-  fetchAndDeliver()
-
-  // Poll every 300 ms — keeps viewer pages in sync even when broadcast lags
-  const poll = setInterval(fetchAndDeliver, 300)
-
-  // Re-sync instantly when the user switches back to this tab
-  const onVisible = () => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-      fetchAndDeliver()
-    }
-  }
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', onVisible)
-  }
-
-  // ── Buzz backup processor ────────────────────────────────────────────────
-  // The admin page polls every 200 ms to process buzzes. This runs every
-  // 500 ms as a fallback so buzzes register even if the admin tab is closed.
-  // It only acts after the buzz has been pending for >1 s (giving admin first shot).
-  const buzzBackup = setInterval(async () => {
-    if (destroyed) return
+  // WebSocket push — instant updates from local server
+  const unsubState = wsSubscribe(FSC_CHANNEL + ':state', (payload) => deliver(payload as FSCState))
+  const unsubReload = wsSubscribe(FSC_CHANNEL + ':reload', () => {
+    if (typeof window !== 'undefined') window.location.reload()
+  })
+  const unsubBuzz = wsSubscribe(FSC_CHANNEL + ':buzz', async (payload) => {
+    // Buzz received — process it like the old Supabase broadcast path
+    const p = payload as BuzzPending
     if (!lastKnownState || lastKnownState.bz_phase !== 'showing') return
-
-    const pending = await getBuzzPending()
-    if (!pending || destroyed) return
-    if (pending.q_index !== lastKnownState.bz_q_index) return
-
-    // Admin processes within ~200 ms; only step in if still unprocessed after 1 s
-    const age = Date.now() - pending.time
-    if (age < 1000) return
-
-    // Re-read full state from DB (preserves admin-only fields like answers/steps)
     const fullState = await getMatchState()
     if (!fullState || destroyed) return
-    if (fullState.bz_phase !== 'showing') return      // admin already processed it
-    if (fullState.bz_q_index !== pending.q_index) return
-
-    const buzzedPhase = pending.team === 'a' ? 'buzzed_a' : 'buzzed_b'
-    const updated: FSCState = { ...fullState, bz_phase: buzzedPhase, bz_buzz_start: pending.time }
+    if (fullState.bz_phase !== 'showing') return
+    const buzzedPhase = p.team === 'a' ? 'buzzed_a' : 'buzzed_b'
+    const updated: FSCState = { ...fullState, bz_phase: buzzedPhase, bz_buzz_start: p.time }
     await saveMatchState(updated).catch(() => {})
     await clearBuzzPending().catch(() => {})
     deliver(safeForViewers(updated))
-  }, 500)
+  })
 
   return {
     unsubscribe: () => {
       destroyed = true
       if (buzzRetry) { clearInterval(buzzRetry); buzzRetry = null }
-      supabase.removeChannel(ch)
-      clearInterval(poll)
-      clearInterval(buzzBackup)
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', onVisible)
-      }
+      unsubState(); unsubReload(); unsubBuzz()
     },
 
     sendBuzz: (team: 'a' | 'b', qIndex?: number) => {
       if (destroyed) return
-      // Clear any previous retry for a prior question
       if (buzzRetry) { clearInterval(buzzRetry); buzzRetry = null }
-      // Prefer qIndex from caller (React state) over lastKnownState which may lag.
       const qIdx = qIndex ?? lastKnownState?.bz_q_index ?? 0
       const payload: BuzzPending = { team, q_index: qIdx, time: Date.now() }
 
       const attemptSend = () => {
         if (destroyed) return
-        // Stop retrying if phase is no longer 'showing' (buzz was acknowledged)
         if (lastKnownState && lastKnownState.bz_phase !== 'showing') {
           if (buzzRetry) { clearInterval(buzzRetry); buzzRetry = null }
           return
         }
-        // 1. Broadcast via Realtime (instant; no RLS; admin receives on same channel)
-        if (channelReady) ch.send({ type: 'broadcast', event: 'buzz', payload })
-        // 2. DB write as backup (admin 200ms poll + viewer backup processor)
+        wsBroadcast(FSC_CHANNEL + ':buzz', payload)
         saveBuzzPending(team, qIdx).catch(() => {})
       }
 
       attemptSend()
-      // Retry every 400 ms until the admin acknowledges (phase changes from 'showing')
       buzzRetry = setInterval(attemptSend, 400)
     },
 

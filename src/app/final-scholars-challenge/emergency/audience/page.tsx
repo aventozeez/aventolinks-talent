@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2 } from 'lucide-react'
 import {
   EmergencyState, EmergencyScore, INCIDENTS,
   defaultEmergencyState, subscribeToEmergency,
@@ -28,12 +27,11 @@ function ScorePanel({ label, color, score, submitted, deployCount }:
 
 export default function EmergencyAudiencePage() {
   const [state,   setState]   = useState<EmergencyState>(defaultEmergencyState())
-  const [loading, setLoading] = useState(true)
   const [timerMs, setTimerMs] = useState(0)
   const timerRef = useRef<NodeJS.Timeout>()
 
   useEffect(() => {
-    const sub = subscribeToEmergency(s => { setState(s); setLoading(false) })
+    const sub = subscribeToEmergency(s => { setState(s) })
     return sub.unsubscribe
   }, [])
 
@@ -44,12 +42,6 @@ export default function EmergencyAudiencePage() {
     tick(); timerRef.current = setInterval(tick, 200)
     return () => clearInterval(timerRef.current)
   }, [state.timer_start, state.phase])
-
-  if (loading) return (
-    <div className="min-h-screen bg-[#060f1f] flex items-center justify-center">
-      <Loader2 className="animate-spin text-[#f5a623]" size={48}/>
-    </div>
-  )
 
   const { phase, score_a, score_b } = state
   const timerWarn = timerMs > 0 && timerMs < 30_000

@@ -8,7 +8,7 @@ import {
   subscribeToSim, saveSimState, getSimState,
   SIM_CHANNEL,
 } from '@/lib/fsc-simulator'
-import { supabase } from '@/lib/supabase'
+import { wsBroadcast } from '@/lib/ws-sync'
 
 const TEAM: 'a' | 'b' = 'a'
 const TEAM_COLOR = 'green'
@@ -56,8 +56,7 @@ export default function SimTeamAPage() {
     if (!s || s.phase !== 'working') return
     const updated = { ...s, team_a_allocation: alloc }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ch = (supabase.channel(SIM_CHANNEL) as any)
-    ch.send({ type: 'broadcast', event: 'sim_state', payload: updated })
+    wsBroadcast(SIM_CHANNEL, updated)
     await saveSimState(updated)
   }, [])
 
@@ -87,8 +86,7 @@ export default function SimTeamAPage() {
       score_a: score,
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ch = (supabase.channel(SIM_CHANNEL) as any)
-    ch.send({ type: 'broadcast', event: 'sim_state', payload: updated })
+    wsBroadcast(SIM_CHANNEL, updated)
     await saveSimState(updated)
     setState(updated)
     setSubmitting(false)

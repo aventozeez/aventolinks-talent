@@ -1,5 +1,5 @@
-// Uses the existing singleton supabase client so all tabs share the same WS pool
 import { supabase } from './supabase'
+import { wsSubscribe, wsBroadcast } from './ws-sync'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 export const BROADCAST_ROOM = 'quiz-live'
@@ -76,32 +76,22 @@ export function subscribeToLive(cb: (s: QuizLiveState) => void): {
   let lastSig  = ''
   let lastMode: GameMode = 'rapid_fire'   // remembered across polls
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ch = (supabase.channel(BROADCAST_ROOM) as any)
-    .on('broadcast', { event: 'quiz_state' }, (msg: { payload: QuizLiveState }) => {
-      if (msg.payload.mode) lastMode = msg.payload.mode
-      lastSig = _sig(msg.payload)
-      cb(msg.payload)
-    })
-    .subscribe()
-
-  // Polling fallback — merges last known mode so viewers stay mode-aware after refresh
-  const poll = setInterval(async () => {
-    const { data } = await getLiveState()
+  // Seed with DB state immediately
+  getLiveState().then(({ data }) => {
     if (!data) return
-    const sig = _sig(data)
-    if (sig === lastSig) return
-    lastSig = sig
+    lastSig = _sig(data)
     cb({ ...data, mode: lastMode })
-  }, 2000)
+  })
+
+  const unsubState = wsSubscribe(BROADCAST_ROOM + ':state', (payload) => {
+    const s = payload as QuizLiveState
+    if (s.mode) lastMode = s.mode
+    lastSig = _sig(s)
+    cb(s)
+  })
 
   return {
-    unsubscribe: () => {
-      supabase.removeChannel(ch)
-      clearInterval(poll)
-    },
-    /** Teams call this to buzz in. Admin's channel receives the event. */
-    sendBuzz: (team: 'a' | 'b') =>
-      ch.send({ type: 'broadcast', event: 'buzz', payload: { team } }),
+    unsubscribe: unsubState,
+    sendBuzz: (team: 'a' | 'b') => wsBroadcast(BROADCAST_ROOM + ':buzz', { team }),
   }
 }

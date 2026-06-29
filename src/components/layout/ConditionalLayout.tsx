@@ -6,8 +6,10 @@ import Navbar from './Navbar'
 export default function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isStaffPage = pathname?.startsWith('/dashboard/staff')
+  const isFSCPage   = pathname?.startsWith('/final-scholars-challenge')
+  const isQuizLive  = pathname?.startsWith('/quiz-live')
 
-  if (isStaffPage) {
+  if (isStaffPage || isFSCPage || isQuizLive) {
     return <>{children}</>
   }
 

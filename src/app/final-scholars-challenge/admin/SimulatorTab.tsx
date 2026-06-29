@@ -5,7 +5,7 @@ import {
   Play, RotateCcw, Eye, Loader2, Zap, Trophy,
   CheckCircle, Clock, AlertTriangle, ChevronRight,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 import {
   SCENARIOS, SimState, SimScenario, SimAllocation,
   makeDefaultSimState, makeDefaultAllocation,
@@ -26,8 +26,6 @@ export default function SimulatorTab() {
   const [saving,  setSaving]  = useState(false)
   const [timerMs, setTimerMs] = useState(0)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const channelRef = useRef<any>(null)
   const stateRef   = useRef<SimState | null>(null)
   useEffect(() => { stateRef.current = state }, [state])
 
@@ -38,7 +36,7 @@ export default function SimulatorTab() {
   const apply = useCallback(async (next: SimState) => {
     setState(next)
     stateRef.current = next
-    channelRef.current?.send({ type: 'broadcast', event: 'sim_state', payload: next })
+    wsBroadcast(SIM_CHANNEL, next)
     setSaving(true)
     await saveSimState(next)
     setSaving(false)
@@ -46,20 +44,16 @@ export default function SimulatorTab() {
 
   // ── Channel + initial load ──────────────────────────────────────────────────
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ch = (supabase.channel(SIM_CHANNEL) as any)
-      .on('broadcast', { event: 'sim_state' }, (msg: { payload: SimState }) => {
-        setState(msg.payload)
-        stateRef.current = msg.payload
-      })
-      .subscribe((status: string) => { if (status === 'SUBSCRIBED') channelRef.current = ch })
-
     getSimState().then(s => {
       setState(s ?? makeDefaultSimState())
       setLoading(false)
     })
 
-    return () => { supabase.removeChannel(ch); channelRef.current = null }
+    const unsub = wsSubscribe(SIM_CHANNEL, (payload) => {
+      const s = payload as SimState
+      setState(s); stateRef.current = s
+    })
+    return unsub
   }, [])
 
   // ── Timer tick ──────────────────────────────────────────────────────────────
