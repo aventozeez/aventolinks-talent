@@ -173,7 +173,7 @@ export async function getISAnswers(problemIndex: number): Promise<{ a: string[] 
 
 // ── Pools & Saved Matches ─────────────────────────────────────────────────────
 
-export type PoolType = 'rapid_fire' | 'buzzer' | 'sprint'
+export type PoolType = 'rapid_fire' | 'buzzer' | 'sprint' | 'audio_visual'
 
 export type QuestionPool = {
   id: string
@@ -183,22 +183,123 @@ export type QuestionPool = {
   created_at: string
 }
 
+export type MatchStage = 'r16' | 'qf' | 'sf' | '3team' | 'final'
+
 export type SavedMatch = {
   id: string
   name: string
   team_a_name: string
   team_b_name: string
-  rf_pool_id: string | null    // Team A's RF pool
-  rf_pool_id_b: string | null  // Team B's RF pool
+  rf_pool_id: string | null
+  rf_pool_id_b: string | null
   bz_pool_id: string | null
-  is_pool_id: string | null    // Sprint Problem 1
-  is_pool_id_2: string | null  // Sprint Problem 2
+  is_pool_id: string | null
+  is_pool_id_2: string | null
   status: 'draft' | 'live' | 'completed'
   created_at: string
   final_score_a?: number
   final_score_b?: number
   winner?: string
+  stage?: MatchStage
+  match_code?: string
+  feeds_into?: string
+  feeds_into_slot?: 'a' | 'b'
+  team_c_name?: string
+  carried_score_a?: number
+  carried_score_b?: number
+  carried_score_c?: number
+  mc_pool_id_a?: string | null
+  mc_pool_id_b?: string | null
+  mc_pool_id_c?: string | null
+  mc_score_a?: number
+  mc_score_b?: number
+  mc_score_c?: number
+  final_score_c?: number
+  winner_2?: string
+  av_pool_id_a?: string | null
+  av_pool_id_b?: string | null
+  av_score_a?: number
+  av_score_b?: number
 }
+
+export type School = {
+  id: string
+  name: string
+  nickname?: string
+  slot: number
+}
+
+const SCHOOLS_ROW_ID = 'fsc_schools'
+
+export async function getSchools(): Promise<School[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from('fsc_match_state').select('data').eq('id', SCHOOLS_ROW_ID).maybeSingle()
+  return (data?.data?.schools as School[]) ?? []
+}
+
+export async function saveSchools(schools: School[]): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from('fsc_match_state')
+    .upsert({ id: SCHOOLS_ROW_ID, data: { schools }, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+}
+
+export const BRACKET_TEMPLATE: Array<{
+  match_code: string; stage: MatchStage; name: string
+  slot_a?: number; slot_b?: number; feeds_into?: string; feeds_into_slot?: 'a' | 'b'
+}> = [
+  { match_code: 'M1',  stage: 'r16',   name: 'Round of 16 — Match 1', slot_a: 1,  slot_b: 2,  feeds_into: 'QF1', feeds_into_slot: 'a' },
+  { match_code: 'M2',  stage: 'r16',   name: 'Round of 16 — Match 2', slot_a: 3,  slot_b: 4,  feeds_into: 'QF1', feeds_into_slot: 'b' },
+  { match_code: 'M3',  stage: 'r16',   name: 'Round of 16 — Match 3', slot_a: 5,  slot_b: 6,  feeds_into: 'QF2', feeds_into_slot: 'a' },
+  { match_code: 'M4',  stage: 'r16',   name: 'Round of 16 — Match 4', slot_a: 7,  slot_b: 8,  feeds_into: 'QF2', feeds_into_slot: 'b' },
+  { match_code: 'M5',  stage: 'r16',   name: 'Round of 16 — Match 5', slot_a: 9,  slot_b: 10, feeds_into: 'QF3', feeds_into_slot: 'a' },
+  { match_code: 'M6',  stage: 'r16',   name: 'Round of 16 — Match 6', slot_a: 11, slot_b: 12, feeds_into: 'QF3', feeds_into_slot: 'b' },
+  { match_code: 'M7',  stage: 'r16',   name: 'Round of 16 — Match 7', slot_a: 13, slot_b: 14, feeds_into: 'QF4', feeds_into_slot: 'a' },
+  { match_code: 'M8',  stage: 'r16',   name: 'Round of 16 — Match 8', slot_a: 15, slot_b: 16, feeds_into: 'QF4', feeds_into_slot: 'b' },
+  { match_code: 'QF1', stage: 'qf',    name: 'Quarter Final 1', feeds_into: 'SF1', feeds_into_slot: 'a' },
+  { match_code: 'QF2', stage: 'qf',    name: 'Quarter Final 2', feeds_into: 'SF1', feeds_into_slot: 'b' },
+  { match_code: 'QF3', stage: 'qf',    name: 'Quarter Final 3', feeds_into: 'SF2', feeds_into_slot: 'a' },
+  { match_code: 'QF4', stage: 'qf',    name: 'Quarter Final 4', feeds_into: 'SF2', feeds_into_slot: 'b' },
+  { match_code: 'SF1', stage: 'sf',    name: 'Semi Final 1', feeds_into: '3TF', feeds_into_slot: 'a' },
+  { match_code: 'SF2', stage: 'sf',    name: 'Semi Final 2', feeds_into: '3TF', feeds_into_slot: 'b' },
+  { match_code: '3TF', stage: '3team', name: '3-Team Final — Mystery Chain', feeds_into: 'GF', feeds_into_slot: 'a' },
+  { match_code: 'GF',  stage: 'final', name: 'Grand Final — Audio Visual' },
+]
+
+export function generateBracketMatches(schools: School[]): SavedMatch[] {
+  const bySlot = Object.fromEntries(schools.map(s => [s.slot, s]))
+  const displayName = (slot: number) => { const sc = bySlot[slot]; return sc ? (sc.nickname || sc.name) : `TBD (Slot ${slot})` }
+  return BRACKET_TEMPLATE.map(t => ({
+    id: `bracket_${t.match_code}`,
+    name: t.name,
+    team_a_name: t.slot_a ? displayName(t.slot_a) : 'TBD',
+    team_b_name: t.slot_b ? displayName(t.slot_b) : 'TBD',
+    team_c_name: t.match_code === '3TF' ? 'TBD (Best Loser)' : undefined,
+    rf_pool_id: null, rf_pool_id_b: null, bz_pool_id: null, is_pool_id: null, is_pool_id_2: null,
+    status: 'draft' as const,
+    created_at: new Date().toISOString(),
+    stage: t.stage, match_code: t.match_code, feeds_into: t.feeds_into, feeds_into_slot: t.feeds_into_slot,
+  }))
+}
+
+export type MysteryPuzzle = { id: string; clue: string; scrambled: string; answer: string; story: string; image_url?: string }
+export type MysteryPack = { id: string; name: string; scenario_title: string; opening_story: string; final_message: string; puzzles: MysteryPuzzle[]; created_at: string }
+
+const MYSTERY_PACKS_ROW_ID = 'fsc_mystery_packs'
+export async function getMysteryPacks(): Promise<MysteryPack[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any).from('fsc_match_state').select('data').eq('id', MYSTERY_PACKS_ROW_ID).maybeSingle()
+  return (data?.data?.packs as MysteryPack[]) ?? []
+}
+export async function saveMysteryPacks(packs: MysteryPack[]): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from('fsc_match_state').upsert({ id: MYSTERY_PACKS_ROW_ID, data: { packs }, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+}
+
+export const MC_PUZZLE_COUNT = 10
+export const MC_TIME_MS      = 60_000
+export const MC_CORRECT_PTS  = 10
 
 const POOLS_ROW_ID   = 'fsc_pools_config'
 const MATCHES_ROW_ID = 'fsc_saved_matches'
