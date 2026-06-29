@@ -367,15 +367,6 @@ export function generateBracketMatches(schools: School[]): SavedMatch[] {
 
 // ── Mystery Chain ─────────────────────────────────────────────────────────────
 
-export type MysteryPuzzle = {
-  id: string
-  clue: string
-  scrambled: string
-  answer: string
-  story: string
-  image_url?: string
-}
-
 export type MysteryPack = {
   id: string
   name: string

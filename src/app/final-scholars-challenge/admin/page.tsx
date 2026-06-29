@@ -23,7 +23,7 @@ import {
   getPools, savePools, getSavedMatches, saveSavedMatchesList,
   School, getSchools, saveSchools, generateBracketMatches, BRACKET_TEMPLATE,
   MysteryPack, MysteryPuzzle, getMysteryPacks, saveMysteryPacks,
-  MCPhase, AVPhase, MC_TIME_MS, MC_CORRECT_PTS, MC_PUZZLE_COUNT,
+  MC_TIME_MS, MC_CORRECT_PTS, MC_PUZZLE_COUNT,
 } from '@/lib/fsc-live'
 import { supabase } from '@/lib/supabase'
 import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
@@ -58,6 +58,10 @@ const fmtTime = (ms: number) => {
 export default function AdminPage() {
   const router = useRouter()
   const [authChecked, setAuthChecked] = useState(false)
+  const [needsLogin, setNeedsLogin] = useState(false)
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('teams')
 
   // ── Teams ──────────────────────────────────────────────────────────────────
@@ -183,10 +187,22 @@ export default function AdminPage() {
     }
   }, [fscState?.rf_phase, fscState?.mc_phase, fscState?.av_phase])
 
-  // ── Auth (bypassed for local hosting) ────────────────────────────────────
+  // ── Auth — restore session or show login form ────────────────────────────
   useEffect(() => {
-    setAuthChecked(true)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) { setAuthChecked(true) }
+      else { setNeedsLogin(true) }
+    })
   }, [])
+
+  const handleLogin = async () => {
+    setLoginLoading(true); setLoginError('')
+    const { error } = await supabase.auth.signInWithPassword({
+      email: 'azeezadebayo39@gmail.com', password: loginPassword,
+    })
+    if (error) { setLoginError(error.message); setLoginLoading(false) }
+    else { setNeedsLogin(false); setAuthChecked(true) }
+  }
 
   // ── Core: save state + broadcast to all clients ────────────────────────────
   const applyState = useCallback(async (newState: FSCState) => {
@@ -1134,6 +1150,29 @@ export default function AdminPage() {
       av_score_b: Math.min(newCorrectB, 10) * RF_CORRECT_PTS,
     })
   }
+
+  // ── Login screen (local hosting — no stored session) ──────────────────────
+  if (needsLogin) return (
+    <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
+      <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-8 w-full max-w-sm space-y-4">
+        <h2 className="text-white text-xl font-bold text-center">Admin Login</h2>
+        <p className="text-slate-400 text-sm text-center">{`azeezadebayo39@gmail.com`}</p>
+        <input
+          type="password" placeholder="Password" value={loginPassword}
+          onChange={e => setLoginPassword(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleLogin()}
+          className="w-full bg-slate-800 text-white border border-slate-600 rounded-lg px-4 py-2 focus:outline-none focus:border-[#f5a623]"
+        />
+        {loginError && <p className="text-red-400 text-sm">{loginError}</p>}
+        <button
+          onClick={handleLogin} disabled={loginLoading || !loginPassword}
+          className="w-full bg-[#f5a623] text-black font-bold py-2 rounded-lg hover:bg-[#e09510] disabled:opacity-50"
+        >
+          {loginLoading ? 'Signing in…' : 'Sign In'}
+        </button>
+      </div>
+    </div>
+  )
 
   // ── Loading guard ──────────────────────────────────────────────────────────
   if (!authChecked || fscLoading) return (
