@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabaseAdmin as supabase } from './supabase'
 import { wsSubscribe, wsBroadcast } from './ws-sync'
 
 // ── Constants ─────────────────────────────────────────────────────────────────

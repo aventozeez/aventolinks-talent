@@ -5,6 +5,10 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Admin client uses service role key (local-only — bypasses RLS)
+const serviceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY ?? supabaseAnonKey
+export const supabaseAdmin = createClient(supabaseUrl, serviceKey)
+
 // =============================================
 // AUTH HELPERS
 // =============================================
