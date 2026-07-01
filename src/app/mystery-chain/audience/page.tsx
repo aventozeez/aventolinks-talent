@@ -59,6 +59,22 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
     return () => clearInterval(iv)
   }, [fullText])
 
+  // Text-to-speech narration
+  useEffect(() => {
+    if (!fullText || typeof window === 'undefined' || !window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    const utter = new SpeechSynthesisUtterance(fullText)
+    utter.rate = 0.88
+    utter.pitch = 0.95
+    utter.volume = 1
+    // prefer a deep/dramatic voice if available
+    const voices = window.speechSynthesis.getVoices()
+    const preferred = voices.find(v => /male|david|google uk|daniel/i.test(v.name))
+    if (preferred) utter.voice = preferred
+    window.speechSynthesis.speak(utter)
+    return () => { window.speechSynthesis.cancel() }
+  }, [fullText])
+
   // Blinking cursor
   useEffect(() => {
     const iv = setInterval(() => setCursorVisible(v => !v), 530)
