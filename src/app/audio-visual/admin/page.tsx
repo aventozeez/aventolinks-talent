@@ -93,6 +93,24 @@ export default function AVAdmin() {
   const [timer, setTimer] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Listen for incoming AV state pushed from Mystery Chain admin
+  const [mcPush, setMcPush] = useState<{ teamA: string; teamB: string } | null>(null)
+  useEffect(() => {
+    const ws = new WebSocket(WS_URL)
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', channel: CHANNEL }))
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data)
+        if (msg.channel === CHANNEL && msg.payload?.teamA && msg.payload?.teamB) {
+          // MC admin pushed new teams — surface the banner if we're still idle
+          setMcPush({ teamA: msg.payload.teamA, teamB: msg.payload.teamB })
+        }
+      } catch {}
+    }
+    ws.onerror = () => ws.close()
+    return () => ws.close()
+  }, [])
+
   // broadcast whenever state changes
   useEffect(() => {
     broadcast(state)
@@ -220,6 +238,27 @@ export default function AVAdmin() {
             <button onClick={resetAll} className="px-3 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs">Reset All</button>
           </div>
         </div>
+
+        {/* Mystery Chain handoff banner */}
+        {mcPush && state.phase === 'idle' && (
+          <div className="bg-purple-900/40 border border-purple-500/50 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-purple-300 text-xs font-bold uppercase tracking-widest mb-1">📺 Mystery Chain Result Received</p>
+              <p className="text-white font-bold">
+                Top 2 advancing: <span className="text-green-400">{mcPush.teamA}</span> vs <span className="text-blue-400">{mcPush.teamB}</span>
+              </p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button
+                onClick={() => { update({ teamA: mcPush.teamA, teamB: mcPush.teamB }); setMcPush(null) }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-xl"
+              >
+                ✓ Use These Teams
+              </button>
+              <button onClick={() => setMcPush(null)} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-xl">✕</button>
+            </div>
+          </div>
+        )}
 
         {/* Phase banner */}
         <div className="bg-[#111827] rounded-2xl p-4 flex items-center justify-between">

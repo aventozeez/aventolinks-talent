@@ -534,6 +534,36 @@ export default function MCAdminPage() {
                 })}
               </div>
             </div>
+            {/* Advance top 2 to Audio Visual */}
+            {(() => {
+              const ranked = [
+                { name: s.teamA, score: s.scoreA },
+                { name: s.teamB, score: s.scoreB },
+                { name: s.teamC, score: s.scoreC },
+              ].sort((a, b) => b.score - a.score)
+              return (
+                <button
+                  onClick={() => wsBroadcast('av:state', {
+                    phase: 'idle',
+                    videoUrl: 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1',
+                    videoPlay: false,
+                    teamA: ranked[0].name,
+                    teamB: ranked[1].name,
+                    questions: [],
+                    currentQ: 0,
+                    timerStart: null,
+                    scoreA: 0,
+                    scoreB: 0,
+                    correctA: 0,
+                    correctB: 0,
+                  })}
+                  className="w-full bg-purple-700 hover:bg-purple-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+                >
+                  📺 Advance Top 2 to Audio Visual Round
+                  <span className="text-purple-300 font-normal text-sm">({ranked[0].name} &amp; {ranked[1].name})</span>
+                </button>
+              )
+            })()}
             <button onClick={reset} className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl">
               Start New Game
             </button>
