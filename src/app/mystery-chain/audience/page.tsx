@@ -70,32 +70,106 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
 
       {/* keyframe definitions */}
       <style>{`
-        @keyframes radar {
-          0% { transform: scale(0.4); opacity: 0.6; }
-          100% { transform: scale(2.2); opacity: 0; }
+        @keyframes detective-walk {
+          0%   { transform: translateX(-12vw) scaleX(1); }
+          49%  { transform: translateX(108vw) scaleX(1); }
+          50%  { transform: translateX(108vw) scaleX(-1); }
+          99%  { transform: translateX(-12vw) scaleX(-1); }
+          100% { transform: translateX(-12vw) scaleX(1); }
         }
-        @keyframes blink-cursor {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
+        @keyframes detective-bob {
+          0%,100% { bottom: 18px; }
+          50%      { bottom: 26px; }
+        }
+        @keyframes footprint-fade {
+          0%   { opacity: 0; transform: scale(0.5); }
+          15%  { opacity: 0.55; transform: scale(1); }
+          80%  { opacity: 0.35; }
+          100% { opacity: 0; }
+        }
+        @keyframes magnify-bob {
+          0%,100% { transform: translateY(0px) rotate(-8deg); }
+          50%      { transform: translateY(-18px) rotate(8deg); }
+        }
+        @keyframes question-rise {
+          0%   { opacity: 0; transform: translateY(0px) scale(0.6); }
+          20%  { opacity: 0.7; transform: translateY(-20px) scale(1); }
+          80%  { opacity: 0.5; transform: translateY(-70px) scale(1); }
+          100% { opacity: 0; transform: translateY(-100px) scale(0.8); }
+        }
+        @keyframes shadow-slide {
+          0%   { opacity: 0; transform: translateX(-60px); }
+          20%  { opacity: 0.18; }
+          80%  { opacity: 0.18; }
+          100% { opacity: 0; transform: translateX(60px); }
+        }
+        @keyframes torch-sweep {
+          0%,100% { transform: rotate(-20deg); opacity: 0.25; }
+          50%      { transform: rotate(20deg);  opacity: 0.5; }
         }
       `}</style>
 
-      {/* Radar pulse rings */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        {[0,1,2,3].map(i => (
-          <div key={i} className="absolute rounded-full border-2 border-purple-500"
-            style={{
-              width: '60vw', height: '60vw',
-              animation: `radar ${2.4 + i * 0.7}s ease-out infinite`,
-              animationDelay: `${i * 0.65}s`,
-            }} />
-        ))}
-        <div className="absolute w-48 h-48 rounded-full bg-purple-950/60 blur-3xl" />
-      </div>
+      {/* Characters layer */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
 
-      {/* Scanlines */}
-      <div className="absolute inset-0 pointer-events-none"
-        style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.07) 3px, rgba(0,0,0,0.07) 4px)' }} />
+        {/* Detective walking across bottom */}
+        <div style={{ position:'absolute', fontSize:'3rem', animation:'detective-walk 14s linear infinite, detective-bob 0.7s ease-in-out infinite' }}>
+          🕵️
+        </div>
+
+        {/* Footprints scattered at the bottom */}
+        {[10,22,34,46,58,70,82].map((left, i) => (
+          <div key={i} style={{
+            position:'absolute', bottom: i % 2 === 0 ? 6 : 14, left:`${left}%`,
+            fontSize:'1.3rem', opacity:0,
+            animation:`footprint-fade 14s linear infinite`,
+            animationDelay:`${i * 1.4 + 1}s`,
+          }}>👣</div>
+        ))}
+
+        {/* Magnifying glass floating top-right */}
+        <div style={{
+          position:'absolute', top:'12%', right:'6%',
+          fontSize:'3.5rem', opacity:0.45,
+          animation:'magnify-bob 3.5s ease-in-out infinite',
+        }}>🔍</div>
+
+        {/* Torch/flashlight sweeping from top-left */}
+        <div style={{
+          position:'absolute', top:'8%', left:'5%',
+          fontSize:'3rem', opacity:0.4,
+          animation:'torch-sweep 4s ease-in-out infinite',
+          transformOrigin:'bottom center',
+        }}>🔦</div>
+
+        {/* Floating question marks */}
+        {[15, 42, 68, 85].map((left, i) => (
+          <div key={i} style={{
+            position:'absolute', bottom:'22%', left:`${left}%`,
+            fontSize: i % 2 === 0 ? '1.8rem' : '1.2rem',
+            opacity:0,
+            animation:`question-rise ${5 + i}s ease-out infinite`,
+            animationDelay:`${i * 2.2}s`,
+          }}>❓</div>
+        ))}
+
+        {/* Shadow silhouette creeping on the right */}
+        <div style={{
+          position:'absolute', bottom:0, right:'8%',
+          fontSize:'5rem', opacity:0,
+          animation:'shadow-slide 8s ease-in-out infinite',
+          animationDelay:'3s',
+          filter:'brightness(0) opacity(0.25)',
+        }}>🧍</div>
+
+        {/* Caution tape strip at the very bottom */}
+        <div style={{
+          position:'absolute', bottom:0, left:0, right:0,
+          height:'8px',
+          background:'repeating-linear-gradient(90deg, #f5a623 0px, #f5a623 30px, #1a1a1a 30px, #1a1a1a 60px)',
+          opacity:0.35,
+        }} />
+      </div>
 
       <div className="relative z-10 flex flex-col flex-1 p-5 gap-4">
         <Scoreboard s={s} activeKey={null} />
