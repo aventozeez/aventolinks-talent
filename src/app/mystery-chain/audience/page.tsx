@@ -84,297 +84,266 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden relative">
 
-      {/* Cartoon scene — SVG animated film strip */}
-      <div className="absolute inset-x-0 bottom-0 pointer-events-none overflow-hidden select-none" style={{height:'45%', opacity:0.85}}>
-        <svg viewBox="0 0 1000 260" xmlns="http://www.w3.org/2000/svg" style={{width:'100%',height:'100%',display:'block'}}>
+      {/* ── FULL-SCREEN CARTOON SCENE ── */}
+      <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+        <svg viewBox="0 0 1000 560" xmlns="http://www.w3.org/2000/svg"
+          style={{width:'100%', height:'100%', display:'block'}}>
           <defs>
-            <linearGradient id="sky-day" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#5bb8f5"/><stop offset="100%" stopColor="#c9e8fb"/>
-            </linearGradient>
-            <linearGradient id="sky-dusk" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#1a1a40"/><stop offset="100%" stopColor="#3a2a50"/>
-            </linearGradient>
-            <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="mc-grass" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#4caf50"/><stop offset="100%" stopColor="#2e7d32"/>
             </linearGradient>
           </defs>
 
-          {/* ── SKY – brightens then darkens ── */}
-          <rect width="1000" height="180" fill="#5bb8f5">
+          {/* SKY */}
+          <rect width="1000" height="390" fill="#5bb8f5">
             <animate attributeName="fill"
-              values="#5bb8f5;#5bb8f5;#7a6a90;#1a1a40"
-              keyTimes="0;0.45;0.65;1"
-              dur="35s" repeatCount="indefinite"/>
+              values="#5bb8f5;#5bb8f5;#6a5a80;#12122a"
+              keyTimes="0;0.45;0.65;1" dur="35s" repeatCount="indefinite"/>
           </rect>
 
-          {/* ── SUN – rises then sets ── */}
-          <circle r="28" fill="#FFD700">
-            <animate attributeName="cx" values="80;400;820;1050" keyTimes="0;0.3;0.55;0.7" dur="35s" repeatCount="indefinite"/>
-            <animate attributeName="cy" values="110;55;90;200"  keyTimes="0;0.3;0.55;0.7" dur="35s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="1;1;0.6;0" keyTimes="0;0.5;0.65;0.75" dur="35s" repeatCount="indefinite"/>
+          {/* SUN */}
+          <circle r="38" fill="#FFD700" opacity="1">
+            <animate attributeName="cx" values="90;420;860;1100" keyTimes="0;0.3;0.55;0.72" dur="35s" repeatCount="indefinite"/>
+            <animate attributeName="cy" values="200;80;140;350"  keyTimes="0;0.3;0.55;0.72" dur="35s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="1;1;0.5;0"  keyTimes="0;0.5;0.65;0.75" dur="35s" repeatCount="indefinite"/>
           </circle>
 
-          {/* ── DAY CLOUD ── */}
+          {/* WHITE CLOUD drifts left → right */}
           <g>
-            <animate attributeName="transform" values="translate(-120,0);translate(500,0);translate(1100,0)" keyTimes="0;0.45;0.9" dur="35s" repeatCount="indefinite"/>
-            <ellipse cx="0" cy="50" rx="60" ry="28" fill="white" opacity="0.85"/>
-            <ellipse cx="45" cy="44" rx="42" ry="24" fill="white" opacity="0.85"/>
-            <ellipse cx="-35" cy="48" rx="38" ry="22" fill="white" opacity="0.85"/>
+            <animateTransform attributeName="transform" type="translate"
+              values="-200,0; 600,0; 1200,0" keyTimes="0;0.5;1" dur="35s" repeatCount="indefinite"/>
+            <ellipse cx="0"   cy="100" rx="80"  ry="36" fill="white" opacity="0.9"/>
+            <ellipse cx="60"  cy="90"  rx="55"  ry="30" fill="white" opacity="0.9"/>
+            <ellipse cx="-55" cy="106" rx="50"  ry="28" fill="white" opacity="0.9"/>
           </g>
 
-          {/* ── DARK THREAT CLOUDS – roll in from right ── */}
-          <g opacity="0">
-            <animate attributeName="opacity" values="0;0;0;0.9;1" keyTimes="0;0.5;0.62;0.78;1" dur="35s" repeatCount="indefinite"/>
-            <animate attributeName="transform" values="translate(600,0);translate(600,0);translate(300,-10);translate(0,-10)" keyTimes="0;0.55;0.72;1" dur="35s" repeatCount="indefinite"/>
-            <ellipse cx="0"   cy="40" rx="120" ry="50" fill="#2a2a3a"/>
-            <ellipse cx="90"  cy="30" rx="90"  ry="42" fill="#333348"/>
-            <ellipse cx="-70" cy="45" rx="80"  ry="38" fill="#252535"/>
-            <ellipse cx="170" cy="50" rx="100" ry="45" fill="#2a2a3a"/>
+          {/* DARK THREAT CLOUDS roll in from right */}
+          <g>
+            <animateTransform attributeName="transform" type="translate"
+              values="1000,-20; 1000,-20; 400,-20; -100,-20"
+              keyTimes="0;0.52;0.72;1" dur="35s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0;0;0.9;1" keyTimes="0;0.52;0.72;1" dur="35s" repeatCount="indefinite"/>
+            <ellipse cx="0"   cy="80"  rx="160" ry="65" fill="#1e1e30"/>
+            <ellipse cx="120" cy="65"  rx="120" ry="55" fill="#252535"/>
+            <ellipse cx="-100"cy="90"  rx="110" ry="50" fill="#1e1e30"/>
+            <ellipse cx="240" cy="75"  rx="130" ry="58" fill="#2a2a3a"/>
           </g>
 
-          {/* ── GROUND ── */}
-          <rect y="180" width="1000" height="80" fill="url(#grass)"/>
-          <rect y="178" width="1000" height="6"  fill="#66bb6a"/>
-          {/* Path to school */}
-          <rect x="380" y="180" width="70" height="80" fill="#9e9e9e"/>
-          <rect x="395" y="180" width="3"  height="80" fill="#bdbdbd"/>
-          <rect x="447" y="180" width="3"  height="80" fill="#bdbdbd"/>
+          {/* GROUND */}
+          <rect y="390" width="1000" height="170" fill="url(#mc-grass)"/>
+          <rect y="386" width="1000" height="8"   fill="#66bb6a"/>
 
-          {/* ── SCHOOL BUILDING ── */}
-          {/* Main block */}
-          <rect x="300" y="80" width="320" height="110" fill="#f5e6c8" stroke="#c4a46b" strokeWidth="2"/>
-          {/* Roof */}
-          <polygon points="280,82 640,82 605,45 315,45" fill="#c0392b" stroke="#96281b" strokeWidth="2"/>
-          {/* Windows row */}
-          {[330,400,470,540].map((x,i) => (
+          {/* PATH to school */}
+          <rect x="395" y="390" width="75" height="170" fill="#9e9e9e"/>
+          <rect x="410" y="390" width="4"  height="170" fill="#bdbdbd"/>
+          <rect x="455" y="390" width="4"  height="170" fill="#bdbdbd"/>
+
+          {/* ══ SCHOOL BUILDING ══ */}
+          <rect x="250" y="175" width="400" height="225" fill="#f5e6c8" stroke="#c4a46b" strokeWidth="2"/>
+          <polygon points="225,178 675,178 638,115 262,115" fill="#c0392b" stroke="#96281b" strokeWidth="2"/>
+          {/* windows */}
+          {[275,355,435,515,595].map((x,i) => (
             <g key={i}>
-              <rect x={x} y="100" width="44" height="38" rx="3" fill="#87ceeb" stroke="#c4a46b" strokeWidth="1.5"/>
-              <line x1={x+22} y1="100" x2={x+22} y2="138" stroke="#c4a46b" strokeWidth="1"/>
-              <line x1={x}    y1="119" x2={x+44} y2="119" stroke="#c4a46b" strokeWidth="1"/>
-              {/* Light flicker in windows at threat phase */}
-              <rect x={x} y="100" width="44" height="38" rx="3" fill="#FFD700" opacity="0">
+              <rect x={x} y="200" width="56" height="50" rx="3" fill="#87ceeb" stroke="#c4a46b" strokeWidth="1.5"/>
+              <line x1={x+28} y1="200" x2={x+28} y2="250" stroke="#c4a46b" strokeWidth="1"/>
+              <line x1={x}    y1="225" x2={x+56} y2="225" stroke="#c4a46b" strokeWidth="1"/>
+              <rect x={x} y="200" width="56" height="50" rx="3" fill="#FFD700" opacity="0">
                 <animate attributeName="opacity"
-                  values="0;0;0;0.4;0;0.4;0;0.3;0"
-                  keyTimes="0;0.6;0.65;0.7;0.73;0.78;0.82;0.9;1"
+                  values="0;0;0;0.5;0;0.5;0;0.4;0"
+                  keyTimes="0;0.6;0.65;0.7;0.74;0.8;0.84;0.92;1"
                   dur="35s" repeatCount="indefinite"/>
               </rect>
             </g>
           ))}
-          {/* Door */}
-          <rect x="408" y="152" width="48" height="38" rx="4" fill="#795548" stroke="#5d4037" strokeWidth="2"/>
-          <circle cx="450" cy="172" r="3.5" fill="#ffd54f"/>
-          {/* School sign */}
-          <rect x="312" y="52" width="296" height="20" rx="3" fill="white" stroke="#c4a46b" strokeWidth="1"/>
-          <text x="460" y="66" textAnchor="middle" fontSize="11" fill="#333" fontFamily="Arial,sans-serif" fontWeight="bold">CRESCENT ACADEMY</text>
-          {/* Flag */}
-          <line x1="610" y1="10" x2="610" y2="82" stroke="#9e9e9e" strokeWidth="3"/>
-          <rect x="610" y="10" width="36" height="22" fill="#006600"/>
-          <rect x="610" y="10" width="36" height="7"  fill="#006600"/>
-          <rect x="610" y="17" width="36" height="8"  fill="white"/>
-          <rect x="610" y="25" width="36" height="7"  fill="#006600"/>
+          {/* door */}
+          <rect x="415" y="330" width="65" height="70" rx="5" fill="#795548" stroke="#5d4037" strokeWidth="2"/>
+          <circle cx="472" cy="366" r="5" fill="#ffd54f"/>
+          {/* school sign */}
+          <rect x="265" y="122" width="370" height="26" rx="3" fill="white" stroke="#c4a46b" strokeWidth="1"/>
+          <text x="450" y="140" textAnchor="middle" fontSize="14" fill="#333"
+            fontFamily="Arial,sans-serif" fontWeight="bold">CRESCENT ACADEMY</text>
+          {/* flag */}
+          <line x1="660" y1="30" x2="660" y2="178" stroke="#9e9e9e" strokeWidth="4"/>
+          <rect x="660" y="30" width="48" height="30" fill="#006600"/>
+          <rect x="660" y="30" width="48" height="10" fill="#006600"/>
+          <rect x="660" y="40" width="48" height="10" fill="white"/>
+          <rect x="660" y="50" width="48" height="10" fill="#006600"/>
 
-          {/* ── CLOCK top-left ── */}
-          <g transform="translate(55,52)">
-            <circle r="28" fill="white" stroke="#555" strokeWidth="3"/>
-            <circle r="3"  fill="#333"/>
-            {/* Hour hand: 8 o'clock → 10 o'clock */}
-            <line x1="0" y1="0" x2="0" y2="-17" stroke="#333" strokeWidth="3.5" strokeLinecap="round">
+          {/* ── CLOCK (top-left of scene) ── */}
+          <g transform="translate(80,90)">
+            <circle r="38" fill="white" stroke="#444" strokeWidth="4"/>
+            <circle r="4"  fill="#222"/>
+            {/* hour hand 8→10 */}
+            <line x1="0" y1="0" x2="0" y2="-22" stroke="#222" strokeWidth="5" strokeLinecap="round">
               <animateTransform attributeName="transform" type="rotate"
-                values="240;240;300;300" keyTimes="0;0.42;0.5;1" dur="35s" repeatCount="indefinite"/>
+                values="240,0,0; 240,0,0; 300,0,0; 300,0,0"
+                keyTimes="0;0.42;0.5;1" dur="35s" repeatCount="indefinite"/>
             </line>
-            {/* Minute hand: 15min → 30min */}
-            <line x1="0" y1="0" x2="0" y2="-22" stroke="#555" strokeWidth="2.5" strokeLinecap="round">
+            {/* minute hand 15→30 */}
+            <line x1="0" y1="0" x2="0" y2="-30" stroke="#555" strokeWidth="3.5" strokeLinecap="round">
               <animateTransform attributeName="transform" type="rotate"
-                values="90;90;180;180" keyTimes="0;0.42;0.5;1" dur="35s" repeatCount="indefinite"/>
+                values="90,0,0; 90,0,0; 180,0,0; 180,0,0"
+                keyTimes="0;0.42;0.5;1" dur="35s" repeatCount="indefinite"/>
             </line>
-            {/* Red alarm flash when time changes */}
-            <circle r="28" fill="none" stroke="#e53935" strokeWidth="3" opacity="0">
+            {/* alarm ring */}
+            <circle r="38" fill="none" stroke="#e53935" strokeWidth="4" opacity="0">
               <animate attributeName="opacity"
-                values="0;0;0;0.8;0;0.8;0;0" keyTimes="0;0.44;0.46;0.5;0.54;0.58;0.62;1"
+                values="0;0;0;1;0;1;0;0"
+                keyTimes="0;0.44;0.47;0.51;0.55;0.59;0.63;1"
                 dur="35s" repeatCount="indefinite"/>
             </circle>
-            <text x="0" y="14" textAnchor="middle" fontSize="8" fill="#555" fontFamily="Arial,sans-serif">
-              AM
-            </text>
+            <text x="0" y="18" textAnchor="middle" fontSize="11" fill="#666" fontFamily="Arial,sans-serif">AM</text>
           </g>
 
-          {/* ── STUDENT 1 (blue shirt, backpack) ── */}
+          {/* ── STUDENT 1 – blue shirt ── */}
           <g>
-            <animate attributeName="transform"
-              values="translate(980,0);translate(980,0);translate(415,0);translate(415,0)"
-              keyTimes="0;0.02;0.35;1" dur="35s" repeatCount="indefinite"/>
-            {/* body */}
-            <rect x="-10" y="163" width="20" height="26" rx="4" fill="#1565c0"/>
-            {/* head */}
-            <circle cx="0" cy="157" r="13" fill="#ffcc80"/>
-            {/* hair */}
-            <rect x="-13" y="144" width="26" height="8" rx="4" fill="#5d4037"/>
-            {/* backpack */}
-            <rect x="10"  y="165" width="14" height="18" rx="3" fill="#e53935"/>
-            <rect x="12"  y="170" width="10" height="4"  rx="1" fill="#c62828"/>
-            {/* legs – walking */}
-            <rect x="-9" y="189" width="8" height="20" rx="3" fill="#424242">
+            <animateTransform attributeName="transform" type="translate"
+              values="1050,0; 1050,0; 420,0; 420,0"
+              keyTimes="0;0.03;0.36;1" dur="35s" repeatCount="indefinite"/>
+            <circle cx="0"  cy="350" r="18"  fill="#ffcc80"/>
+            <rect x="-14"  y="368"  width="28" height="38" rx="5" fill="#1565c0"/>
+            <rect x="-13"  y="333"  width="26" height="11" rx="5" fill="#5d4037"/>
+            <rect x="14"   y="370"  width="18" height="26" rx="4" fill="#e53935"/>
+            <rect x="-12"  y="406"  width="11" height="28" rx="4" fill="#333">
               <animateTransform attributeName="transform" type="rotate"
-                values="18,-5,189;-18,-5,189;18,-5,189" dur="0.55s" repeatCount="indefinite"/>
+                values="20,-6,406; -20,-6,406; 20,-6,406" dur="0.5s" repeatCount="indefinite"/>
             </rect>
-            <rect x="1"  y="189" width="8" height="20" rx="3" fill="#424242">
+            <rect x="1"    y="406"  width="11" height="28" rx="4" fill="#333">
               <animateTransform attributeName="transform" type="rotate"
-                values="-18,5,189;18,5,189;-18,5,189" dur="0.55s" repeatCount="indefinite"/>
+                values="-20,7,406; 20,7,406; -20,7,406" dur="0.5s" repeatCount="indefinite"/>
             </rect>
-            {/* shoes */}
-            <ellipse cx="-5" cy="209" rx="7" ry="4" fill="#212121"/>
-            <ellipse cx="5"  cy="209" rx="7" ry="4" fill="#212121"/>
+            <ellipse cx="-6" cy="434" rx="10" ry="5" fill="#111"/>
+            <ellipse cx="6"  cy="434" rx="10" ry="5" fill="#111"/>
           </g>
 
-          {/* ── STUDENT 2 (pink dress) ── */}
+          {/* ── STUDENT 2 – pink ── */}
           <g>
-            <animate attributeName="transform"
-              values="translate(1060,0);translate(1060,0);translate(445,0);translate(445,0)"
-              keyTimes="0;0.04;0.38;1" dur="35s" repeatCount="indefinite"/>
-            <rect x="-9"  y="163" width="18" height="26" rx="4" fill="#e91e8c"/>
-            <circle cx="0" cy="157" r="12" fill="#ffe0b2"/>
-            <rect x="-12" y="144" width="24" height="10" rx="5" fill="#4a148c"/>
-            <rect x="9"   y="165" width="13" height="16" rx="3" fill="#7b1fa2"/>
-            <rect x="-8"  y="189" width="7"  height="19" rx="3" fill="#c2185b">
+            <animateTransform attributeName="transform" type="translate"
+              values="1150,0; 1150,0; 450,0; 450,0"
+              keyTimes="0;0.05;0.39;1" dur="35s" repeatCount="indefinite"/>
+            <circle cx="0"  cy="350" r="17"  fill="#ffe0b2"/>
+            <rect x="-13"  y="367"  width="26" height="36" rx="5" fill="#e91e8c"/>
+            <rect x="-13"  y="334"  width="26" height="12" rx="6" fill="#4a148c"/>
+            <rect x="13"   y="369"  width="16" height="22" rx="4" fill="#7b1fa2"/>
+            <rect x="-11"  y="403"  width="10" height="26" rx="4" fill="#c2185b">
               <animateTransform attributeName="transform" type="rotate"
-                values="16,-4,189;-16,-4,189;16,-4,189" dur="0.55s" repeatCount="indefinite" begin="0.18s"/>
+                values="18,-6,403; -18,-6,403; 18,-6,403" dur="0.5s" repeatCount="indefinite" begin="0.15s"/>
             </rect>
-            <rect x="1"   y="189" width="7"  height="19" rx="3" fill="#c2185b">
+            <rect x="1"    y="403"  width="10" height="26" rx="4" fill="#c2185b">
               <animateTransform attributeName="transform" type="rotate"
-                values="-16,4,189;16,4,189;-16,4,189" dur="0.55s" repeatCount="indefinite" begin="0.18s"/>
+                values="-18,6,403; 18,6,403; -18,6,403" dur="0.5s" repeatCount="indefinite" begin="0.15s"/>
             </rect>
-            <ellipse cx="-4" cy="208" rx="6" ry="3.5" fill="#212121"/>
-            <ellipse cx="4"  cy="208" rx="6" ry="3.5" fill="#212121"/>
+            <ellipse cx="-5" cy="429" rx="9" ry="5" fill="#111"/>
+            <ellipse cx="5"  cy="429" rx="9" ry="5" fill="#111"/>
           </g>
 
-          {/* ── STUDENT 3 (green shirt) ── */}
+          {/* ── STUDENT 3 – green shirt ── */}
           <g>
-            <animate attributeName="transform"
-              values="translate(1140,0);translate(1140,0);translate(470,0);translate(470,0)"
-              keyTimes="0;0.06;0.41;1" dur="35s" repeatCount="indefinite"/>
-            <rect x="-10" y="163" width="20" height="26" rx="4" fill="#2e7d32"/>
-            <circle cx="0" cy="157" r="13" fill="#ffb74d"/>
-            <rect x="-13" y="144" width="26" height="8" rx="4" fill="#1a1a1a"/>
-            <rect x="10"  y="165" width="14" height="17" rx="3" fill="#1976d2"/>
-            <rect x="-9"  y="189" width="8"  height="20" rx="3" fill="#424242">
+            <animateTransform attributeName="transform" type="translate"
+              values="1250,0; 1250,0; 475,0; 475,0"
+              keyTimes="0;0.07;0.42;1" dur="35s" repeatCount="indefinite"/>
+            <circle cx="0"  cy="350" r="18"  fill="#ffb74d"/>
+            <rect x="-14"  y="368"  width="28" height="38" rx="5" fill="#2e7d32"/>
+            <rect x="-13"  y="333"  width="26" height="11" rx="5" fill="#111"/>
+            <rect x="14"   y="370"  width="18" height="24" rx="4" fill="#1976d2"/>
+            <rect x="-12"  y="406"  width="11" height="28" rx="4" fill="#333">
               <animateTransform attributeName="transform" type="rotate"
-                values="18,-5,189;-18,-5,189;18,-5,189" dur="0.55s" repeatCount="indefinite" begin="0.27s"/>
+                values="20,-6,406; -20,-6,406; 20,-6,406" dur="0.5s" repeatCount="indefinite" begin="0.28s"/>
             </rect>
-            <rect x="1"   y="189" width="8"  height="20" rx="3" fill="#424242">
+            <rect x="1"    y="406"  width="11" height="28" rx="4" fill="#333">
               <animateTransform attributeName="transform" type="rotate"
-                values="-18,5,189;18,5,189;-18,5,189" dur="0.55s" repeatCount="indefinite" begin="0.27s"/>
+                values="-20,7,406; 20,7,406; -20,7,406" dur="0.5s" repeatCount="indefinite" begin="0.28s"/>
             </rect>
-            <ellipse cx="-5" cy="209" rx="7" ry="4" fill="#212121"/>
-            <ellipse cx="5"  cy="209" rx="7" ry="4" fill="#212121"/>
+            <ellipse cx="-6" cy="434" rx="10" ry="5" fill="#111"/>
+            <ellipse cx="6"  cy="434" rx="10" ry="5" fill="#111"/>
           </g>
 
-          {/* ── TEACHER at door – turns to look, raises hand in alarm ── */}
-          <g transform="translate(388,0)">
-            {/* teacher body */}
-            <rect x="-11" y="163" width="22" height="28" rx="4" fill="#6a1b9a"/>
-            <circle cx="0" cy="157" r="13" fill="#ffe0b2"/>
-            {/* hair bun */}
-            <circle cx="0" cy="144" r="8" fill="#5d4037"/>
-            <circle cx="6" cy="141" r="5" fill="#5d4037"/>
-            {/* legs */}
-            <rect x="-9" y="191" width="8" height="18" rx="3" fill="#4a148c"/>
-            <rect x="1"  y="191" width="8" height="18" rx="3" fill="#4a148c"/>
-            <ellipse cx="-5" cy="209" rx="6" ry="3.5" fill="#212121"/>
-            <ellipse cx="5"  cy="209" rx="6" ry="3.5" fill="#212121"/>
-            {/* Alarm arm – raised when teacher notices */}
-            <line x1="-11" y1="172" x2="-30" y2="155" stroke="#ffe0b2" strokeWidth="5" strokeLinecap="round" opacity="0">
-              <animate attributeName="opacity" values="0;0;0;1;1" keyTimes="0;0.44;0.5;0.55;1" dur="35s" repeatCount="indefinite"/>
+          {/* ── TEACHER at door ── */}
+          <g transform="translate(390,0)">
+            <circle cx="0"  cy="350" r="17"  fill="#ffe0b2"/>
+            <rect x="-13"  y="367"  width="26" height="35" rx="5" fill="#6a1b9a"/>
+            <circle cx="0"  cy="334" r="10"  fill="#5d4037"/>
+            <circle cx="8"  cy="331" r="7"   fill="#5d4037"/>
+            <rect x="-11"  y="402"  width="10" height="24" rx="4" fill="#4a148c"/>
+            <rect x="1"    y="402"  width="10" height="24" rx="4" fill="#4a148c"/>
+            <ellipse cx="-5" cy="426" rx="9" ry="4" fill="#111"/>
+            <ellipse cx="5"  cy="426" rx="9" ry="4" fill="#111"/>
+            {/* raised alarm arm */}
+            <line x1="-13" y1="375" x2="-38" y2="352" stroke="#ffe0b2" strokeWidth="7"
+              strokeLinecap="round" opacity="0">
+              <animate attributeName="opacity" values="0;0;0;1;1" keyTimes="0;0.44;0.5;0.56;1" dur="35s" repeatCount="indefinite"/>
             </line>
-            {/* ! bubble */}
+            {/* ! speech bubble */}
             <g opacity="0">
-              <animate attributeName="opacity" values="0;0;0;0;1;1" keyTimes="0;0.44;0.5;0.54;0.6;1" dur="35s" repeatCount="indefinite"/>
-              <circle cx="-42" cy="140" r="14" fill="white" stroke="#e53935" strokeWidth="2"/>
-              <text x="-42" y="146" textAnchor="middle" fontSize="16" fill="#e53935" fontWeight="bold">!</text>
+              <animate attributeName="opacity" values="0;0;0;0;1;1" keyTimes="0;0.44;0.51;0.55;0.6;1" dur="35s" repeatCount="indefinite"/>
+              <circle cx="-56" cy="336" r="18" fill="white" stroke="#e53935" strokeWidth="2.5"/>
+              <text x="-56" y="343" textAnchor="middle" fontSize="20" fill="#e53935" fontWeight="900">!</text>
             </g>
           </g>
 
-          {/* ── THREAT FIGURE – dark silhouette stalking from right ── */}
-          <g opacity="0">
-            <animate attributeName="opacity" values="0;0;0;0;0.85;1" keyTimes="0;0.55;0.62;0.68;0.8;1" dur="35s" repeatCount="indefinite"/>
-            <animate attributeName="transform"
-              values="translate(1050,0);translate(1050,0);translate(1050,0);translate(820,0);translate(720,0)"
-              keyTimes="0;0.55;0.65;0.82;1" dur="35s" repeatCount="indefinite"/>
-            {/* shadow body */}
-            <circle cx="0" cy="150" r="16" fill="#0d0d1a"/>
-            <rect x="-14" y="166" width="28" height="36" rx="5" fill="#0d0d1a"/>
-            <rect x="-11" y="202" width="9"  height="24" rx="4" fill="#0d0d1a">
-              <animateTransform attributeName="transform" type="rotate"
-                values="15,-6,202;-15,-6,202;15,-6,202" dur="0.6s" repeatCount="indefinite"/>
-            </rect>
-            <rect x="2"   y="202" width="9"  height="24" rx="4" fill="#0d0d1a">
-              <animateTransform attributeName="transform" type="rotate"
-                values="-15,6,202;15,6,202;-15,6,202" dur="0.6s" repeatCount="indefinite"/>
-            </rect>
-            {/* red eyes */}
-            <circle cx="-6" cy="147" r="5" fill="#e53935"/>
-            <circle cx="6"  cy="147" r="5" fill="#e53935"/>
-            <circle cx="-6" cy="147" r="2.5" fill="#ffcdd2"/>
-            <circle cx="6"  cy="147" r="2.5" fill="#ffcdd2"/>
-            {/* ground shadow */}
-            <ellipse cx="0" cy="228" rx="28" ry="9" fill="rgba(0,0,0,0.4)"/>
-          </g>
-
-          {/* ── WARNING SIGN – pops up at threat phase ── */}
-          <g opacity="0">
-            <animate attributeName="opacity" values="0;0;0;0;1;0;1;0;1" keyTimes="0;0.6;0.65;0.68;0.72;0.76;0.8;0.85;1" dur="35s" repeatCount="indefinite"/>
-            <animate attributeName="transform" values="translate(820,10);translate(820,10)" dur="35s" repeatCount="indefinite"/>
-            <polygon points="0,-30 26,18 -26,18" fill="#ffd600" stroke="#f57f17" strokeWidth="2.5"/>
-            <text x="0" y="14" textAnchor="middle" fontSize="22" fill="#e53935" fontWeight="900">!</text>
-          </g>
-
-          {/* ── CAUTION TAPE – bottom strip ── */}
+          {/* ── THREAT FIGURE ── */}
           <g>
-            {Array.from({length:28}).map((_,i) => (
-              <rect key={i} x={i*36} y="250" width="18" height="10" fill={i%2===0?'#ffd600':'#212121'} opacity="0.55"/>
-            ))}
+            <animateTransform attributeName="transform" type="translate"
+              values="1100,0; 1100,0; 1100,0; 820,0; 700,0"
+              keyTimes="0;0.55;0.65;0.82;1" dur="35s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0;0;0;0.9;1" keyTimes="0;0.55;0.65;0.82;1" dur="35s" repeatCount="indefinite"/>
+            <circle cx="0"  cy="348" r="22"  fill="#090912"/>
+            <rect x="-18"  y="370"  width="36" height="50" rx="7" fill="#090912"/>
+            <rect x="-15"  y="420"  width="13" height="34" rx="5" fill="#090912">
+              <animateTransform attributeName="transform" type="rotate"
+                values="16,-8,420; -16,-8,420; 16,-8,420" dur="0.58s" repeatCount="indefinite"/>
+            </rect>
+            <rect x="2"    y="420"  width="13" height="34" rx="5" fill="#090912">
+              <animateTransform attributeName="transform" type="rotate"
+                values="-16,8,420; 16,8,420; -16,8,420" dur="0.58s" repeatCount="indefinite"/>
+            </rect>
+            <circle cx="-8" cy="344" r="6.5" fill="#e53935"/>
+            <circle cx="8"  cy="344" r="6.5" fill="#e53935"/>
+            <circle cx="-8" cy="344" r="3"   fill="#ffcdd2"/>
+            <circle cx="8"  cy="344" r="3"   fill="#ffcdd2"/>
+            <ellipse cx="0" cy="458" rx="36" ry="11" fill="rgba(0,0,0,0.35)"/>
           </g>
+
+          {/* ── WARNING TRIANGLE ── */}
+          <g transform="translate(820,50)">
+            <animate attributeName="opacity" values="0;0;0;0;1;0;1;0;1" keyTimes="0;0.6;0.65;0.68;0.73;0.77;0.82;0.87;1" dur="35s" repeatCount="indefinite"/>
+            <polygon points="0,-42 36,24 -36,24" fill="#ffd600" stroke="#f57f17" strokeWidth="3.5"/>
+            <text x="0" y="20" textAnchor="middle" fontSize="32" fill="#e53935" fontWeight="900">!</text>
+          </g>
+
+          {/* CAUTION TAPE strip */}
+          {Array.from({length:28}).map((_,i) => (
+            <rect key={i} x={i*36} y="548" width="18" height="12" fill={i%2===0?'#ffd600':'#1a1a1a'} opacity="0.6"/>
+          ))}
         </svg>
       </div>
 
-      <div className="relative z-10 flex flex-col flex-1 p-5 gap-4">
+      {/* ── SCOREBOARD – top strip, above scene ── */}
+      <div className="relative z-20 p-3">
         <Scoreboard s={s} activeKey={null} />
+      </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center gap-5 px-2">
+      {/* ── TITLE – just below scoreboard ── */}
+      <div className="relative z-20 text-center pt-1 pb-2">
+        <p className="text-purple-300 text-xs font-bold uppercase tracking-[0.3em]">{storyTeam} selected</p>
+        <p className="text-white text-2xl font-black tracking-tight drop-shadow-lg">
+          {s.activePackEmoji} {s.activePackTitle}
+        </p>
+      </div>
 
-          {/* Title */}
-          <div className="text-center">
-            <p className="text-purple-400 text-xs font-bold uppercase tracking-[0.3em] mb-1">{storyTeam} selected</p>
-            <p className="text-white text-3xl font-black tracking-tight">
-              {s.activePackEmoji} {s.activePackTitle}
-            </p>
-          </div>
-
-          {/* Story box */}
-          <div className="w-full max-w-2xl bg-black/50 border border-purple-800/40 rounded-2xl p-6 shadow-xl shadow-purple-900/20 backdrop-blur">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="inline-block w-2 h-2 rounded-full bg-yellow-500 animate-pulse" style={{animationDelay:'0.2s'}} />
-              <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" style={{animationDelay:'0.4s'}} />
-              <p className="text-slate-500 text-xs font-mono ml-1 uppercase tracking-widest">INCIDENT REPORT — CLASSIFIED</p>
-            </div>
-
-            <p className="text-green-300 font-mono text-sm leading-7 min-h-[6rem]">
-              {displayed}
-              <span className={`inline-block w-0.5 h-4 bg-green-400 ml-0.5 align-middle ${cursorVisible ? 'opacity-100' : 'opacity-0'}`} />
-            </p>
-          </div>
-
-          {/* Waiting indicator */}
-          {done && (
-            <div className="flex items-center gap-3 mt-2 animate-pulse">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#f5a623]" />
-              <p className="text-[#f5a623] text-sm font-bold tracking-wide">
-                Waiting for riddles to begin…
-              </p>
-              <div className="w-1.5 h-1.5 rounded-full bg-[#f5a623]" />
-            </div>
-          )}
-        </div>
+      {/* ── SUBTITLE BAR – pinned to bottom, over the scene ── */}
+      <div className="absolute bottom-0 inset-x-0 z-20 px-4 pb-4 pt-2"
+        style={{background:'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.7) 70%, transparent 100%)'}}>
+        <p className="text-white font-semibold text-center text-lg leading-7 min-h-[3.5rem] drop-shadow"
+          style={{textShadow:'0 2px 8px rgba(0,0,0,0.9), 0 0 2px #000'}}>
+          {displayed}
+          <span className={`inline-block w-0.5 h-5 bg-white ml-1 align-middle transition-opacity ${cursorVisible ? 'opacity-100' : 'opacity-0'}`} />
+        </p>
+        {done && (
+          <p className="text-center text-[#f5a623] text-sm font-bold tracking-widest animate-pulse mt-1">
+            ● WAITING FOR RIDDLES TO BEGIN…
+          </p>
+        )}
       </div>
     </div>
   )
