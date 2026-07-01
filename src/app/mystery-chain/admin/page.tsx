@@ -80,7 +80,7 @@ const SILENT_WARNING_PACK = {
 const defaultState = (): MCState => ({
   phase: 'setup',
   teamA: '', teamB: '', teamC: '',
-  packTitle: '', openingStory: '',
+  packTitle: SILENT_WARNING_PACK.packTitle, openingStory: SILENT_WARNING_PACK.openingStory,
   queueA: [], queueB: [], queueC: [],
   revealedA: [], revealedB: [], revealedC: [],
   scoreA: 0, scoreB: 0, scoreC: 0,
@@ -98,7 +98,9 @@ export default function MCAdminPage() {
   const [scrambled, setScrambled] = useState('')
   const [answer, setAnswer] = useState('')
   const [storySnippet, setStorySnippet] = useState('')
-  const [puzzles, setPuzzles] = useState<MCPuzzle[]>([])
+  const [puzzles, setPuzzles] = useState<MCPuzzle[]>(
+    SILENT_WARNING_PACK.puzzles.map(p => ({ ...p, id: crypto.randomUUID() }))
+  )
 
   const broadcast = useCallback((st: MCState) => {
     wsBroadcast(CHANNEL, safeForAudience(st))
