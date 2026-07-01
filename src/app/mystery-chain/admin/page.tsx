@@ -263,7 +263,7 @@ export default function MCAdminPage() {
     })
   }
 
-  const reset = () => setS(defaultState())
+  const reset = () => update(defaultState())
 
   // Derived
   const currentQueue = s.phase === 'a_playing' ? s.queueA : s.phase === 'b_playing' ? s.queueB : s.queueC
@@ -545,8 +545,7 @@ export default function MCAdminPage() {
               return (
                 <button
                   onClick={() => {
-                    wsBroadcast('av:state', {
-                      _from_mc: true,
+                    wsBroadcast('mc:av_handoff', {
                       teamA: ranked[0].name,
                       teamB: ranked[1].name,
                     })

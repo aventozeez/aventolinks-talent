@@ -97,11 +97,11 @@ export default function AVAdmin() {
   const [mcPush, setMcPush] = useState<{ teamA: string; teamB: string } | null>(null)
   useEffect(() => {
     const ws = new WebSocket(WS_URL)
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', channel: CHANNEL }))
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', channel: 'mc:av_handoff' }))
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
-        if (msg.channel === CHANNEL && msg.payload?._from_mc) {
+        if (msg.channel === 'mc:av_handoff' && msg.payload?.teamA) {
           setMcPush({ teamA: msg.payload.teamA, teamB: msg.payload.teamB })
         }
       } catch {}
