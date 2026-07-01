@@ -68,28 +68,34 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden relative">
 
-      {/* Animated background — slow radar pulse */}
+      {/* keyframe definitions */}
+      <style>{`
+        @keyframes radar {
+          0% { transform: scale(0.4); opacity: 0.6; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
+        @keyframes blink-cursor {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
+
+      {/* Radar pulse rings */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        {[1,2,3,4].map(i => (
-          <div key={i} className="absolute rounded-full border border-purple-700/20"
+        {[0,1,2,3].map(i => (
+          <div key={i} className="absolute rounded-full border-2 border-purple-500"
             style={{
-              width: `${i * 22}vw`, height: `${i * 22}vw`,
-              animation: `ping ${2 + i * 0.6}s cubic-bezier(0,0,0.2,1) infinite`,
-              animationDelay: `${i * 0.4}s`,
-              opacity: 0.15,
+              width: '60vw', height: '60vw',
+              animation: `radar ${2.4 + i * 0.7}s ease-out infinite`,
+              animationDelay: `${i * 0.65}s`,
             }} />
         ))}
-        {/* Central glow */}
-        <div className="absolute w-32 h-32 rounded-full bg-purple-900/30 blur-3xl" />
+        <div className="absolute w-48 h-48 rounded-full bg-purple-950/60 blur-3xl" />
       </div>
-
-      {/* Film-grain overlay */}
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: '150px' }} />
 
       {/* Scanlines */}
       <div className="absolute inset-0 pointer-events-none"
-        style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px)' }} />
+        style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.07) 3px, rgba(0,0,0,0.07) 4px)' }} />
 
       <div className="relative z-10 flex flex-col flex-1 p-5 gap-4">
         <Scoreboard s={s} activeKey={null} />
