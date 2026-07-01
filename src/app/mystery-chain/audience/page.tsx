@@ -36,6 +36,105 @@ const fmtTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string }) {
+  const fullText = s.activeOpeningStory
+  const [displayed, setDisplayed] = useState('')
+  const [cursorVisible, setCursorVisible] = useState(true)
+  const [done, setDone] = useState(false)
+  const indexRef = useRef(0)
+
+  // Typewriter
+  useEffect(() => {
+    setDisplayed('')
+    indexRef.current = 0
+    setDone(false)
+    const iv = setInterval(() => {
+      indexRef.current++
+      setDisplayed(fullText.slice(0, indexRef.current))
+      if (indexRef.current >= fullText.length) {
+        clearInterval(iv)
+        setDone(true)
+      }
+    }, 28)
+    return () => clearInterval(iv)
+  }, [fullText])
+
+  // Blinking cursor
+  useEffect(() => {
+    const iv = setInterval(() => setCursorVisible(v => !v), 530)
+    return () => clearInterval(iv)
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden relative">
+
+      {/* Animated background — slow radar pulse */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        {[1,2,3,4].map(i => (
+          <div key={i} className="absolute rounded-full border border-purple-700/20"
+            style={{
+              width: `${i * 22}vw`, height: `${i * 22}vw`,
+              animation: `ping ${2 + i * 0.6}s cubic-bezier(0,0,0.2,1) infinite`,
+              animationDelay: `${i * 0.4}s`,
+              opacity: 0.15,
+            }} />
+        ))}
+        {/* Central glow */}
+        <div className="absolute w-32 h-32 rounded-full bg-purple-900/30 blur-3xl" />
+      </div>
+
+      {/* Film-grain overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: '150px' }} />
+
+      {/* Scanlines */}
+      <div className="absolute inset-0 pointer-events-none"
+        style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px)' }} />
+
+      <div className="relative z-10 flex flex-col flex-1 p-5 gap-4">
+        <Scoreboard s={s} activeKey={null} />
+
+        <div className="flex-1 flex flex-col items-center justify-center gap-5 px-2">
+
+          {/* Title */}
+          <div className="text-center">
+            <p className="text-purple-400 text-xs font-bold uppercase tracking-[0.3em] mb-1">{storyTeam} selected</p>
+            <p className="text-white text-3xl font-black tracking-tight">
+              {s.activePackEmoji} {s.activePackTitle}
+            </p>
+          </div>
+
+          {/* Story box */}
+          <div className="w-full max-w-2xl bg-black/50 border border-purple-800/40 rounded-2xl p-6 shadow-xl shadow-purple-900/20 backdrop-blur">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="inline-block w-2 h-2 rounded-full bg-yellow-500 animate-pulse" style={{animationDelay:'0.2s'}} />
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" style={{animationDelay:'0.4s'}} />
+              <p className="text-slate-500 text-xs font-mono ml-1 uppercase tracking-widest">INCIDENT REPORT — CLASSIFIED</p>
+            </div>
+
+            <p className="text-green-300 font-mono text-sm leading-7 min-h-[6rem]">
+              {displayed}
+              <span className={`inline-block w-0.5 h-4 bg-green-400 ml-0.5 align-middle ${cursorVisible ? 'opacity-100' : 'opacity-0'}`} />
+            </p>
+          </div>
+
+          {/* Waiting indicator */}
+          {done && (
+            <div className="flex items-center gap-3 mt-2 animate-pulse">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#f5a623]" />
+              <p className="text-[#f5a623] text-sm font-bold tracking-wide">
+                Waiting for riddles to begin…
+              </p>
+              <div className="w-1.5 h-1.5 rounded-full bg-[#f5a623]" />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Scoreboard({ s, activeKey }: { s: MCAudienceState; activeKey: string | null }) {
   return (
     <div className="grid grid-cols-3 gap-3">
@@ -156,26 +255,7 @@ export default function MCAudiencePage() {
   // Story phase — show opening scenario before riddles
   if (s.phase === 'story_A' || s.phase === 'story_B' || s.phase === 'story_C') {
     const storyTeam = s.phase === 'story_A' ? s.teamA : s.phase === 'story_B' ? s.teamB : s.teamC
-    return (
-      <div className="min-h-screen bg-[#0a0a1a] flex flex-col p-4 gap-5">
-        <Scoreboard s={s} activeKey={null} />
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 text-center px-4">
-          <div>
-            <p className="text-purple-300 text-xs font-bold uppercase tracking-widest mb-1">{storyTeam} selected</p>
-            <p className="text-white text-3xl font-black">{s.activePackEmoji} {s.activePackTitle}</p>
-          </div>
-          <div className="bg-purple-900/20 border border-purple-500/30 rounded-2xl p-6 max-w-2xl">
-            <p className="text-purple-300 text-xs font-bold uppercase tracking-widest mb-4">Opening Scenario</p>
-            <p className="text-white text-base leading-relaxed">{s.activeOpeningStory}</p>
-          </div>
-          <div className="flex items-center gap-2 animate-pulse">
-            <div className="w-2 h-2 rounded-full bg-[#f5a623]" />
-            <p className="text-[#f5a623] text-sm font-bold">Waiting for admin to start the riddles…</p>
-            <div className="w-2 h-2 rounded-full bg-[#f5a623]" />
-          </div>
-        </div>
-      </div>
-    )
+    return <StoryPhase s={s} storyTeam={storyTeam} />
   }
 
   // Playing phase
