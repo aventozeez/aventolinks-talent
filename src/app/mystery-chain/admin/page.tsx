@@ -4,23 +4,25 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { wsBroadcast } from '@/lib/ws-sync'
 
 const CHANNEL = 'mc:state'
-const MC_TIME_MS = 180_000 // 3 minutes
+const MC_TIME_MS = 180_000
 const MC_PTS = 10
 
-type MCPhase = 'setup' | 'story' | 'a_playing' | 'b_playing' | 'c_playing' | 'done'
+type MCPhase =
+  | 'setup'
+  | 'intro'
+  | 'pick_A' | 'a_playing'
+  | 'pick_B' | 'b_playing'
+  | 'pick_C' | 'c_playing'
+  | 'done'
 
-type MCPuzzle = {
-  id: string
-  clue: string
-  scrambled: string
-  answer: string
-  storySnippet: string
-}
+type MCPuzzle = { id: string; clue: string; scrambled: string; answer: string; storySnippet: string }
+type MCPack = { id: string; title: string; emoji: string; teaser: string; openingStory: string; puzzles: MCPuzzle[] }
 
 type MCState = {
   phase: MCPhase
   teamA: string; teamB: string; teamC: string
-  packTitle: string; openingStory: string
+  packs: MCPack[]
+  chosenA: string | null; chosenB: string | null; chosenC: string | null
   queueA: MCPuzzle[]; queueB: MCPuzzle[]; queueC: MCPuzzle[]
   revealedA: string[]; revealedB: string[]; revealedC: string[]
   scoreA: number; scoreB: number; scoreC: number
@@ -34,58 +36,128 @@ const fmtTime = (ms: number) => {
 }
 
 function safeForAudience(s: MCState) {
-  const getQueue = () => {
-    if (s.phase === 'a_playing') return s.queueA
-    if (s.phase === 'b_playing') return s.queueB
-    if (s.phase === 'c_playing') return s.queueC
-    return []
-  }
+  const playing = ['a_playing','b_playing','c_playing'].includes(s.phase)
+  const getQueue = () => s.phase === 'a_playing' ? s.queueA : s.phase === 'b_playing' ? s.queueB : s.queueC
   const activeRevealed = s.phase === 'a_playing' ? s.revealedA : s.phase === 'b_playing' ? s.revealedB : s.revealedC
-  const q = getQueue()
-  const puzzle = q[0] ?? null
+  const q = getQueue(); const puzzle = q[0] ?? null
+
+  const packFor = (id: string | null) => id ? s.packs.find(p => p.id === id) ?? null : null
+
   return {
     phase: s.phase,
     teamA: s.teamA, teamB: s.teamB, teamC: s.teamC,
-    packTitle: s.packTitle, openingStory: s.openingStory,
-    scoreA: s.scoreA, scoreB: s.scoreB, scoreC: s.scoreC,
-    revealedA: s.revealedA, revealedB: s.revealedB, revealedC: s.revealedC,
+    packs: s.packs.map(p => ({ id: p.id, title: p.title, emoji: p.emoji, teaser: p.teaser })),
+    chosenA: s.chosenA, chosenB: s.chosenB, chosenC: s.chosenC,
+    activePackTitle: playing ? packFor(
+      s.phase === 'a_playing' ? s.chosenA : s.phase === 'b_playing' ? s.chosenB : s.chosenC
+    )?.title ?? '' : '',
     activeRevealedStory: activeRevealed,
-    timerStart: s.timerStart,
-    revealed: s.revealed,
+    revealedA: s.revealedA, revealedB: s.revealedB, revealedC: s.revealedC,
+    scoreA: s.scoreA, scoreB: s.scoreB, scoreC: s.scoreC,
+    timerStart: s.timerStart, revealed: s.revealed,
     currentPuzzle: puzzle ? {
-      clue: puzzle.clue,
-      scrambled: puzzle.scrambled,
+      clue: puzzle.clue, scrambled: puzzle.scrambled,
       answer: s.revealed ? puzzle.answer : undefined,
     } : null,
   }
 }
 
-const SILENT_WARNING_PACK = {
-  packTitle: 'The Silent Warning',
-  openingStory: `At 8:15 AM, students arrived at Crescent Academy for the annual Scholars Challenge. Everything appeared normal. At 10:30 AM, a teacher noticed something unusual. The school was not under attack yet — but all the signs suggested that something dangerous was about to happen. The teams have 3 minutes to uncover the threat.`,
-  puzzles: [
-    { clue: 'The weakest part of any system.', scrambled: 'KNLI', answer: 'LINK', storySnippet: 'Investigators discovered a weak link in the school\'s safety system.' },
-    { clue: 'A person present where they are not authorized to be.', scrambled: 'RTUINRDE', answer: 'INTRUDER', storySnippet: 'Security footage showed a possible intruder.' },
-    { clue: 'A place selected for special attention.', scrambled: 'RAGTTE', answer: 'TARGET', storySnippet: 'The intruder appeared interested in a specific target.' },
-    { clue: 'Choosing the perfect moment.', scrambled: 'GMNITI', answer: 'TIMING', storySnippet: 'Whoever planned this understood timing perfectly.' },
-    { clue: 'Information passed secretly.', scrambled: 'SGAESME', answer: 'MESSAGE', storySnippet: 'A coded message was discovered.' },
-    { clue: 'Careful examination to discover the truth.', scrambled: 'YAANLSIS', answer: 'ANALYSIS', storySnippet: 'The analysis revealed a disturbing pattern.' },
-    { clue: 'Continuous observation.', scrambled: 'NIMTOROING', answer: 'MONITORING', storySnippet: 'Monitoring showed unusual movement around the campus.' },
-    { clue: 'A signal that demands immediate action.', scrambled: 'TREAL', answer: 'ALERT', storySnippet: 'The school issued an alert.' },
-    { clue: 'Organized movement away from danger.', scrambled: 'AUEVTCAIOON', answer: 'EVACUATION', storySnippet: 'A precautionary evacuation began.' },
-    { clue: 'The final objective of every safety plan.', scrambled: 'NTEITCOPRO', answer: 'PROTECTION', storySnippet: 'The school and its students were finally safe under full protection.' },
-  ],
-}
+// ── 4 Built-in Mystery Packs ─────────────────────────────────────────────────
+
+const mkp = (puzzles: Omit<MCPuzzle,'id'>[]) =>
+  puzzles.map(p => ({ ...p, id: crypto.randomUUID() }))
+
+const BUILT_IN_PACKS: Omit<MCPack,'id'>[] = [
+  {
+    title: 'The Silent Warning',
+    emoji: '🔒',
+    teaser: 'Uncover the threat. Protect the school.',
+    openingStory: 'At 8:15 AM, students arrived at Crescent Academy for the annual Scholars Challenge. Everything appeared normal. At 10:30 AM, a teacher noticed something unusual. The school was not under attack yet — but all the signs suggested that something dangerous was about to happen. The teams have 3 minutes to uncover the threat.',
+    puzzles: mkp([
+      { clue: 'The weakest part of any system.', scrambled: 'KNLI', answer: 'LINK', storySnippet: 'Investigators discovered a weak link in the school\'s safety system.' },
+      { clue: 'A person present where they are not authorized to be.', scrambled: 'RTUINRDE', answer: 'INTRUDER', storySnippet: 'Security footage showed a possible intruder.' },
+      { clue: 'A place selected for special attention.', scrambled: 'RAGTTE', answer: 'TARGET', storySnippet: 'The intruder appeared interested in a specific target.' },
+      { clue: 'Choosing the perfect moment.', scrambled: 'GMNITI', answer: 'TIMING', storySnippet: 'Whoever planned this understood timing perfectly.' },
+      { clue: 'Information passed secretly.', scrambled: 'SGAESME', answer: 'MESSAGE', storySnippet: 'A coded message was discovered.' },
+      { clue: 'Careful examination to discover the truth.', scrambled: 'YAANLSIS', answer: 'ANALYSIS', storySnippet: 'The analysis revealed a disturbing pattern.' },
+      { clue: 'Continuous observation.', scrambled: 'NIMTOROING', answer: 'MONITORING', storySnippet: 'Monitoring showed unusual movement around the campus.' },
+      { clue: 'A signal that demands immediate action.', scrambled: 'TREAL', answer: 'ALERT', storySnippet: 'The school issued an alert.' },
+      { clue: 'Organized movement away from danger.', scrambled: 'AUEVTCAIOON', answer: 'EVACUATION', storySnippet: 'A precautionary evacuation began.' },
+      { clue: 'The final objective of every safety plan.', scrambled: 'NTEITCOPRO', answer: 'PROTECTION', storySnippet: 'The school and its students were finally safe under full protection.' },
+    ]),
+  },
+  {
+    title: 'The Missing Trophy',
+    emoji: '🏆',
+    teaser: 'The trophy vanished. The ceremony cannot wait.',
+    openingStory: 'The morning of the Awards Ceremony, Crescent Academy\'s championship trophy was found missing from the display cabinet. The hall was locked all night. Only three people had keys. The teams have 3 minutes to track down the truth before the ceremony begins.',
+    puzzles: mkp([
+      { clue: 'An act of taking what does not belong to you.', scrambled: 'FHETT', answer: 'THEFT', storySnippet: 'The trophy case showed clear signs of deliberate theft.' },
+      { clue: 'A person believed to be responsible.', scrambled: 'SPSUECT', answer: 'SUSPECT', storySnippet: 'One individual quickly became the main suspect.' },
+      { clue: 'The reason someone commits an act.', scrambled: 'OMVITE', answer: 'MOTIVE', storySnippet: 'A motive rooted in jealousy was uncovered.' },
+      { clue: 'A story offered to prove innocence.', scrambled: 'BIAILA', answer: 'ALIBI', storySnippet: 'The suspect\'s alibi did not match the timeline.' },
+      { clue: 'Something that proves what happened.', scrambled: 'CEVEDENI', answer: 'EVIDENCE', storySnippet: 'Evidence was found hidden beneath the display cabinet.' },
+      { clue: 'A person who saw the incident.', scrambled: 'SSENWIT', answer: 'WITNESS', storySnippet: 'A witness recalled seeing a shadow in the corridor.' },
+      { clue: 'To look carefully through an area.', scrambled: 'RAECSH', answer: 'SEARCH', storySnippet: 'A thorough search of the school premises began.' },
+      { clue: 'A device that records visual activity.', scrambled: 'RAACME', answer: 'CAMERA', storySnippet: 'Camera footage confirmed the identity of the thief.' },
+      { clue: 'Caught in the act of wrongdoing.', scrambled: 'SEDXOPE', answer: 'EXPOSED', storySnippet: 'The thief was exposed in front of the entire school.' },
+      { clue: 'The act of returning something to its rightful place.', scrambled: 'YOVECERR', answer: 'RECOVERY', storySnippet: 'The trophy\'s recovery was celebrated school-wide.' },
+    ]),
+  },
+  {
+    title: 'The Exam Leak',
+    emoji: '📋',
+    teaser: 'The questions are out. Time is running out.',
+    openingStory: 'Three days before the most important national examination in Crescent Academy\'s history, a student discovered that the exam questions were already circulating in a private group. The school board called for an immediate investigation. The teams have 3 minutes to uncover who is behind the leak.',
+    puzzles: mkp([
+      { clue: 'Information disclosed without permission.', scrambled: 'KALE', answer: 'LEAK', storySnippet: 'Exam questions had been secretly leaked online.' },
+      { clue: 'Permission to enter a restricted area.', scrambled: 'SCACES', answer: 'ACCESS', storySnippet: 'Someone gained unauthorized access to the examination vault.' },
+      { clue: 'A portable electronic tool.', scrambled: 'CVDEEI', answer: 'DEVICE', storySnippet: 'A hidden device was used to photograph the papers.' },
+      { clue: 'Information passed to others online.', scrambled: 'ADEHRS', answer: 'SHARED', storySnippet: 'The images were shared in a private online group.' },
+      { clue: 'A closed community communicating secretly.', scrambled: 'OUGPR', answer: 'GROUP', storySnippet: 'A secret group of students had been coordinating the plan.' },
+      { clue: 'The person ultimately responsible for a wrongdoing.', scrambled: 'TPRUCIL', answer: 'CULPRIT', storySnippet: 'The culprit was someone entrusted with securing the papers.' },
+      { clue: 'Gaining advantage through dishonest means.', scrambled: 'TINCHEAG', answer: 'CHEATING', storySnippet: 'Deliberate cheating was confirmed by the examination board.' },
+      { clue: 'A formal investigation into a breach.', scrambled: 'YUIRNIQ', answer: 'INQUIRY', storySnippet: 'An urgent inquiry was opened by senior school officials.' },
+      { clue: 'A rule that was seriously broken.', scrambled: 'CYLIPOL', answer: 'POLICY', storySnippet: 'The act violated every examination integrity policy.' },
+      { clue: 'The consequence for serious misconduct.', scrambled: 'YNALEPT', answer: 'PENALTY', storySnippet: 'The student faced the ultimate academic penalty — expulsion.' },
+    ]),
+  },
+  {
+    title: 'The Vanishing Coach',
+    emoji: '👁️',
+    teaser: 'He was here. Now he is gone. Find out why.',
+    openingStory: 'Two hours before Crescent Academy\'s biggest inter-school competition in a decade, the head coach was reported missing. His office was locked from the inside. His phone sat on his desk. No one saw him leave. The teams have 3 minutes to piece together his disappearance.',
+    puzzles: mkp([
+      { clue: 'No longer present or able to be found.', scrambled: 'GSINIMS', answer: 'MISSING', storySnippet: 'The coach was officially reported missing at 7:45 AM.' },
+      { clue: 'A sign or indication pointing to what happened.', scrambled: 'UELC', answer: 'CLUE', storySnippet: 'A single clue was found on his otherwise empty desk.' },
+      { clue: 'A written communication left behind.', scrambled: 'ETON', answer: 'NOTE', storySnippet: 'A hastily written note suggested he had left in a hurry.' },
+      { clue: 'A person seen near the scene.', scrambled: 'PSCUSTE', answer: 'SUSPECT', storySnippet: 'A suspect was seen near the coach\'s office at dawn.' },
+      { clue: 'Something kept hidden from others.', scrambled: 'CESRTE', answer: 'SECRET', storySnippet: 'The coach had been keeping a dangerous secret.' },
+      { clue: 'Forced or pressured into doing something.', scrambled: 'DORCEF', answer: 'FORCED', storySnippet: 'Evidence showed the coach had been forced to leave.' },
+      { clue: 'A communication device used to track location.', scrambled: 'LOHPNE', answer: 'PHONE', storySnippet: 'His phone contained a threatening message received that morning.' },
+      { clue: 'The path or direction taken to leave.', scrambled: 'UEROT', answer: 'ROUTE', storySnippet: 'Security cameras tracked the route he was taken.' },
+      { clue: 'To keep someone safe from danger.', scrambled: 'CDFERENE', answer: 'DEFENDED', storySnippet: 'Authorities acted quickly once they understood what he had defended.' },
+      { clue: 'Brought back safe after going missing.', scrambled: 'EDRCREOV', answer: 'RECOVERED', storySnippet: 'The coach was recovered safely — and told the full story.' },
+    ]),
+  },
+]
+
+const PACKS: MCPack[] = BUILT_IN_PACKS.map(p => ({ ...p, id: crypto.randomUUID() }))
+
+// ── Default State ────────────────────────────────────────────────────────────
 
 const defaultState = (): MCState => ({
   phase: 'setup',
   teamA: '', teamB: '', teamC: '',
-  packTitle: SILENT_WARNING_PACK.packTitle, openingStory: SILENT_WARNING_PACK.openingStory,
+  packs: PACKS,
+  chosenA: null, chosenB: null, chosenC: null,
   queueA: [], queueB: [], queueC: [],
   revealedA: [], revealedB: [], revealedC: [],
   scoreA: 0, scoreB: 0, scoreC: 0,
   timerStart: null, revealed: false,
 })
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function MCAdminPage() {
   const [s, setS] = useState<MCState>(defaultState())
@@ -94,85 +166,44 @@ export default function MCAdminPage() {
   const stateRef = useRef(s)
   stateRef.current = s
 
-  const [clue, setClue] = useState('')
-  const [scrambled, setScrambled] = useState('')
-  const [answer, setAnswer] = useState('')
-  const [storySnippet, setStorySnippet] = useState('')
-  const [puzzles, setPuzzles] = useState<MCPuzzle[]>(
-    SILENT_WARNING_PACK.puzzles.map(p => ({ ...p, id: crypto.randomUUID() }))
-  )
+  const broadcast = useCallback((st: MCState) => wsBroadcast(CHANNEL, safeForAudience(st)), [])
+  const update = useCallback((st: MCState) => { setS(st); broadcast(st) }, [broadcast])
 
-  const broadcast = useCallback((st: MCState) => {
-    wsBroadcast(CHANNEL, safeForAudience(st))
-  }, [])
-
-  const update = useCallback((st: MCState) => {
-    setS(st)
-    broadcast(st)
-  }, [broadcast])
-
+  // Timer
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current)
-    const playing = ['a_playing', 'b_playing', 'c_playing'].includes(s.phase)
+    const playing = ['a_playing','b_playing','c_playing'].includes(s.phase)
     if (!playing || !s.timerStart) { setTimeLeft(MC_TIME_MS); return }
-
     const tick = () => {
       const left = Math.max(0, MC_TIME_MS - (Date.now() - (stateRef.current.timerStart ?? 0)))
       setTimeLeft(left)
       if (left === 0) {
         const cur = stateRef.current
-        if (!['a_playing', 'b_playing', 'c_playing'].includes(cur.phase)) return
+        if (!['a_playing','b_playing','c_playing'].includes(cur.phase)) return
         const next: MCState = {
           ...cur,
-          phase: cur.phase === 'a_playing' ? 'b_playing' : cur.phase === 'b_playing' ? 'c_playing' : 'done',
-          timerStart: cur.phase !== 'c_playing' ? Date.now() : null,
-          revealed: false,
+          phase: cur.phase === 'a_playing' ? 'pick_B' : cur.phase === 'b_playing' ? 'pick_C' : 'done',
+          timerStart: null, revealed: false,
         }
-        setS(next)
-        broadcast(next)
-        clearInterval(timerRef.current!)
+        setS(next); broadcast(next); clearInterval(timerRef.current!)
       }
     }
-    tick()
-    timerRef.current = setInterval(tick, 250)
+    tick(); timerRef.current = setInterval(tick, 250)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [s.phase, s.timerStart, broadcast])
 
-  const loadSilentWarning = () => {
-    setPuzzles(SILENT_WARNING_PACK.puzzles.map(p => ({ ...p, id: crypto.randomUUID() })))
-    setS(prev => ({ ...prev, packTitle: SILENT_WARNING_PACK.packTitle, openingStory: SILENT_WARNING_PACK.openingStory }))
-  }
-
-  const addPuzzle = () => {
-    if (!clue.trim() || !scrambled.trim() || !answer.trim()) return
-    setPuzzles(prev => [...prev, {
-      id: crypto.randomUUID(),
-      clue: clue.trim(),
-      scrambled: scrambled.trim().toUpperCase(),
-      answer: answer.trim(),
-      storySnippet: storySnippet.trim(),
-    }])
-    setClue(''); setScrambled(''); setAnswer(''); setStorySnippet('')
-  }
-
-  const removePuzzle = (id: string) => setPuzzles(prev => prev.filter(p => p.id !== id))
-
-  const startGame = () => {
-    if (!s.teamA || !s.teamB || !s.teamC || puzzles.length === 0) return
-    const q = [...puzzles]
-    const next: MCState = {
-      ...s,
-      phase: 'story',
-      queueA: [...q], queueB: [...q], queueC: [...q],
-      revealedA: [], revealedB: [], revealedC: [],
-      scoreA: 0, scoreB: 0, scoreC: 0,
-      timerStart: null, revealed: false,
+  // Pick a mystery for current team
+  const pickMystery = (packId: string) => {
+    const cur = stateRef.current
+    const pack = cur.packs.find(p => p.id === packId)!
+    const queue = [...pack.puzzles]
+    if (cur.phase === 'pick_A') {
+      update({ ...cur, chosenA: packId, phase: 'a_playing', queueA: queue, timerStart: Date.now(), revealed: false })
+    } else if (cur.phase === 'pick_B') {
+      update({ ...cur, chosenB: packId, phase: 'b_playing', queueB: queue, timerStart: Date.now(), revealed: false })
+    } else if (cur.phase === 'pick_C') {
+      update({ ...cur, chosenC: packId, phase: 'c_playing', queueC: queue, timerStart: Date.now(), revealed: false })
     }
-    update(next)
-  }
-
-  const startTeam = (phase: MCPhase) => {
-    update({ ...s, phase, timerStart: Date.now(), revealed: false })
   }
 
   const action = (result: 'correct' | 'wrong' | 'skip') => {
@@ -182,22 +213,18 @@ export default function MCAdminPage() {
     const revKey = cur.phase === 'a_playing' ? 'revealedA' : cur.phase === 'b_playing' ? 'revealedB' : 'revealedC'
     const queue = [...cur[qKey]]
     if (queue.length === 0) return
-
     const puzzle = queue.shift()!
-    if (result === 'wrong' || result === 'skip') queue.push(puzzle)
-
+    if (result !== 'correct') queue.push(puzzle)
     const nextRevealed = result === 'correct' && puzzle.storySnippet
       ? [...cur[revKey], puzzle.storySnippet]
       : [...cur[revKey]]
-
-    const next: MCState = {
+    update({
       ...cur,
       [qKey]: queue,
       [scoreKey]: result === 'correct' ? cur[scoreKey] + MC_PTS : cur[scoreKey],
       [revKey]: nextRevealed,
       revealed: false,
-    }
-    update(next)
+    })
   }
 
   const reveal = () => update({ ...s, revealed: !s.revealed })
@@ -205,39 +232,45 @@ export default function MCAdminPage() {
   const nextTeam = () => {
     const next: MCState = {
       ...s,
-      phase: s.phase === 'a_playing' ? 'b_playing' : s.phase === 'b_playing' ? 'c_playing' : 'done',
-      timerStart: s.phase !== 'c_playing' ? Date.now() : null,
-      revealed: false,
+      phase: s.phase === 'a_playing' ? 'pick_B' : s.phase === 'b_playing' ? 'pick_C' : 'done',
+      timerStart: null, revealed: false,
     }
     update(next)
   }
 
-  const reset = () => { setS(defaultState()); setPuzzles([]) }
+  const reset = () => setS(defaultState())
 
+  // Derived
   const currentQueue = s.phase === 'a_playing' ? s.queueA : s.phase === 'b_playing' ? s.queueB : s.queueC
   const currentPuzzle = currentQueue[0] ?? null
   const currentTeamName = s.phase === 'a_playing' ? s.teamA : s.phase === 'b_playing' ? s.teamB : s.teamC
   const currentRevealed = s.phase === 'a_playing' ? s.revealedA : s.phase === 'b_playing' ? s.revealedB : s.revealedC
+  const currentChosenId = s.phase === 'a_playing' ? s.chosenA : s.phase === 'b_playing' ? s.chosenB : s.chosenC
+  const currentPack = s.packs.find(p => p.id === currentChosenId)
+  const pickingTeam = s.phase === 'pick_A' ? s.teamA : s.phase === 'pick_B' ? s.teamB : s.phase === 'pick_C' ? s.teamC : ''
+  const takenIds = [s.chosenA, s.chosenB, s.chosenC].filter(Boolean) as string[]
   const pct = timeLeft / MC_TIME_MS
   const timerColor = pct > 0.4 ? '#22c55e' : pct > 0.2 ? '#f59e0b' : '#ef4444'
-  const isPlaying = ['a_playing', 'b_playing', 'c_playing'].includes(s.phase)
+  const isPlaying = ['a_playing','b_playing','c_playing'].includes(s.phase)
+  const isPicking = ['pick_A','pick_B','pick_C'].includes(s.phase)
 
   return (
     <div className="min-h-screen bg-[#0a1628] text-white p-4">
       <div className="max-w-3xl mx-auto space-y-4">
 
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest">Standalone Test</p>
+            <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest">Admin Control</p>
             <h1 className="text-white text-2xl font-black">🔮 Mystery Chain</h1>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2">
             <a href="/mystery-chain/audience" target="_blank"
               className="text-xs bg-purple-600/30 border border-purple-500/40 text-purple-300 px-3 py-1.5 rounded-lg hover:bg-purple-600/50">
-              Open Audience ↗
+              Audience ↗
             </a>
             {s.phase !== 'setup' && (
-              <button onClick={reset} className="text-xs bg-red-600/20 border border-red-500/30 text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-600/30">
+              <button onClick={reset} className="text-xs bg-red-600/20 border border-red-500/30 text-red-400 px-3 py-1.5 rounded-lg">
                 Reset
               </button>
             )}
@@ -247,115 +280,132 @@ export default function MCAdminPage() {
         {/* ── SETUP ── */}
         {s.phase === 'setup' && (
           <div className="space-y-4">
-            <button onClick={loadSilentWarning}
-              className="w-full bg-gradient-to-r from-yellow-600/30 to-orange-600/30 border border-yellow-500/40 text-yellow-300 font-bold py-3 rounded-xl hover:from-yellow-600/40 hover:to-orange-600/40 flex items-center justify-center gap-2">
-              ⚡ Load &quot;The Silent Warning&quot; Pack (10 puzzles)
-            </button>
-
             <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-3">
-              <h2 className="text-white font-bold">Pack Info</h2>
-              <input value={s.packTitle} onChange={e => setS(p => ({ ...p, packTitle: e.target.value }))}
-                placeholder="Pack title" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm" />
-              <textarea value={s.openingStory} onChange={e => setS(p => ({ ...p, openingStory: e.target.value }))}
-                placeholder="Opening scenario story shown before the round starts…"
-                rows={4} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm resize-none" />
-            </div>
-
-            <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-3">
-              <h2 className="text-white font-bold">Teams</h2>
+              <h2 className="text-white font-bold">Enter Team Names</h2>
               <div className="grid grid-cols-3 gap-3">
                 {(['teamA','teamB','teamC'] as const).map((k, i) => (
                   <input key={k} value={s[k]} onChange={e => setS(p => ({ ...p, [k]: e.target.value }))}
-                    placeholder={`Team ${['A','B','C'][i]} name`}
+                    placeholder={`Team ${['A','B','C'][i]}`}
                     className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm" />
                 ))}
               </div>
             </div>
 
+            {/* Preview 4 packs */}
             <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-3">
-              <h2 className="text-white font-bold">Puzzles ({puzzles.length})</h2>
-              <div className="bg-slate-800/50 rounded-lg p-3 space-y-2">
-                <input value={clue} onChange={e => setClue(e.target.value)}
-                  placeholder="Clue" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm" />
-                <input value={scrambled} onChange={e => setScrambled(e.target.value.toUpperCase())}
-                  placeholder="Scrambled word" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm font-mono" />
-                <input value={answer} onChange={e => setAnswer(e.target.value)}
-                  placeholder="Answer" className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm" />
-                <input value={storySnippet} onChange={e => setStorySnippet(e.target.value)}
-                  placeholder="Story snippet revealed on correct answer (optional)"
-                  className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
-                  onKeyDown={e => e.key === 'Enter' && addPuzzle()} />
-                <button onClick={addPuzzle} disabled={!clue || !scrambled || !answer}
-                  className="w-full bg-[#f5a623] text-black font-bold py-2 rounded-lg text-sm hover:bg-[#e09510] disabled:opacity-40">
-                  + Add Puzzle
-                </button>
-              </div>
-              <div className="space-y-2 max-h-56 overflow-y-auto">
-                {puzzles.map((p, i) => (
-                  <div key={p.id} className="flex items-start gap-2 bg-slate-800/50 rounded-lg px-3 py-2">
-                    <span className="text-slate-500 text-xs mt-0.5 w-5 shrink-0">{i + 1}.</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[#f5a623] text-sm font-mono font-bold">{p.scrambled}</p>
-                      <p className="text-slate-400 text-xs">Clue: {p.clue}</p>
-                      <p className="text-green-400 text-xs">Answer: {p.answer}</p>
-                      {p.storySnippet && <p className="text-blue-400 text-xs italic mt-0.5">&ldquo;{p.storySnippet}&rdquo;</p>}
-                    </div>
-                    <button onClick={() => removePuzzle(p.id)} className="text-red-400 hover:text-red-300 text-xs shrink-0">✕</button>
+              <h2 className="text-white font-bold">4 Mystery Packs Available</h2>
+              <div className="grid grid-cols-2 gap-3">
+                {s.packs.map(p => (
+                  <div key={p.id} className="bg-slate-800/50 border border-slate-600/50 rounded-xl p-3">
+                    <p className="text-2xl mb-1">{p.emoji}</p>
+                    <p className="text-white font-bold text-sm">{p.title}</p>
+                    <p className="text-slate-400 text-xs">{p.teaser}</p>
                   </div>
                 ))}
-                {puzzles.length === 0 && (
-                  <p className="text-slate-500 text-sm text-center py-2">No puzzles yet. Load a pack above or add manually.</p>
-                )}
               </div>
             </div>
 
-            <button onClick={startGame}
-              disabled={!s.teamA || !s.teamB || !s.teamC || puzzles.length === 0}
+            <button onClick={() => update({ ...s, phase: 'intro' })}
+              disabled={!s.teamA || !s.teamB || !s.teamC}
               className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-black py-4 rounded-xl text-lg">
-              Start Mystery Chain →
+              Begin Mystery Chain →
             </button>
           </div>
         )}
 
-        {/* ── STORY ── */}
-        {s.phase === 'story' && (
+        {/* ── INTRO ── */}
+        {s.phase === 'intro' && (
           <div className="space-y-4">
-            <div className="bg-purple-900/20 border border-purple-500/30 rounded-2xl p-6">
-              <p className="text-purple-300 text-xs font-bold uppercase tracking-widest mb-3">Opening Scenario</p>
-              <p className="text-white text-base leading-relaxed">{s.openingStory || '(No opening story set)'}</p>
+            <div className="bg-purple-900/20 border border-purple-500/30 rounded-2xl p-6 text-center">
+              <p className="text-purple-300 text-xs font-bold uppercase tracking-widest mb-3">Welcome to the Mystery Chain</p>
+              <p className="text-white text-base leading-relaxed">
+                Four mysteries are waiting to be unlocked. Each team will choose one mystery and have <span className="text-[#f5a623] font-bold">3 minutes</span> to unscramble the words and reveal the full story. Every correct answer earns <span className="text-[#f5a623] font-bold">10 points</span> and unlocks the next chapter of the mystery.
+              </p>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              {[{name:s.teamA,q:s.queueA.length},{name:s.teamB,q:s.queueB.length},{name:s.teamC,q:s.queueC.length}].map((t,i) => (
+              {[s.teamA, s.teamB, s.teamC].map((t,i) => (
                 <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
-                  <p className="text-slate-300 text-sm font-semibold">{t.name}</p>
-                  <p className="text-slate-500 text-xs">{t.q} puzzles</p>
+                  <p className="text-slate-400 text-xs">Team {['A','B','C'][i]}</p>
+                  <p className="text-white font-bold">{t}</p>
                 </div>
               ))}
             </div>
-            <button onClick={() => startTeam('a_playing')}
+            <button onClick={() => update({ ...s, phase: 'pick_A' })}
               className="w-full bg-purple-600 hover:bg-purple-500 text-white font-black py-4 rounded-xl text-lg">
-              ▶ Start {s.teamA}
+              {s.teamA} — Choose Your Mystery →
             </button>
+          </div>
+        )}
+
+        {/* ── PICK PHASE ── */}
+        {isPicking && (
+          <div className="space-y-4">
+            <div className="text-center">
+              <p className="text-slate-400 text-sm">It is now</p>
+              <p className="text-white text-3xl font-black">{pickingTeam}&apos;s turn to choose</p>
+              <p className="text-slate-400 text-sm mt-1">Select a mystery to unlock</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {s.packs.map(pack => {
+                const taken = takenIds.includes(pack.id)
+                const takenBy = taken
+                  ? pack.id === s.chosenA ? s.teamA : pack.id === s.chosenB ? s.teamB : s.teamC
+                  : null
+                return (
+                  <button
+                    key={pack.id}
+                    onClick={() => !taken && pickMystery(pack.id)}
+                    disabled={taken}
+                    className={`relative rounded-2xl p-5 border text-left transition-all ${
+                      taken
+                        ? 'bg-white/5 border-white/10 opacity-50 cursor-not-allowed'
+                        : 'bg-[#0d1f3c] border-slate-600 hover:border-purple-400 hover:bg-purple-900/20 cursor-pointer'
+                    }`}
+                  >
+                    {taken && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/50">
+                        <div className="text-center">
+                          <p className="text-white text-xs font-bold">Chosen by</p>
+                          <p className="text-[#f5a623] text-sm font-black">{takenBy}</p>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-4xl mb-2">{pack.emoji}</p>
+                    <p className="text-white font-black text-base">{pack.title}</p>
+                    <p className="text-slate-400 text-xs mt-1">{pack.teaser}</p>
+                    {!taken && (
+                      <p className="text-purple-400 text-xs font-bold mt-3 uppercase tracking-wider">Tap to choose →</p>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
 
         {/* ── PLAYING ── */}
         {isPlaying && (
           <div className="space-y-4">
+            {/* Pack + Timer */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-white font-bold">{currentTeamName} is playing</span>
-                <span className="text-slate-400 text-sm">{currentQueue.length} left in queue</span>
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <p className="text-purple-300 text-xs font-bold uppercase tracking-widest">{currentTeamName}</p>
+                  <p className="text-white font-bold">{currentPack?.emoji} {currentPack?.title}</p>
+                </div>
+                <span className="text-slate-400 text-sm">{currentQueue.length} left</span>
               </div>
-              <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+              <div className="h-3 bg-white/10 rounded-full overflow-hidden mt-3">
                 <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pct * 100}%`, background: timerColor }} />
               </div>
               <p className="text-center font-black text-5xl mt-2" style={{ color: timerColor }}>{fmtTime(timeLeft)}</p>
             </div>
 
+            {/* Scores */}
             <div className="grid grid-cols-3 gap-2">
               {[{name:s.teamA,score:s.scoreA,k:'A'},{name:s.teamB,score:s.scoreB,k:'B'},{name:s.teamC,score:s.scoreC,k:'C'}].map(t => {
-                const active = (s.phase === 'a_playing' && t.k==='A') || (s.phase === 'b_playing' && t.k==='B') || (s.phase === 'c_playing' && t.k==='C')
+                const active = (s.phase==='a_playing'&&t.k==='A')||(s.phase==='b_playing'&&t.k==='B')||(s.phase==='c_playing'&&t.k==='C')
                 return (
                   <div key={t.k} className={`rounded-xl p-3 text-center border ${active ? 'bg-purple-600/20 border-purple-500' : 'bg-white/5 border-white/10'}`}>
                     <p className="text-slate-300 text-xs font-semibold truncate">{t.name}</p>
@@ -365,6 +415,7 @@ export default function MCAdminPage() {
               })}
             </div>
 
+            {/* Story so far */}
             {currentRevealed.length > 0 && (
               <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
                 <p className="text-blue-300 text-xs font-bold uppercase tracking-widest mb-2">Story Unlocked So Far</p>
@@ -378,6 +429,7 @@ export default function MCAdminPage() {
               </div>
             )}
 
+            {/* Current Puzzle */}
             {currentPuzzle ? (
               <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-5 space-y-3">
                 <div className="flex items-start justify-between gap-3">
@@ -387,34 +439,29 @@ export default function MCAdminPage() {
                   </button>
                 </div>
                 <p className="text-[#f5a623] text-4xl font-black tracking-[0.25em] text-center">{currentPuzzle.scrambled}</p>
-                {s.revealed && (
-                  <p className="text-green-400 text-xl font-bold text-center">{currentPuzzle.answer}</p>
-                )}
+                {s.revealed && <p className="text-green-400 text-xl font-bold text-center">{currentPuzzle.answer}</p>}
               </div>
             ) : (
-              <div className="bg-white/5 border border-white/10 rounded-xl p-6 text-center text-slate-500">
-                No more puzzles in queue
-              </div>
+              <div className="bg-white/5 border border-white/10 rounded-xl p-6 text-center text-slate-500">No more puzzles</div>
             )}
 
+            {/* Actions */}
             <div className="grid grid-cols-3 gap-3">
-              <button onClick={() => action('correct')}
-                className="py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm">
-                ✓ Correct<br/><span className="text-xs font-normal opacity-75">+{MC_PTS} pts · story revealed</span>
+              <button onClick={() => action('correct')} className="py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm">
+                ✓ Correct<br/><span className="text-xs opacity-75">+{MC_PTS} pts · story revealed</span>
               </button>
-              <button onClick={() => action('wrong')}
-                className="py-4 bg-red-600/60 hover:bg-red-600/80 text-white font-bold rounded-xl text-sm border border-red-500/30">
-                ✗ Wrong<br/><span className="text-xs font-normal opacity-75">Recycle to back</span>
+              <button onClick={() => action('wrong')} className="py-4 bg-red-600/60 hover:bg-red-600/80 text-white font-bold rounded-xl text-sm border border-red-500/30">
+                ✗ Wrong<br/><span className="text-xs opacity-75">Recycle to back</span>
               </button>
-              <button onClick={() => action('skip')}
-                className="py-4 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm border border-white/10">
-                ↷ Skip<br/><span className="text-xs font-normal opacity-75">Recycle to back</span>
+              <button onClick={() => action('skip')} className="py-4 bg-white/5 hover:bg-white/10 text-slate-300 font-bold rounded-xl text-sm border border-white/10">
+                ↷ Skip<br/><span className="text-xs opacity-75">Recycle to back</span>
               </button>
             </div>
 
-            <button onClick={nextTeam}
-              className="w-full border border-slate-600 text-slate-400 hover:text-white hover:border-slate-400 py-3 rounded-xl text-sm font-semibold">
-              {s.phase === 'c_playing' ? 'End Round →' : `Time Up — Move to ${s.phase === 'a_playing' ? s.teamB : s.teamC} →`}
+            <button onClick={nextTeam} className="w-full border border-slate-600 text-slate-400 hover:text-white hover:border-slate-400 py-3 rounded-xl text-sm font-semibold">
+              {s.phase === 'c_playing'
+                ? 'End Round →'
+                : `Time Up — ${s.phase === 'a_playing' ? s.teamB : s.teamC} chooses next →`}
             </button>
           </div>
         )}
@@ -423,25 +470,29 @@ export default function MCAdminPage() {
         {s.phase === 'done' && (
           <div className="space-y-4">
             <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-6">
-              <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest text-center mb-4">
-                Final Results — {s.packTitle}
-              </p>
+              <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest text-center mb-4">Final Results</p>
               <div className="space-y-3">
-                {[{name:s.teamA,score:s.scoreA,rev:s.revealedA},{name:s.teamB,score:s.scoreB,rev:s.revealedB},{name:s.teamC,score:s.scoreC,rev:s.revealedC}]
-                  .sort((a,b) => b.score - a.score)
-                  .map((t, i) => (
+                {[
+                  {name:s.teamA,score:s.scoreA,rev:s.revealedA,packId:s.chosenA},
+                  {name:s.teamB,score:s.scoreB,rev:s.revealedB,packId:s.chosenB},
+                  {name:s.teamC,score:s.scoreC,rev:s.revealedC,packId:s.chosenC},
+                ].sort((a,b) => b.score - a.score).map((t, i) => {
+                  const pack = s.packs.find(p => p.id === t.packId)
+                  return (
                     <div key={t.name} className="bg-white/5 rounded-xl p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <span className="text-2xl">{['🥇','🥈','🥉'][i]}</span>
-                          <span className="text-white font-bold">{t.name}</span>
+                          <div>
+                            <p className="text-white font-bold">{t.name}</p>
+                            <p className="text-slate-500 text-xs">{pack?.emoji} {pack?.title} · {t.rev.length} clues unlocked</p>
+                          </div>
                         </div>
                         <span className="text-white text-2xl font-black">{t.score} pts</span>
                       </div>
-                      <p className="text-slate-500 text-xs mt-1 ml-9">{t.rev.length} story clues unlocked</p>
                     </div>
-                  ))
-                }
+                  )
+                })}
               </div>
             </div>
             <button onClick={reset} className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl">
