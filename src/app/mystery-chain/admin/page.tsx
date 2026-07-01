@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { wsBroadcast } from '@/lib/ws-sync'
 
 const CHANNEL = 'mc:state'
@@ -182,6 +183,7 @@ const defaultState = (): MCState => ({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function MCAdminPage() {
+  const router = useRouter()
   const [s, setS] = useState<MCState>(defaultState())
   const [timeLeft, setTimeLeft] = useState(MC_TIME_MS)
   const [avSent, setAvSent] = useState(false)
@@ -550,7 +552,7 @@ export default function MCAdminPage() {
                       teamB: ranked[1].name,
                     })
                     setAvSent(true)
-                    setTimeout(() => setAvSent(false), 3000)
+                    setTimeout(() => router.push('/audio-visual/admin'), 800)
                   }}
                   className={`w-full font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors ${avSent ? 'bg-green-700 text-white cursor-default' : 'bg-purple-700 hover:bg-purple-600 text-white'}`}
                 >
