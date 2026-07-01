@@ -184,6 +184,7 @@ const defaultState = (): MCState => ({
 export default function MCAdminPage() {
   const [s, setS] = useState<MCState>(defaultState())
   const [timeLeft, setTimeLeft] = useState(MC_TIME_MS)
+  const [avSent, setAvSent] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const stateRef = useRef(s)
   stateRef.current = s
@@ -543,24 +544,21 @@ export default function MCAdminPage() {
               ].sort((a, b) => b.score - a.score)
               return (
                 <button
-                  onClick={() => wsBroadcast('av:state', {
-                    phase: 'idle',
-                    videoUrl: 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1',
-                    videoPlay: false,
-                    teamA: ranked[0].name,
-                    teamB: ranked[1].name,
-                    questions: [],
-                    currentQ: 0,
-                    timerStart: null,
-                    scoreA: 0,
-                    scoreB: 0,
-                    correctA: 0,
-                    correctB: 0,
-                  })}
-                  className="w-full bg-purple-700 hover:bg-purple-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+                  onClick={() => {
+                    wsBroadcast('av:state', {
+                      _from_mc: true,
+                      teamA: ranked[0].name,
+                      teamB: ranked[1].name,
+                    })
+                    setAvSent(true)
+                    setTimeout(() => setAvSent(false), 3000)
+                  }}
+                  className={`w-full font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors ${avSent ? 'bg-green-700 text-white cursor-default' : 'bg-purple-700 hover:bg-purple-600 text-white'}`}
                 >
-                  📺 Advance Top 2 to Audio Visual Round
-                  <span className="text-purple-300 font-normal text-sm">({ranked[0].name} &amp; {ranked[1].name})</span>
+                  {avSent
+                    ? <>✓ Sent! Open the Audio Visual admin to continue</>
+                    : <>📺 Advance Top 2 to Audio Visual Round <span className="text-purple-300 font-normal text-sm">({ranked[0].name} &amp; {ranked[1].name})</span></>
+                  }
                 </button>
               )
             })()}

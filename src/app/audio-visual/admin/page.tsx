@@ -101,8 +101,7 @@ export default function AVAdmin() {
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
-        if (msg.channel === CHANNEL && msg.payload?.teamA && msg.payload?.teamB) {
-          // MC admin pushed new teams — surface the banner if we're still idle
+        if (msg.channel === CHANNEL && msg.payload?._from_mc) {
           setMcPush({ teamA: msg.payload.teamA, teamB: msg.payload.teamB })
         }
       } catch {}
