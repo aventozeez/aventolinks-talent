@@ -28,14 +28,20 @@ type AVState = {
   correctB: number
 }
 
+// Big Buck Bunny — Blender Foundation (public domain, guaranteed available)
 const DEFAULT_VIDEO = 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1'
 
 const DEFAULT_QUESTIONS: AVQuestion[] = [
-  { id: '1', text: 'What colour was the main character?', answer: 'Orange (the bunny/rabbit)', revealed: false, answeredBy: null },
-  { id: '2', text: 'What animals were the antagonists in the clip?', answer: 'Squirrels / rodents', revealed: false, answeredBy: null },
-  { id: '3', text: 'What was the setting of the video?', answer: 'A forest / outdoor woodland', revealed: false, answeredBy: null },
-  { id: '4', text: 'Describe the opening scene of the video.', answer: 'A peaceful nature scene / character sleeping', revealed: false, answeredBy: null },
-  { id: '5', text: 'What sound accompanied the title sequence?', answer: 'Orchestral / cheerful music', revealed: false, answeredBy: null },
+  { id: '1',  text: 'What is the title of the animation that was shown?',                                         answer: 'Big Buck Bunny',                                    revealed: false, answeredBy: null },
+  { id: '2',  text: 'What colour is the large main character in the video?',                                      answer: 'White / cream',                                     revealed: false, answeredBy: null },
+  { id: '3',  text: 'In which type of environment does the story take place?',                                    answer: 'A forest / meadow / countryside',                    revealed: false, answeredBy: null },
+  { id: '4',  text: 'What is the main character doing at the very start of the video?',                           answer: 'Sleeping / resting under a tree',                    revealed: false, answeredBy: null },
+  { id: '5',  text: 'Name the type of small animals that act as antagonists in the clip.',                        answer: 'Squirrels / rodents / chinchillas',                  revealed: false, answeredBy: null },
+  { id: '6',  text: 'What do the small animals do that first provokes the main character?',                       answer: 'They pop his butterflies / hurt small animals',      revealed: false, answeredBy: null },
+  { id: '7',  text: 'What gentle creatures does the main character interact with peacefully at the beginning?',   answer: 'Butterflies / birds / small animals',               revealed: false, answeredBy: null },
+  { id: '8',  text: 'How does the main character ultimately deal with the antagonists?',                          answer: 'He sets traps / chases and catches them',           revealed: false, answeredBy: null },
+  { id: '9',  text: 'What word or phrase appears as the title card on screen?',                                   answer: 'Big Buck Bunny',                                    revealed: false, answeredBy: null },
+  { id: '10', text: 'Which organisation produced this animated film?',                                            answer: 'The Blender Foundation / Blender Institute',        revealed: false, answeredBy: null },
 ]
 
 function useWs() {
@@ -102,6 +108,12 @@ export default function AVAdmin() {
       try {
         const msg = JSON.parse(e.data)
         if (msg.channel === 'mc:av_handoff' && msg.payload?.teamA) {
+          // Auto-apply teams immediately — admin navigated straight here from MC
+          setState(prev => ({
+            ...prev,
+            teamA: msg.payload.teamA,
+            teamB: msg.payload.teamB,
+          }))
           setMcPush({ teamA: msg.payload.teamA, teamB: msg.payload.teamB })
         }
       } catch {}
@@ -238,24 +250,22 @@ export default function AVAdmin() {
           </div>
         </div>
 
-        {/* Mystery Chain handoff banner */}
+        {/* Ready to Play banner — shown when teams are loaded from MC */}
         {mcPush && state.phase === 'idle' && (
-          <div className="bg-purple-900/40 border border-purple-500/50 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
+          <div className="bg-green-900/40 border border-green-500/50 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
             <div>
-              <p className="text-purple-300 text-xs font-bold uppercase tracking-widest mb-1">📺 Mystery Chain Result Received</p>
+              <p className="text-green-400 text-xs font-bold uppercase tracking-widest mb-1">✅ Ready to Play</p>
               <p className="text-white font-bold">
-                Top 2 advancing: <span className="text-green-400">{mcPush.teamA}</span> vs <span className="text-blue-400">{mcPush.teamB}</span>
+                <span className="text-green-400">{mcPush.teamA}</span> vs <span className="text-blue-400">{mcPush.teamB}</span>
+                <span className="text-gray-400 font-normal text-sm ml-3">· {state.questions.length} questions loaded · Video ready</span>
               </p>
             </div>
-            <div className="flex gap-2 shrink-0">
-              <button
-                onClick={() => { update({ teamA: mcPush.teamA, teamB: mcPush.teamB }); setMcPush(null) }}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-xl"
-              >
-                ✓ Use These Teams
-              </button>
-              <button onClick={() => setMcPush(null)} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-xl">✕</button>
-            </div>
+            <button
+              onClick={startWatching}
+              className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-black rounded-xl text-sm shrink-0"
+            >
+              ▶ Play Video Now
+            </button>
           </div>
         )}
 
