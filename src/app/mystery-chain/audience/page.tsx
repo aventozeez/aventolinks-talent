@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { wsSubscribe } from '@/lib/ws-sync'
 import AVAudienceView from '@/components/av-audience-view'
 
@@ -39,56 +39,65 @@ const fmtTime = (ms: number) => {
 
 function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string }) {
   const fullText = s.activeOpeningStory
-  const [displayed, setDisplayed] = useState('')
-  const [cursorVisible, setCursorVisible] = useState(true)
+  // Sentence-level subtitle synced to speech
+  const [currentSentence, setCurrentSentence] = useState('')
   const [done, setDone] = useState(false)
-  const [hideSubtitle, setHideSubtitle] = useState(false)
-  const indexRef = useRef(0)
 
-  // Fade the subtitle away shortly after the story finishes typing
-  useEffect(() => {
-    if (!done) { setHideSubtitle(false); return }
-    const t = setTimeout(() => setHideSubtitle(true), 1500)
-    return () => clearTimeout(t)
-  }, [done])
-
-  // Typewriter
-  useEffect(() => {
-    setDisplayed('')
-    indexRef.current = 0
-    setDone(false)
-    const iv = setInterval(() => {
-      indexRef.current++
-      setDisplayed(fullText.slice(0, indexRef.current))
-      if (indexRef.current >= fullText.length) {
-        clearInterval(iv)
-        setDone(true)
-      }
-    }, 28)
-    return () => clearInterval(iv)
+  // Split story into sentences (keep the terminator so pacing feels natural)
+  const sentences = useMemo(() => {
+    if (!fullText) return []
+    // Split on sentence terminators while keeping them attached
+    return fullText.match(/[^.!?]+[.!?]+(?:\s+|$)/g)?.map(s => s.trim()).filter(Boolean) ?? [fullText]
   }, [fullText])
 
-  // Text-to-speech narration
+  // Narrate one sentence at a time; show that sentence as subtitle while it plays.
+  // When speech ends, clear the subtitle and speak the next one.
   useEffect(() => {
     if (!fullText || typeof window === 'undefined' || !window.speechSynthesis) return
     window.speechSynthesis.cancel()
-    const utter = new SpeechSynthesisUtterance(fullText)
-    utter.rate = 0.88
-    utter.pitch = 0.95
-    utter.volume = 1
-    // prefer a deep/dramatic voice if available
+    setCurrentSentence('')
+    setDone(false)
+
+    let cancelled = false
+    let idx = 0
+
     const voices = window.speechSynthesis.getVoices()
     const preferred = voices.find(v => /male|david|google uk|daniel/i.test(v.name))
-    if (preferred) utter.voice = preferred
-    window.speechSynthesis.speak(utter)
-    return () => { window.speechSynthesis.cancel() }
-  }, [fullText])
 
-  // Blinking cursor
-  useEffect(() => {
-    const iv = setInterval(() => setCursorVisible(v => !v), 530)
-    return () => clearInterval(iv)
-  }, [])
+    function speakNext() {
+      if (cancelled) return
+      if (idx >= sentences.length) {
+        setCurrentSentence('')
+        setDone(true)
+        return
+      }
+      const sentence = sentences[idx]
+      setCurrentSentence(sentence)
+      const utter = new SpeechSynthesisUtterance(sentence)
+      utter.rate = 0.88
+      utter.pitch = 0.95
+      utter.volume = 1
+      if (preferred) utter.voice = preferred
+      utter.onend = () => {
+        if (cancelled) return
+        idx++
+        // Small pause between sentences with subtitle cleared, for a clean beat
+        setCurrentSentence('')
+        setTimeout(speakNext, 220)
+      }
+      window.speechSynthesis.speak(utter)
+    }
+
+    // Give voices a moment to load if not yet available
+    const delay = voices.length === 0 ? 350 : 0
+    const t = setTimeout(speakNext, delay)
+
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+      window.speechSynthesis.cancel()
+    }
+  }, [fullText, sentences])
 
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden relative">
@@ -117,17 +126,26 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
         </p>
       </div>
 
-      {/* ── SUBTITLE BAR – pinned to bottom, unmounts after story finishes ── */}
-      {!hideSubtitle && (
-        <div className="absolute bottom-0 inset-x-0 z-20 px-4 pb-4 pt-2"
-          style={{background:'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.7) 70%, transparent 100%)'}}>
+      {/* ── SUBTITLE BAR – shows the sentence currently being spoken ── */}
+      {currentSentence && (
+        <div key={currentSentence} className="absolute bottom-0 inset-x-0 z-20 px-4 pb-4 pt-2"
+          style={{
+            background:'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.7) 70%, transparent 100%)',
+            animation: 'mcSubIn 220ms ease-out',
+          }}>
           <p className="text-white font-semibold text-center text-lg leading-7 min-h-[3.5rem] drop-shadow"
             style={{textShadow:'0 2px 8px rgba(0,0,0,0.9), 0 0 2px #000'}}>
-            {displayed}
-            <span className={`inline-block w-0.5 h-5 bg-white ml-1 align-middle transition-opacity ${cursorVisible ? 'opacity-100' : 'opacity-0'}`} />
+            {currentSentence}
           </p>
         </div>
       )}
+      {/* keyframes for the subtitle fade-in */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes mcSubIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}} />
 
       {/* Small waiting hint — stays visible even after subtitle fades */}
       {done && (
