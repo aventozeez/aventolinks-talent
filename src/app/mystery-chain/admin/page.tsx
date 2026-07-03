@@ -113,7 +113,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
     title: 'The Silent Warning',
     emoji: '🔒',
     teaser: 'Uncover the threat. Protect the school.',
-    openingStory: 'At 8:15 AM, students arrived at Crescent Academy for the annual Scholars Challenge. Everything appeared normal. At 10:30 AM, a teacher noticed something unusual. The school was not under attack yet — but all the signs suggested that something dangerous was about to happen. The teams have 60 seconds to uncover the threat.',
+    openingStory: 'At 8:15 AM, students arrived at Crescent Academy for the annual Scholars Challenge. The morning felt ordinary — buses pulled up at the gates, teachers greeted their classes, and the assembly hall began to fill with excited voices. But by 10:30 AM, something shifted. A senior teacher noticed a stranger loitering near the west corridor. Cameras had gone offline for four minutes overnight. A locker that should have been empty was warm to the touch. Nothing had happened yet — but every silent sign pointed to a plan already in motion. Someone was watching the school. Someone was waiting for the right moment. And that moment was coming fast. Students of Crescent Academy — the safety of this school now rests in your hands. Unscramble every clue, unlock the mystery, and reveal the threat before it strikes. Your time starts now.',
     puzzles: [
       mk({ picture: '🔗', clue: 'The weakest part of any system.', scrambled: 'KNLI', answer: 'LINK', storySnippet: 'Investigators discovered a weak link in the school\'s safety system.' }),
       mk({ picture: '👤', clue: 'A person present where they are not authorized to be.', scrambled: 'RTUINRDE', answer: 'INTRUDER', storySnippet: 'Security footage showed a possible intruder.' }),
@@ -131,7 +131,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
     title: 'The Missing Trophy',
     emoji: '🏆',
     teaser: 'The trophy vanished. The ceremony cannot wait.',
-    openingStory: 'The morning of the Awards Ceremony, Crescent Academy\'s championship trophy was found missing from the display cabinet. The hall was locked all night. Only three people had keys. The teams have 60 seconds to track down the truth before the ceremony begins.',
+    openingStory: 'The morning of the Awards Ceremony, Crescent Academy\'s championship trophy was gone. The great glass cabinet in the main hall — polished the night before — now stood empty, the felt still bearing the faint outline of where the trophy had rested for twenty years. The hall had been locked from the outside all night. The security log listed only three names with keys: the principal, the janitor, and the head prefect. And yet, at 6:47 AM, a fresh scratch marked the frame of the cabinet, a single glove lay under a chair, and the CCTV feed had gone dark for exactly nine minutes. The ceremony begins in one hour. The parents are already arriving. The press is on their way. Students of Crescent Academy — the honour of this school is now in your hands. Unscramble every clue, unlock the mystery, and expose the truth before the ceremony begins. Your time starts now.',
     puzzles: [
       mk({ picture: '💰', clue: 'An act of taking what does not belong to you.', scrambled: 'FHETT', answer: 'THEFT', storySnippet: 'The trophy case showed clear signs of deliberate theft.' }),
       mk({ picture: '🕵️', clue: 'A person believed to be responsible.', scrambled: 'SPSUECT', answer: 'SUSPECT', storySnippet: 'One individual quickly became the main suspect.' }),
@@ -149,7 +149,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
     title: 'The Exam Leak',
     emoji: '📋',
     teaser: 'The questions are out. Time is running out.',
-    openingStory: 'Three days before the most important national examination in Crescent Academy\'s history, a student discovered that the exam questions were already circulating in a private group. The school board called for an immediate investigation. The teams have 60 seconds to uncover who is behind the leak.',
+    openingStory: 'Three days before the most important national examination in Crescent Academy\'s history, a whisper turned into a scandal. A quiet junior, scrolling through a class group at midnight, saw a familiar page of text on her screen — a section from the sealed exam paper that would not be opened for another 72 hours. She screenshot it. She showed her parents. By sunrise, the head of the examination board had been called. By 8 AM, teachers were in emergency meeting. Nine students had already seen the leak. The vault had not been broken. The papers had not been moved. And yet, somehow, the questions had escaped — passed from phone to phone in silence. Every reputation is on the line. The examination itself is at risk of being cancelled. Students of Crescent Academy — the integrity of this school is now in your hands. Unscramble every clue, unlock the mystery, and expose the person behind the leak. Your time starts now.',
     puzzles: [
       mk({ picture: '💧', clue: 'Information disclosed without permission.', scrambled: 'KALE', answer: 'LEAK', storySnippet: 'Exam questions had been secretly leaked online.' }),
       mk({ picture: '🔑', clue: 'Permission to enter a restricted area.', scrambled: 'SCACES', answer: 'ACCESS', storySnippet: 'Someone gained unauthorized access to the examination vault.' }),
@@ -167,7 +167,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
     title: 'The Vanishing Coach',
     emoji: '👁️',
     teaser: 'He was here. Now he is gone. Find out why.',
-    openingStory: 'Two hours before Crescent Academy\'s biggest inter-school competition in a decade, the head coach was reported missing. His office was locked from the inside. His phone sat on his desk. No one saw him leave. The teams have 60 seconds to piece together his disappearance.',
+    openingStory: 'Two hours before Crescent Academy\'s biggest inter-school competition in a decade, the head coach was gone. His office door was locked from the inside — but he was not inside. His phone sat on the desk, still buzzing with unread messages. His notebook lay open, mid-sentence. A half-empty cup of tea was still warm. No one saw him arrive. No one saw him leave. The security guard swore the corridor had been empty all morning. The whistle he never took off was hanging by the window. And on the chair, folded neatly, was his tracksuit — as if he had simply stepped out of it. The team he trained for years now waits on the pitch, unsure whether the competition can even begin. Students of Crescent Academy — the fate of your school\'s biggest match is now in your hands. Unscramble every clue, unlock the mystery, and piece together what really happened to the coach. Your time starts now.',
     puzzles: [
       mk({ picture: '❓', clue: 'No longer present or able to be found.', scrambled: 'GSINIMS', answer: 'MISSING', storySnippet: 'The coach was officially reported missing at 7:45 AM.' }),
       mk({ picture: '🔍', clue: 'A sign or indication pointing to what happened.', scrambled: 'UELC', answer: 'CLUE', storySnippet: 'A single clue was found on his otherwise empty desk.' }),
