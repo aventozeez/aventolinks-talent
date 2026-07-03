@@ -748,6 +748,8 @@ export default function MCAdminPage() {
                       correctA: 0,
                       correctB: 0,
                     })
+                    // Redirect the MC audience display to the AV audience
+                    wsBroadcast('mc:goto_av', { at: Date.now() })
                     setAvSent(true)
                     setTimeout(() => router.push('/audio-visual/admin'), 800)
                   }}

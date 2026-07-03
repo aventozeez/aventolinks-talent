@@ -553,7 +553,11 @@ export default function MCAudiencePage() {
 
   useEffect(() => {
     const unsub = wsSubscribe(CHANNEL, (data: MCAudienceState) => setS(data))
-    return () => unsub()
+    // When MC admin advances to AV, redirect this display to the AV audience
+    const unsubGoto = wsSubscribe('mc:goto_av', () => {
+      window.location.href = '/audio-visual/audience'
+    })
+    return () => { unsub(); unsubGoto() }
   }, [])
 
   useEffect(() => {

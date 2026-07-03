@@ -138,12 +138,16 @@ export default function AVAudience() {
         <div className="flex-1 relative bg-black">
           <iframe
             ref={iframeRef}
-            src={s.videoUrl + (s.videoPlay ? '&autoplay=1' : '')}
+            src={`${s.videoUrl}${s.videoUrl.includes('?') ? '&' : '?'}autoplay=1&mute=1&rel=0&playsinline=1`}
             className="absolute inset-0 w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
             title="Audio Visual Round Video"
           />
+          {/* Unmute prompt overlay */}
+          <div className="absolute bottom-14 right-4 bg-black/80 border border-yellow-500/60 text-yellow-300 px-3 py-2 rounded-lg text-xs font-bold pointer-events-none">
+            🔇 Auto-muted for autoplay — click the video player to unmute
+          </div>
         </div>
 
         {/* Bottom instruction */}
