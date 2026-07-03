@@ -52,7 +52,8 @@ type MCState = {
   revealed: boolean
   // AV Round pre-configuration (set during setup before game starts)
   avVideoUrl: string
-  avQuestions: AVQSetup[]
+  avQuestionsA: AVQSetup[]   // 10 questions for Team A round
+  avQuestionsB: AVQSetup[]   // 10 different questions for Team B round
 }
 
 const fmtTime = (ms: number) => {
@@ -187,19 +188,32 @@ const PACKS: MCPack[] = RAW_PACKS.map(p => ({ ...p, id: crypto.randomUUID() }))
 // ── Default AV Questions ──────────────────────────────────────────────────────
 // These are shown in the setup screen for the admin to edit before the game starts
 
-// Default answers correspond to the pre-loaded Big Buck Bunny video.
+// Default answers cover the first 2 minutes of Big Buck Bunny (the pre-loaded video).
 // Admin can edit any of these before starting the game.
-const DEFAULT_AV_QUESTIONS: Omit<AVQSetup,'id'>[] = [
-  { text: 'What is the name of the main character in the video?', answer: 'Big Buck Bunny' },
-  { text: 'What colour is the main rabbit?', answer: 'White' },
-  { text: 'Where does the story take place?', answer: 'A meadow / forest' },
-  { text: 'Name one small animal the bullies harm at the start.', answer: 'A butterfly (or a bird)' },
-  { text: 'How many bullies are there in the video?', answer: 'Three' },
-  { text: 'What kind of animals are the bullies?', answer: 'Rodents / squirrels' },
-  { text: 'What does Buck decide to do after being bullied?', answer: 'Take revenge / set traps' },
-  { text: 'What object does Buck use to launch his final trap?', answer: 'A log / tree trunk' },
-  { text: 'What mood does the video end on?', answer: 'Peaceful / triumphant' },
-  { text: 'What is the key message of the video?', answer: 'Stand up to bullies (or kindness matters)' },
+const DEFAULT_AV_QUESTIONS_A: Omit<AVQSetup,'id'>[] = [
+  { text: 'What kind of animal is the main character?', answer: 'A rabbit / bunny' },
+  { text: 'What colour is the main character?', answer: 'White' },
+  { text: 'What is the setting of the video?', answer: 'A meadow / forest' },
+  { text: 'What is the main character doing at the start?', answer: 'Sleeping / waking up' },
+  { text: 'What time of day does the video begin?', answer: 'Morning / sunrise' },
+  { text: 'What does the rabbit do first when he leaves his home?', answer: 'Stretches / smells a flower' },
+  { text: 'What insect does the rabbit interact with early on?', answer: 'A butterfly' },
+  { text: 'What is the mood of the opening scene?', answer: 'Peaceful / cheerful' },
+  { text: 'What is the general size of the main character?', answer: 'Large / big' },
+  { text: 'What is the art style of the video?', answer: '3D animation / CGI' },
+]
+
+const DEFAULT_AV_QUESTIONS_B: Omit<AVQSetup,'id'>[] = [
+  { text: 'Name one plant or flower shown in the opening.', answer: 'A daisy / flowers' },
+  { text: 'What kind of home does the main character live in?', answer: 'A tree / burrow' },
+  { text: 'What sound plays during the opening?', answer: 'Birds chirping / calm music' },
+  { text: 'What does the rabbit do to greet the day?', answer: 'Yawn / stretch' },
+  { text: 'What is the weather like in the video?', answer: 'Sunny / clear' },
+  { text: 'What animals besides the rabbit appear early?', answer: 'Birds / squirrels' },
+  { text: 'What is the main character\'s facial expression at the start?', answer: 'Happy / content' },
+  { text: 'What colour is the sky?', answer: 'Blue' },
+  { text: 'Is the video a musical, silent, or narrated?', answer: 'Silent / no dialogue' },
+  { text: 'What year was Big Buck Bunny released?', answer: '2008' },
 ]
 
 // ── Default State ─────────────────────────────────────────────────────────────
@@ -213,8 +227,10 @@ const defaultState = (): MCState => ({
   revealedA: [], revealedB: [], revealedC: [],
   scoreA: 0, scoreB: 0, scoreC: 0,
   timerStart: null, revealed: false,
-  avVideoUrl: 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1',
-  avQuestions: DEFAULT_AV_QUESTIONS.map(q => ({ ...q, id: crypto.randomUUID() })),
+  // Big Buck Bunny — video ends at 120s (2 min) via YouTube's end= parameter
+  avVideoUrl: 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1&end=120',
+  avQuestionsA: DEFAULT_AV_QUESTIONS_A.map(q => ({ ...q, id: crypto.randomUUID() })),
+  avQuestionsB: DEFAULT_AV_QUESTIONS_B.map(q => ({ ...q, id: crypto.randomUUID() })),
 })
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -225,6 +241,7 @@ export default function MCAdminPage() {
   const [timeLeft, setTimeLeft] = useState(MC_TIME_MS)
   const [avSent, setAvSent] = useState(false)
   const [avOpen, setAvOpen] = useState(false)
+  const [avTab, setAvTab] = useState<'A' | 'B'>('A')
   const [newQ, setNewQ] = useState({ text: '', answer: '' })
   const [editingQ, setEditingQ] = useState<string | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
@@ -303,18 +320,20 @@ export default function MCAdminPage() {
   const reset = () => update(defaultState())
 
   // AV question helpers (local state only — broadcast happens on Advance)
+  const key = avTab === 'A' ? 'avQuestionsA' : 'avQuestionsB'
   const updateAVQ = (id: string, field: 'text' | 'answer', val: string) => {
-    setS(p => ({ ...p, avQuestions: p.avQuestions.map(q => q.id === id ? { ...q, [field]: val } : q) }))
+    setS(p => ({ ...p, [key]: p[key].map(q => q.id === id ? { ...q, [field]: val } : q) }))
   }
   const deleteAVQ = (id: string) => {
-    setS(p => ({ ...p, avQuestions: p.avQuestions.filter(q => q.id !== id) }))
+    setS(p => ({ ...p, [key]: p[key].filter(q => q.id !== id) }))
   }
   const addAVQ = () => {
     if (!newQ.text.trim()) return
     const q: AVQSetup = { id: crypto.randomUUID(), text: newQ.text.trim(), answer: newQ.answer.trim() }
-    setS(p => ({ ...p, avQuestions: [...p.avQuestions, q] }))
+    setS(p => ({ ...p, [key]: [...p[key], q] }))
     setNewQ({ text: '', answer: '' })
   }
+  const currentAVQs = avTab === 'A' ? s.avQuestionsA : s.avQuestionsB
 
   // Derived
   const currentQueue = s.phase === 'a_playing' ? s.queueA : s.phase === 'b_playing' ? s.queueB : s.queueC
@@ -332,7 +351,9 @@ export default function MCAdminPage() {
   const isPlaying = ['a_playing','b_playing','c_playing'].includes(s.phase)
   const isPicking = ['pick_A','pick_B','pick_C'].includes(s.phase)
   const isStory = ['story_A','story_B','story_C'].includes(s.phase)
-  const avQsReady = s.avQuestions.length >= 5 && s.avQuestions.every(q => q.answer.trim())
+  const avQsAReady = s.avQuestionsA.length >= 10 && s.avQuestionsA.every(q => q.answer.trim())
+  const avQsBReady = s.avQuestionsB.length >= 10 && s.avQuestionsB.every(q => q.answer.trim())
+  const avQsReady = avQsAReady && avQsBReady
   const canBegin = s.teamA && s.teamB && s.teamC && avQsReady
 
   return (
@@ -397,8 +418,8 @@ export default function MCAdminPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-purple-400 font-bold text-sm">📺 Audio Visual Round Setup</span>
                   {avQsReady
-                    ? <span className="text-xs bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full">✓ Ready ({s.avQuestions.length} questions)</span>
-                    : <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded-full">Fill in answers to unlock</span>
+                    ? <span className="text-xs bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full">✓ Ready (A: {s.avQuestionsA.length} · B: {s.avQuestionsB.length})</span>
+                    : <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded-full">Fill 10 answers per team to unlock</span>
                   }
                 </div>
                 <span className="text-slate-500 text-xs">{avOpen ? '▲' : '▼'}</span>
@@ -407,7 +428,9 @@ export default function MCAdminPage() {
               {avOpen && (
                 <div className="px-4 pb-4 space-y-4 border-t border-purple-700/30">
                   <p className="text-slate-400 text-xs pt-3">
-                    Configure the Grand Final video and questions now. Teams, scores, and all settings carry forward automatically when you click Advance after Mystery Chain ends.
+                    2-minute video, then <b className="text-white">60 seconds per team</b> to answer up to 10 questions.
+                    Each correct answer = <b className="text-white">10 pts</b>. Wrong or skipped questions cycle to the back so teams can retry within the 60s.
+                    Scores carry forward from Mystery Chain automatically.
                   </p>
 
                   {/* Video URL */}
@@ -426,16 +449,31 @@ export default function MCAdminPage() {
                     <p className="text-xs text-slate-500">Paste any YouTube URL — it will be converted to embed format automatically.</p>
                   </div>
 
-                  {/* Questions */}
+                  {/* Questions — split by team */}
                   <div className="space-y-2">
+                    {/* Team tabs */}
+                    <div className="flex gap-2 border-b border-slate-700 pb-1">
+                      {(['A','B'] as const).map(t => (
+                        <button key={t} onClick={() => { setAvTab(t); setEditingQ(null) }}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-t-lg transition-colors ${
+                            avTab === t
+                              ? 'bg-purple-700/40 text-white border border-purple-500/40'
+                              : 'text-slate-400 hover:text-white'
+                          }`}>
+                          Team {t} ({t === 'A' ? s.avQuestionsA.length : s.avQuestionsB.length})
+                          {(t === 'A' ? avQsAReady : avQsBReady) && <span className="text-green-400 ml-1">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+
                     <div className="flex items-center justify-between">
                       <label className="text-xs text-gray-400 font-semibold">
-                        Questions ({s.avQuestions.length}) — fill in ALL answers before you can begin
+                        Team {avTab} questions ({currentAVQs.length}/10) — fill in ALL answers
                       </label>
                     </div>
 
                     <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                      {s.avQuestions.map((q, i) => (
+                      {currentAVQs.map((q, i) => (
                         <div key={q.id} className="bg-slate-800/60 rounded-xl p-3 space-y-2">
                           <div className="flex items-start gap-2">
                             <span className="text-xs text-slate-500 font-bold w-5 shrink-0 mt-2">{i + 1}</span>
@@ -725,11 +763,14 @@ export default function MCAdminPage() {
                     <span className="text-slate-400 text-sm font-normal"> ({ranked[1].score} pts)</span>
                   </p>
                   <p className="text-slate-500 text-xs mt-1">
-                    {s.avQuestions.length} questions ready · scores carry forward · video pre-configured
+                    {s.avQuestionsA.length + s.avQuestionsB.length} questions ready ({s.avQuestionsA.length} A · {s.avQuestionsB.length} B) · scores carry forward · video pre-configured
                   </p>
                 </div>
                 <button
                   onClick={() => {
+                    // Build fresh queues from source questions (source stays immutable for reference)
+                    const buildQs = (arr: AVQSetup[]) =>
+                      arr.map(q => ({ id: q.id, text: q.text, answer: q.answer, revealed: false, answeredBy: null as 'A' | 'B' | null }))
                     // Broadcast full AV state so AV admin hydrates from relay
                     wsBroadcast('av:state', {
                       _from_mc: true,
@@ -740,8 +781,10 @@ export default function MCAdminPage() {
                       teamB: ranked[1].name,
                       mcScoreA: ranked[0].score,
                       mcScoreB: ranked[1].score,
-                      questions: s.avQuestions.map(q => ({ ...q, revealed: false, answeredBy: null })),
-                      currentQ: 0,
+                      questionsA: buildQs(s.avQuestionsA),
+                      questionsB: buildQs(s.avQuestionsB),
+                      queueA: buildQs(s.avQuestionsA),
+                      queueB: buildQs(s.avQuestionsB),
                       timerStart: null,
                       scoreA: ranked[0].score,
                       scoreB: ranked[1].score,
