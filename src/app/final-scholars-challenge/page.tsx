@@ -50,56 +50,6 @@ const LINKS = [
   },
 ]
 
-const MYSTERY_LINKS = [
-  {
-    key:     'mc-admin',
-    label:   'Admin',
-    path:    '/mystery-chain/admin',
-    emoji:   '🎛️',
-    desc:    'Pick mystery packs, reveal clues, track 3-team scores',
-    border:  'border-[#f5a623]/40',
-    bg:      'bg-[#f5a623]/10',
-    text:    'text-[#f5a623]',
-    subtext: 'text-[#f5a623]/60',
-  },
-  {
-    key:     'mc-audience',
-    label:   'Audience Display',
-    path:    '/mystery-chain/audience',
-    emoji:   '🔍',
-    desc:    'Big-screen display — animated story, clues, live scores',
-    border:  'border-purple-500/40',
-    bg:      'bg-purple-500/10',
-    text:    'text-purple-300',
-    subtext: 'text-purple-400/60',
-  },
-]
-
-const AV_LINKS = [
-  {
-    key:     'av-admin',
-    label:   'Admin',
-    path:    '/audio-visual/admin',
-    emoji:   '🎛️',
-    desc:    'Set video, add questions, run Q&A for each team',
-    border:  'border-[#f5a623]/40',
-    bg:      'bg-[#f5a623]/10',
-    text:    'text-[#f5a623]',
-    subtext: 'text-[#f5a623]/60',
-  },
-  {
-    key:     'av-audience',
-    label:   'Audience Display',
-    path:    '/audio-visual/audience',
-    emoji:   '📺',
-    desc:    'Full-screen video + question overlay + countdown timer',
-    border:  'border-blue-500/40',
-    bg:      'bg-blue-500/10',
-    text:    'text-blue-300',
-    subtext: 'text-blue-400/60',
-  },
-]
-
 export default function FinalScholarsChallengeLanding() {
   const [origin, setOrigin]       = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
@@ -161,34 +111,6 @@ export default function FinalScholarsChallengeLanding() {
         <section>
           <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">Qualifying Rounds</p>
           <LinkCards links={LINKS} />
-        </section>
-
-        <div className="border-t border-slate-800" />
-
-        {/* Mystery Chain */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">🔐</span>
-            <div>
-              <p className="text-white font-black text-sm">Mystery Chain</p>
-              <p className="text-slate-500 text-xs">3-Team Final — top 2 advance</p>
-            </div>
-          </div>
-          <LinkCards links={MYSTERY_LINKS} />
-        </section>
-
-        <div className="border-t border-slate-800" />
-
-        {/* Audio Visual Round */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">📺</span>
-            <div>
-              <p className="text-white font-black text-sm">Audio Visual Round</p>
-              <p className="text-slate-500 text-xs">Grand Final — top 2 from Mystery Chain</p>
-            </div>
-          </div>
-          <LinkCards links={AV_LINKS} />
         </section>
 
       </div>
