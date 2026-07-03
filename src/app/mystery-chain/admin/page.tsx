@@ -357,14 +357,14 @@ export default function MCAdminPage() {
   const canBegin = s.teamA && s.teamB && s.teamC && avQsReady
 
   return (
-    <div className="min-h-screen bg-[#0a1628] text-white p-4">
-      <div className="max-w-3xl mx-auto space-y-4">
+    <div className="h-screen bg-[#0a1628] text-white p-3 overflow-hidden">
+      <div className="max-w-3xl mx-auto space-y-2 h-full overflow-y-auto">
 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest">Admin Control</p>
-            <h1 className="text-white text-2xl font-black">🔮 Mystery Chain</h1>
+            <p className="text-[#f5a623] text-[10px] font-bold uppercase tracking-widest">Admin Control</p>
+            <h1 className="text-white text-lg font-black">🔮 Mystery Chain</h1>
           </div>
           <div className="flex gap-2">
             <a href="/mystery-chain/audience" target="_blank"
@@ -381,31 +381,31 @@ export default function MCAdminPage() {
 
         {/* ─── SETUP ───────────────────────────────────────────────────────── */}
         {s.phase === 'setup' && (
-          <div className="space-y-4">
+          <div className="space-y-2">
 
-            {/* Team names */}
-            <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-3">
-              <h2 className="text-white font-bold">Team Names</h2>
-              <div className="grid grid-cols-3 gap-3">
-                {(['teamA','teamB','teamC'] as const).map((k, i) => (
-                  <input key={k} value={s[k]} onChange={e => setS(p => ({ ...p, [k]: e.target.value }))}
-                    placeholder={`Team ${['A','B','C'][i]}`}
-                    className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm" />
-                ))}
+            {/* Team names + mysteries in one row for compactness */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-3 space-y-2">
+                <h2 className="text-white font-bold text-sm">Team Names</h2>
+                <div className="grid grid-cols-1 gap-2">
+                  {(['teamA','teamB','teamC'] as const).map((k, i) => (
+                    <input key={k} value={s[k]} onChange={e => setS(p => ({ ...p, [k]: e.target.value }))}
+                      placeholder={`Team ${['A','B','C'][i]}`}
+                      className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm" />
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Mystery packs preview */}
-            <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-3">
-              <h2 className="text-white font-bold">4 Mysteries Available</h2>
-              <div className="grid grid-cols-2 gap-3">
-                {s.packs.map(p => (
-                  <div key={p.id} className="bg-slate-800/50 border border-slate-600/50 rounded-xl p-3">
-                    <p className="text-2xl mb-1">{p.emoji}</p>
-                    <p className="text-white font-bold text-sm">{p.title}</p>
-                    <p className="text-slate-400 text-xs">{p.teaser}</p>
-                  </div>
-                ))}
+              <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-3 space-y-2">
+                <h2 className="text-white font-bold text-sm">4 Mysteries</h2>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {s.packs.map(p => (
+                    <div key={p.id} className="bg-slate-800/50 border border-slate-600/50 rounded-lg p-1.5">
+                      <p className="text-base leading-none">{p.emoji}</p>
+                      <p className="text-white font-bold text-[11px] mt-1 leading-tight">{p.title}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 

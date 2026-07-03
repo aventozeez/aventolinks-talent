@@ -8,8 +8,10 @@ export default function ConditionalLayout({ children }: { children: React.ReactN
   const isStaffPage = pathname?.startsWith('/dashboard/staff')
   const isFSCPage   = pathname?.startsWith('/final-scholars-challenge')
   const isQuizLive  = pathname?.startsWith('/quiz-live')
+  const isMCPage    = pathname?.startsWith('/mystery-chain')
+  const isAVPage    = pathname?.startsWith('/audio-visual')
 
-  if (isStaffPage || isFSCPage || isQuizLive) {
+  if (isStaffPage || isFSCPage || isQuizLive || isMCPage || isAVPage) {
     return <>{children}</>
   }
 
