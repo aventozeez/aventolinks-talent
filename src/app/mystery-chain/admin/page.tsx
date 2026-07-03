@@ -187,17 +187,19 @@ const PACKS: MCPack[] = RAW_PACKS.map(p => ({ ...p, id: crypto.randomUUID() }))
 // ── Default AV Questions ──────────────────────────────────────────────────────
 // These are shown in the setup screen for the admin to edit before the game starts
 
+// Default answers correspond to the pre-loaded Big Buck Bunny video.
+// Admin can edit any of these before starting the game.
 const DEFAULT_AV_QUESTIONS: Omit<AVQSetup,'id'>[] = [
-  { text: 'What is the name of the main character in the video?', answer: '' },
-  { text: 'What colour is the main character?', answer: '' },
-  { text: 'What is the setting/location of the video?', answer: '' },
-  { text: 'Name one animal that appears in the video.', answer: '' },
-  { text: 'What happens at the beginning of the video?', answer: '' },
-  { text: 'Describe the main conflict or challenge in the video.', answer: '' },
-  { text: 'What object plays an important role in the video?', answer: '' },
-  { text: 'How does the main character resolve the problem?', answer: '' },
-  { text: 'What is the mood/tone of the video?', answer: '' },
-  { text: 'What is the key message or lesson from the video?', answer: '' },
+  { text: 'What is the name of the main character in the video?', answer: 'Big Buck Bunny' },
+  { text: 'What colour is the main rabbit?', answer: 'White' },
+  { text: 'Where does the story take place?', answer: 'A meadow / forest' },
+  { text: 'Name one small animal the bullies harm at the start.', answer: 'A butterfly (or a bird)' },
+  { text: 'How many bullies are there in the video?', answer: 'Three' },
+  { text: 'What kind of animals are the bullies?', answer: 'Rodents / squirrels' },
+  { text: 'What does Buck decide to do after being bullied?', answer: 'Take revenge / set traps' },
+  { text: 'What object does Buck use to launch his final trap?', answer: 'A log / tree trunk' },
+  { text: 'What mood does the video end on?', answer: 'Peaceful / triumphant' },
+  { text: 'What is the key message of the video?', answer: 'Stand up to bullies (or kindness matters)' },
 ]
 
 // ── Default State ─────────────────────────────────────────────────────────────
