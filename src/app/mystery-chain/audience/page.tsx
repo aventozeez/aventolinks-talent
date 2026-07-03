@@ -184,6 +184,49 @@ function SceneSky({ fromColor, toColor, dur='35s' }: { fromColor:string; toColor
   )
 }
 
+// ── Ambient life — birds, drifting clouds, subtle background motion ─────────
+// Used inside every scene to keep the world feeling alive.
+function SceneAmbient({ dur = '35s' }: { dur?: string }) {
+  return (
+    <>
+      {/* extra puffy cloud drifting the other way */}
+      <g opacity="0.7">
+        <animateTransform attributeName="transform" type="translate" values="1200,60;600,60;-200,60" keyTimes="0;0.5;1" dur={dur} repeatCount="indefinite"/>
+        <ellipse cx="0" cy="0" rx="55" ry="24" fill="white"/>
+        <ellipse cx="40" cy="-8" rx="38" ry="20" fill="white"/>
+      </g>
+      {/* bird flock 1 — flies left to right, wings flap */}
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="-100,140;500,110;1100,150" keyTimes="0;0.5;1" dur="18s" repeatCount="indefinite"/>
+        {[0, 30, 60].map((dx, i) => (
+          <g key={i} transform={`translate(${dx},${i * 4})`}>
+            <path d="M0,0 Q-6,-5 -12,0" stroke="#222" strokeWidth="2" fill="none">
+              <animate attributeName="d" values="M0,0 Q-6,-5 -12,0;M0,0 Q-6,3 -12,0;M0,0 Q-6,-5 -12,0" dur="0.35s" repeatCount="indefinite"/>
+            </path>
+            <path d="M0,0 Q6,-5 12,0" stroke="#222" strokeWidth="2" fill="none">
+              <animate attributeName="d" values="M0,0 Q6,-5 12,0;M0,0 Q6,3 12,0;M0,0 Q6,-5 12,0" dur="0.35s" repeatCount="indefinite"/>
+            </path>
+          </g>
+        ))}
+      </g>
+      {/* bird flock 2 — offset timing, goes right to left */}
+      <g opacity="0.85">
+        <animateTransform attributeName="transform" type="translate" values="1100,220;500,180;-100,210" keyTimes="0;0.5;1" dur="24s" repeatCount="indefinite" begin="6s"/>
+        {[0, 25].map((dx, i) => (
+          <g key={i} transform={`translate(${dx},${i * 3})`}>
+            <path d="M0,0 Q-5,-4 -10,0" stroke="#333" strokeWidth="1.8" fill="none">
+              <animate attributeName="d" values="M0,0 Q-5,-4 -10,0;M0,0 Q-5,2 -10,0;M0,0 Q-5,-4 -10,0" dur="0.4s" repeatCount="indefinite"/>
+            </path>
+            <path d="M0,0 Q5,-4 10,0" stroke="#333" strokeWidth="1.8" fill="none">
+              <animate attributeName="d" values="M0,0 Q5,-4 10,0;M0,0 Q5,2 10,0;M0,0 Q5,-4 10,0" dur="0.4s" repeatCount="indefinite"/>
+            </path>
+          </g>
+        ))}
+      </g>
+    </>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SCENE 1 — 🔒 The Silent Warning  (school, students arriving, threat figure)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -233,10 +276,14 @@ function SceneSilentWarning() {
         </circle>
         <text x="0" y="18" textAnchor="middle" fontSize="11" fill="#666" fontFamily="Arial,sans-serif">AM</text>
       </g>
-      {/* students */}
+      <SceneAmbient/>
+      {/* students arriving */}
       <WalkingStudent x0={1050} x1={420} t0={0.03} t1={0.36} dur="35s" shirt="#1565c0" skin="#ffcc80" hair="#5d4037" bag="#e53935"/>
       <WalkingStudent x0={1150} x1={450} t0={0.05} t1={0.39} dur="35s" shirt="#e91e8c" skin="#ffe0b2" hair="#4a148c" bag="#7b1fa2" delay="0.15s"/>
       <WalkingStudent x0={1250} x1={478} t0={0.07} t1={0.42} dur="35s" shirt="#2e7d32" skin="#ffb74d" hair="#111" bag="#1976d2" delay="0.28s"/>
+      {/* additional students — different rhythm */}
+      <WalkingStudent x0={-80} x1={340} t0={0.10} t1={0.44} dur="35s" shirt="#f57c00" skin="#ffe0b2" hair="#3e2723" bag="#00695c" delay="0.4s"/>
+      <WalkingStudent x0={-160} x1={310} t0={0.14} t1={0.48} dur="35s" shirt="#c2185b" skin="#ffcc80" hair="#212121" bag="#f9a825" delay="0.22s"/>
       {/* teacher */}
       <g transform="translate(390,0)">
         <circle cx="0" cy="350" r="17" fill="#ffe0b2"/>
@@ -335,9 +382,13 @@ function SceneMissingTrophy() {
       <ellipse cx="580" cy="375" rx="10" ry="5" fill="#CD7F32"/>
       <rect x="575" y="355" width="10" height="22" rx="2" fill="#CD7F32"/>
       <ellipse cx="580" cy="353" rx="8" ry="4" fill="#b87333"/>
+      <SceneAmbient/>
       {/* students admiring, then reacting */}
       <WalkingStudent x0={1050} x1={330} t0={0.03} t1={0.3} dur="35s" shirt="#1565c0" skin="#ffcc80" hair="#5d4037" bag="#e53935"/>
       <WalkingStudent x0={1150} x1={660} t0={0.05} t1={0.33} dur="35s" shirt="#880e4f" skin="#ffe0b2" hair="#4a148c" bag="#7b1fa2" delay="0.15s"/>
+      {/* extra crowd — teachers strolling in from left */}
+      <WalkingStudent x0={-100} x1={280} t0={0.06} t1={0.31} dur="35s" shirt="#00695c" skin="#ffe0b2" hair="#37474f" bag="#8d6e63" delay="0.3s"/>
+      <WalkingStudent x0={-180} x1={220} t0={0.09} t1={0.35} dur="35s" shirt="#ef6c00" skin="#ffcc80" hair="#212121" bag="#455a64" delay="0.5s"/>
       {/* thief sneaks in from side at night */}
       <g>
         <animateTransform attributeName="transform" type="translate" values="1050,0;1050,0;1050,0;700,0;520,0" keyTimes="0;0.5;0.6;0.75;0.88" dur="35s" repeatCount="indefinite"/>
@@ -376,6 +427,7 @@ function SceneExamLeak() {
   return (
     <>
       <SceneSky fromColor="#87ceeb" toColor="#0a0a1e"/>
+      <SceneAmbient/>
       {/* classroom floor */}
       <rect y="390" width="1000" height="170" fill="#795548"/>
       <rect y="386" width="1000" height="8" fill="#8d6e63"/>
@@ -406,11 +458,15 @@ function SceneExamLeak() {
           <rect x={x+10} y="355" width="80" height="18" rx="2" fill="white" stroke="#ddd" strokeWidth="1"/>
         </g>
       ))}
-      {/* students sitting */}
-      {[175,325].map((x,i) => (
+      {/* students sitting — heads gently bob */}
+      {[175,325,675,825].map((x,i) => (
         <g key={i}>
-          <circle cx={x} cy="342" r="14" fill={i===0?'#ffcc80':'#ffe0b2'}/>
-          <rect x={x-11} y="356" width="22" height="20" rx="4" fill={i===0?'#1565c0':'#c2185b'}/>
+          <g>
+            <animateTransform attributeName="transform" type="translate"
+              values="0,0;0,-3;0,0" dur={`${2 + i*0.3}s`} repeatCount="indefinite" begin={`${i*0.4}s`}/>
+            <circle cx={x} cy="342" r="14" fill={['#ffcc80','#ffe0b2','#ffb74d','#ffd180'][i]}/>
+            <rect x={x-11} y="356" width="22" height="20" rx="4" fill={['#1565c0','#c2185b','#2e7d32','#6a1b9a'][i]}/>
+          </g>
         </g>
       ))}
       {/* phone camera flash */}
@@ -454,6 +510,7 @@ function SceneVanishingCoach() {
   return (
     <>
       <SceneSky fromColor="#5bb8f5" toColor="#0d0d1e"/>
+      <SceneAmbient/>
       {/* sports field */}
       <rect y="390" width="1000" height="170" fill="#388e3c"/>
       <rect y="386" width="1000" height="8" fill="#43a047"/>
@@ -502,6 +559,9 @@ function SceneVanishingCoach() {
       {/* players training */}
       <WalkingStudent x0={250} x1={250} t0={0.5} t1={0.5} dur="35s" shirt="#e53935" skin="#ffcc80" hair="#5d4037" bag="#c62828"/>
       <WalkingStudent x0={680} x1={680} t0={0.5} t1={0.5} dur="35s" shirt="#1565c0" skin="#ffb74d" hair="#111" bag="#1976d2" delay="0.2s"/>
+      {/* extra players jogging across the pitch */}
+      <WalkingStudent x0={-80} x1={1080} t0={0.02} t1={0.5} dur="35s" shirt="#ff9800" skin="#ffcc80" hair="#3e2723" bag="#e65100" delay="0.1s"/>
+      <WalkingStudent x0={1100} x1={-100} t0={0.02} t1={0.55} dur="35s" shirt="#7b1fa2" skin="#ffe0b2" hair="#212121" bag="#4a148c" delay="0.35s"/>
       {/* players looking confused when coach vanishes */}
       {[250, 680].map((x,i) => (
         <text key={i} x={x} y="300" textAnchor="middle" fontSize="28" fill="#ffd600" fontWeight="900" opacity="0">
