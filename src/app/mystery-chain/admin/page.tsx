@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { wsBroadcast } from '@/lib/ws-sync'
 
 const CHANNEL = 'mc:state'
-const MC_TIME_MS = 60_000 // 60 seconds
+const MC_TIME_MS = 60_000
 const MC_PTS = 10
 
 type MCPhase =
@@ -17,8 +17,8 @@ type MCPhase =
 
 type MCPuzzle = {
   id: string
-  picture: string   // emoji shown as the visual clue
-  clue: string      // text description
+  picture: string
+  clue: string
   scrambled: string
   answer: string
   storySnippet: string
@@ -33,6 +33,13 @@ type MCPack = {
   puzzles: MCPuzzle[]
 }
 
+// AV Round question type (simpler — just text + answer, no scrambled)
+type AVQSetup = {
+  id: string
+  text: string
+  answer: string
+}
+
 type MCState = {
   phase: MCPhase
   teamA: string; teamB: string; teamC: string
@@ -43,6 +50,9 @@ type MCState = {
   scoreA: number; scoreB: number; scoreC: number
   timerStart: number | null
   revealed: boolean
+  // AV Round pre-configuration (set during setup before game starts)
+  avVideoUrl: string
+  avQuestions: AVQSetup[]
 }
 
 const fmtTime = (ms: number) => {
@@ -56,14 +66,12 @@ function safeForAudience(s: MCState) {
   const activeQ = s.phase === 'a_playing' ? s.queueA : s.phase === 'b_playing' ? s.queueB : s.queueC
   const activeRevealed = s.phase === 'a_playing' ? s.revealedA : s.phase === 'b_playing' ? s.revealedB : s.revealedC
   const puzzle = activeQ[0] ?? null
-
   const chosenPackId = isPlaying || isStory
     ? (s.phase.endsWith('A') || s.phase === 'a_playing' || s.phase === 'story_A' ? s.chosenA
       : s.phase.endsWith('B') || s.phase === 'b_playing' || s.phase === 'story_B' ? s.chosenB
       : s.chosenC)
     : null
   const activePack = chosenPackId ? s.packs.find(p => p.id === chosenPackId) ?? null : null
-
   return {
     phase: s.phase,
     teamA: s.teamA, teamB: s.teamB, teamC: s.teamC,
@@ -86,6 +94,15 @@ function safeForAudience(s: MCState) {
   }
 }
 
+// Converts watch/short URLs to embeddable format
+function toEmbedUrl(url: string): string {
+  try {
+    const m = url.match(/(?:v=|\/embed\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+    if (m) return `https://www.youtube.com/embed/${m[1]}?enablejsapi=1`
+    return url.includes('youtube.com/embed') ? url : url
+  } catch { return url }
+}
+
 // ── 4 Mystery Packs ──────────────────────────────────────────────────────────
 
 const mk = (p: Omit<MCPuzzle,'id'>) => ({ ...p, id: crypto.randomUUID() })
@@ -105,7 +122,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
       mk({ picture: '🔍', clue: 'Careful examination to discover the truth.', scrambled: 'YAANLSIS', answer: 'ANALYSIS', storySnippet: 'The analysis revealed a disturbing pattern.' }),
       mk({ picture: '📹', clue: 'Continuous observation.', scrambled: 'NIMTOROING', answer: 'MONITORING', storySnippet: 'Monitoring showed unusual movement around the campus.' }),
       mk({ picture: '🚨', clue: 'A signal that demands immediate action.', scrambled: 'TREAL', answer: 'ALERT', storySnippet: 'The school issued an alert.' }),
-      mk({ picture: '🚪', clue: 'Organized movement away from danger.', scrambled: 'AUEVTCAIOON', answer: 'EVACUATION', storySnippet: 'A precautionary evacuation began.' }),
+      mk({ picture: '🚪', clue: 'Organised movement away from danger.', scrambled: 'AUEVTCAIOON', answer: 'EVACUATION', storySnippet: 'A precautionary evacuation began.' }),
       mk({ picture: '🛡️', clue: 'The final objective of every safety plan.', scrambled: 'NTEITCOPRO', answer: 'PROTECTION', storySnippet: 'The school and its students were finally safe under full protection.' }),
     ],
   },
@@ -167,6 +184,22 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
 
 const PACKS: MCPack[] = RAW_PACKS.map(p => ({ ...p, id: crypto.randomUUID() }))
 
+// ── Default AV Questions ──────────────────────────────────────────────────────
+// These are shown in the setup screen for the admin to edit before the game starts
+
+const DEFAULT_AV_QUESTIONS: Omit<AVQSetup,'id'>[] = [
+  { text: 'What is the name of the main character in the video?', answer: '' },
+  { text: 'What colour is the main character?', answer: '' },
+  { text: 'What is the setting/location of the video?', answer: '' },
+  { text: 'Name one animal that appears in the video.', answer: '' },
+  { text: 'What happens at the beginning of the video?', answer: '' },
+  { text: 'Describe the main conflict or challenge in the video.', answer: '' },
+  { text: 'What object plays an important role in the video?', answer: '' },
+  { text: 'How does the main character resolve the problem?', answer: '' },
+  { text: 'What is the mood/tone of the video?', answer: '' },
+  { text: 'What is the key message or lesson from the video?', answer: '' },
+]
+
 // ── Default State ─────────────────────────────────────────────────────────────
 
 const defaultState = (): MCState => ({
@@ -178,6 +211,8 @@ const defaultState = (): MCState => ({
   revealedA: [], revealedB: [], revealedC: [],
   scoreA: 0, scoreB: 0, scoreC: 0,
   timerStart: null, revealed: false,
+  avVideoUrl: 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1',
+  avQuestions: DEFAULT_AV_QUESTIONS.map(q => ({ ...q, id: crypto.randomUUID() })),
 })
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -187,6 +222,9 @@ export default function MCAdminPage() {
   const [s, setS] = useState<MCState>(defaultState())
   const [timeLeft, setTimeLeft] = useState(MC_TIME_MS)
   const [avSent, setAvSent] = useState(false)
+  const [avOpen, setAvOpen] = useState(false)
+  const [newQ, setNewQ] = useState({ text: '', answer: '' })
+  const [editingQ, setEditingQ] = useState<string | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const stateRef = useRef(s)
   stateRef.current = s
@@ -221,23 +259,18 @@ export default function MCAdminPage() {
     const cur = stateRef.current
     const pack = cur.packs.find(p => p.id === packId)!
     const queue = [...pack.puzzles]
-    if (cur.phase === 'pick_A') {
-      update({ ...cur, chosenA: packId, phase: 'story_A', queueA: queue })
-    } else if (cur.phase === 'pick_B') {
-      update({ ...cur, chosenB: packId, phase: 'story_B', queueB: queue })
-    } else if (cur.phase === 'pick_C') {
-      update({ ...cur, chosenC: packId, phase: 'story_C', queueC: queue })
-    }
+    if (cur.phase === 'pick_A') update({ ...cur, chosenA: packId, phase: 'story_A', queueA: queue })
+    else if (cur.phase === 'pick_B') update({ ...cur, chosenB: packId, phase: 'story_B', queueB: queue })
+    else if (cur.phase === 'pick_C') update({ ...cur, chosenC: packId, phase: 'story_C', queueC: queue })
   }
 
   const startRiddles = () => {
     const cur = stateRef.current
-    const next: MCState = {
+    update({
       ...cur,
       phase: cur.phase === 'story_A' ? 'a_playing' : cur.phase === 'story_B' ? 'b_playing' : 'c_playing',
       timerStart: Date.now(), revealed: false,
-    }
-    update(next)
+    })
   }
 
   const action = (result: 'correct' | 'wrong' | 'skip') => {
@@ -267,6 +300,20 @@ export default function MCAdminPage() {
 
   const reset = () => update(defaultState())
 
+  // AV question helpers (local state only — broadcast happens on Advance)
+  const updateAVQ = (id: string, field: 'text' | 'answer', val: string) => {
+    setS(p => ({ ...p, avQuestions: p.avQuestions.map(q => q.id === id ? { ...q, [field]: val } : q) }))
+  }
+  const deleteAVQ = (id: string) => {
+    setS(p => ({ ...p, avQuestions: p.avQuestions.filter(q => q.id !== id) }))
+  }
+  const addAVQ = () => {
+    if (!newQ.text.trim()) return
+    const q: AVQSetup = { id: crypto.randomUUID(), text: newQ.text.trim(), answer: newQ.answer.trim() }
+    setS(p => ({ ...p, avQuestions: [...p.avQuestions, q] }))
+    setNewQ({ text: '', answer: '' })
+  }
+
   // Derived
   const currentQueue = s.phase === 'a_playing' ? s.queueA : s.phase === 'b_playing' ? s.queueB : s.queueC
   const currentPuzzle = currentQueue[0] ?? null
@@ -283,6 +330,8 @@ export default function MCAdminPage() {
   const isPlaying = ['a_playing','b_playing','c_playing'].includes(s.phase)
   const isPicking = ['pick_A','pick_B','pick_C'].includes(s.phase)
   const isStory = ['story_A','story_B','story_C'].includes(s.phase)
+  const avQsReady = s.avQuestions.length >= 5 && s.avQuestions.every(q => q.answer.trim())
+  const canBegin = s.teamA && s.teamB && s.teamC && avQsReady
 
   return (
     <div className="min-h-screen bg-[#0a1628] text-white p-4">
@@ -307,9 +356,11 @@ export default function MCAdminPage() {
           </div>
         </div>
 
-        {/* SETUP */}
+        {/* ─── SETUP ───────────────────────────────────────────────────────── */}
         {s.phase === 'setup' && (
           <div className="space-y-4">
+
+            {/* Team names */}
             <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-3">
               <h2 className="text-white font-bold">Team Names</h2>
               <div className="grid grid-cols-3 gap-3">
@@ -320,6 +371,8 @@ export default function MCAdminPage() {
                 ))}
               </div>
             </div>
+
+            {/* Mystery packs preview */}
             <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-3">
               <h2 className="text-white font-bold">4 Mysteries Available</h2>
               <div className="grid grid-cols-2 gap-3">
@@ -332,15 +385,134 @@ export default function MCAdminPage() {
                 ))}
               </div>
             </div>
+
+            {/* ── AV Round Setup ──────────────────────────────────────────── */}
+            <div className="bg-[#0d1f3c] border border-purple-700/50 rounded-xl overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-purple-900/20 transition-colors"
+                onClick={() => setAvOpen(o => !o)}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-purple-400 font-bold text-sm">📺 Audio Visual Round Setup</span>
+                  {avQsReady
+                    ? <span className="text-xs bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full">✓ Ready ({s.avQuestions.length} questions)</span>
+                    : <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded-full">Fill in answers to unlock</span>
+                  }
+                </div>
+                <span className="text-slate-500 text-xs">{avOpen ? '▲' : '▼'}</span>
+              </button>
+
+              {avOpen && (
+                <div className="px-4 pb-4 space-y-4 border-t border-purple-700/30">
+                  <p className="text-slate-400 text-xs pt-3">
+                    Configure the Grand Final video and questions now. Teams, scores, and all settings carry forward automatically when you click Advance after Mystery Chain ends.
+                  </p>
+
+                  {/* Video URL */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-400 font-semibold block">YouTube Video URL</label>
+                    <input
+                      value={s.avVideoUrl}
+                      onChange={e => {
+                        const url = e.target.value
+                        const embed = toEmbedUrl(url)
+                        setS(p => ({ ...p, avVideoUrl: embed || url }))
+                      }}
+                      placeholder="https://youtube.com/watch?v=... or embed URL"
+                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+                    />
+                    <p className="text-xs text-slate-500">Paste any YouTube URL — it will be converted to embed format automatically.</p>
+                  </div>
+
+                  {/* Questions */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-gray-400 font-semibold">
+                        Questions ({s.avQuestions.length}) — fill in ALL answers before you can begin
+                      </label>
+                    </div>
+
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                      {s.avQuestions.map((q, i) => (
+                        <div key={q.id} className="bg-slate-800/60 rounded-xl p-3 space-y-2">
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs text-slate-500 font-bold w-5 shrink-0 mt-2">{i + 1}</span>
+                            <div className="flex-1 space-y-1.5">
+                              {editingQ === q.id ? (<>
+                                <input
+                                  value={q.text}
+                                  onChange={e => updateAVQ(q.id, 'text', e.target.value)}
+                                  className="w-full bg-slate-700 border border-slate-500 rounded-lg px-2 py-1.5 text-white text-sm"
+                                  placeholder="Question text"
+                                  autoFocus
+                                />
+                                <input
+                                  value={q.answer}
+                                  onChange={e => updateAVQ(q.id, 'answer', e.target.value)}
+                                  className="w-full bg-slate-700 border border-green-500/40 rounded-lg px-2 py-1.5 text-green-300 text-sm"
+                                  placeholder="Answer"
+                                />
+                                <button onClick={() => setEditingQ(null)} className="text-xs text-purple-400 hover:text-purple-300">Done editing</button>
+                              </>) : (<>
+                                <p className="text-white text-sm leading-snug">{q.text}</p>
+                                <p className={`text-xs ${q.answer ? 'text-green-400' : 'text-red-400/70 italic'}`}>
+                                  {q.answer ? `Answer: ${q.answer}` : '⚠ Answer not set — click Edit'}
+                                </p>
+                              </>)}
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              {editingQ !== q.id && (
+                                <button onClick={() => setEditingQ(q.id)} className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700">Edit</button>
+                              )}
+                              <button onClick={() => deleteAVQ(q.id)} className="text-xs text-slate-600 hover:text-red-400 px-2 py-1 rounded-lg hover:bg-slate-700">✕</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add question */}
+                    <div className="bg-slate-800/40 rounded-xl p-3 space-y-2 border border-dashed border-slate-600">
+                      <p className="text-xs text-slate-500 font-semibold">Add a question</p>
+                      <input
+                        value={newQ.text}
+                        onChange={e => setNewQ(p => ({ ...p, text: e.target.value }))}
+                        placeholder="Question text…"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm"
+                      />
+                      <input
+                        value={newQ.answer}
+                        onChange={e => setNewQ(p => ({ ...p, answer: e.target.value }))}
+                        placeholder="Answer…"
+                        className="w-full bg-slate-700 border border-green-500/30 rounded-lg px-2 py-1.5 text-green-300 text-sm"
+                        onKeyDown={e => e.key === 'Enter' && addAVQ()}
+                      />
+                      <button onClick={addAVQ} disabled={!newQ.text.trim()}
+                        className="text-xs bg-purple-600/40 hover:bg-purple-600/70 disabled:opacity-40 text-purple-300 px-3 py-1.5 rounded-lg font-semibold">
+                        + Add Question
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Begin button */}
+            {!canBegin && (
+              <p className="text-center text-xs text-slate-500">
+                {!s.teamA || !s.teamB || !s.teamC ? 'Enter all 3 team names · ' : ''}
+                {!avQsReady ? 'Open AV Round Setup and fill in all question answers' : ''}
+              </p>
+            )}
             <button onClick={() => update({ ...s, phase: 'intro' })}
-              disabled={!s.teamA || !s.teamB || !s.teamC}
-              className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-black py-4 rounded-xl text-lg">
+              disabled={!canBegin}
+              className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-4 rounded-xl text-lg">
               Begin Mystery Chain →
             </button>
           </div>
         )}
 
-        {/* INTRO */}
+        {/* ─── INTRO ───────────────────────────────────────────────────────── */}
         {s.phase === 'intro' && (
           <div className="space-y-4">
             <div className="bg-purple-900/20 border border-purple-500/30 rounded-2xl p-6 text-center space-y-3">
@@ -366,7 +538,7 @@ export default function MCAdminPage() {
           </div>
         )}
 
-        {/* PICK PHASE */}
+        {/* ─── PICK PHASE ──────────────────────────────────────────────────── */}
         {isPicking && (
           <div className="space-y-4">
             <div className="text-center">
@@ -405,7 +577,7 @@ export default function MCAdminPage() {
           </div>
         )}
 
-        {/* STORY PHASE */}
+        {/* ─── STORY PHASE ─────────────────────────────────────────────────── */}
         {isStory && (
           <div className="space-y-4">
             <div className="text-center">
@@ -423,10 +595,9 @@ export default function MCAdminPage() {
           </div>
         )}
 
-        {/* PLAYING */}
+        {/* ─── PLAYING ─────────────────────────────────────────────────────── */}
         {isPlaying && (
           <div className="space-y-4">
-            {/* Timer */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-4">
               <div className="flex items-center justify-between mb-1">
                 <div>
@@ -441,7 +612,6 @@ export default function MCAdminPage() {
               <p className="text-center font-black text-5xl mt-2" style={{ color: timerColor }}>{fmtTime(timeLeft)}</p>
             </div>
 
-            {/* Scores */}
             <div className="grid grid-cols-3 gap-2">
               {[{name:s.teamA,score:s.scoreA,k:'A'},{name:s.teamB,score:s.scoreB,k:'B'},{name:s.teamC,score:s.scoreC,k:'C'}].map(t => {
                 const active = (s.phase==='a_playing'&&t.k==='A')||(s.phase==='b_playing'&&t.k==='B')||(s.phase==='c_playing'&&t.k==='C')
@@ -454,7 +624,6 @@ export default function MCAdminPage() {
               })}
             </div>
 
-            {/* Story so far */}
             {currentRevealed.length > 0 && (
               <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
                 <p className="text-blue-300 text-xs font-bold uppercase tracking-widest mb-2">Story Unlocked</p>
@@ -468,10 +637,8 @@ export default function MCAdminPage() {
               </div>
             )}
 
-            {/* Current Puzzle */}
             {currentPuzzle ? (
               <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-5 space-y-3">
-                {/* Picture clue */}
                 <div className="flex justify-center">
                   <div className="bg-slate-800/60 rounded-2xl px-8 py-4 text-center">
                     <p className="text-7xl">{currentPuzzle.picture}</p>
@@ -491,7 +658,6 @@ export default function MCAdminPage() {
               <div className="bg-white/5 border border-white/10 rounded-xl p-6 text-center text-slate-500">No more puzzles</div>
             )}
 
-            {/* Actions */}
             <div className="grid grid-cols-3 gap-3">
               <button onClick={() => action('correct')} className="py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl text-sm">
                 ✓ Correct<br/><span className="text-xs opacity-75">+{MC_PTS} pts · story revealed</span>
@@ -510,64 +676,98 @@ export default function MCAdminPage() {
           </div>
         )}
 
-        {/* DONE */}
-        {s.phase === 'done' && (
-          <div className="space-y-4">
-            <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-6">
-              <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest text-center mb-4">Final Results</p>
-              <div className="space-y-3">
-                {[
-                  {name:s.teamA,score:s.scoreA,rev:s.revealedA,packId:s.chosenA},
-                  {name:s.teamB,score:s.scoreB,rev:s.revealedB,packId:s.chosenB},
-                  {name:s.teamC,score:s.scoreC,rev:s.revealedC,packId:s.chosenC},
-                ].sort((a,b) => b.score - a.score).map((t, i) => {
-                  const pack = s.packs.find(p => p.id === t.packId)
-                  return (
-                    <div key={t.name} className="bg-white/5 rounded-xl p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{['🥇','🥈','🥉'][i]}</span>
-                        <div>
-                          <p className="text-white font-bold">{t.name}</p>
-                          <p className="text-slate-500 text-xs">{pack?.emoji} {pack?.title} · {t.rev.length} clues unlocked</p>
+        {/* ─── DONE ────────────────────────────────────────────────────────── */}
+        {s.phase === 'done' && (() => {
+          const ranked = [
+            { name: s.teamA, score: s.scoreA },
+            { name: s.teamB, score: s.scoreB },
+            { name: s.teamC, score: s.scoreC },
+          ].sort((a, b) => b.score - a.score)
+
+          return (
+            <div className="space-y-4">
+              <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-6">
+                <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest text-center mb-4">Final Results</p>
+                <div className="space-y-3">
+                  {[
+                    {name:s.teamA,score:s.scoreA,rev:s.revealedA,packId:s.chosenA},
+                    {name:s.teamB,score:s.scoreB,rev:s.revealedB,packId:s.chosenB},
+                    {name:s.teamC,score:s.scoreC,rev:s.revealedC,packId:s.chosenC},
+                  ].sort((a,b) => b.score - a.score).map((t, i) => {
+                    const pack = s.packs.find(p => p.id === t.packId)
+                    return (
+                      <div key={t.name} className="bg-white/5 rounded-xl p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{['🥇','🥈','🥉'][i]}</span>
+                          <div>
+                            <p className="text-white font-bold">{t.name}</p>
+                            <p className="text-slate-500 text-xs">{pack?.emoji} {pack?.title} · {t.rev.length} clues unlocked</p>
+                          </div>
                         </div>
+                        <span className="text-white text-2xl font-black">{t.score} pts</span>
                       </div>
-                      <span className="text-white text-2xl font-black">{t.score} pts</span>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-            {/* Advance top 2 to Audio Visual */}
-            {(() => {
-              const ranked = [
-                { name: s.teamA, score: s.scoreA },
-                { name: s.teamB, score: s.scoreB },
-                { name: s.teamC, score: s.scoreC },
-              ].sort((a, b) => b.score - a.score)
-              return (
+
+              {/* Advance to AV Round */}
+              <div className="bg-purple-900/20 border border-purple-500/40 rounded-2xl p-4 space-y-3">
+                <div>
+                  <p className="text-purple-300 text-xs font-bold uppercase tracking-widest">Grand Final — Audio Visual Round</p>
+                  <p className="text-white font-bold mt-1">
+                    <span className="text-green-400">{ranked[0].name}</span>
+                    <span className="text-slate-400 text-sm font-normal"> ({ranked[0].score} pts) </span>
+                    <span className="text-slate-500">vs</span>
+                    <span className="text-blue-400"> {ranked[1].name}</span>
+                    <span className="text-slate-400 text-sm font-normal"> ({ranked[1].score} pts)</span>
+                  </p>
+                  <p className="text-slate-500 text-xs mt-1">
+                    {s.avQuestions.length} questions ready · scores carry forward · video pre-configured
+                  </p>
+                </div>
                 <button
                   onClick={() => {
-                    wsBroadcast('mc:av_handoff', {
+                    // Broadcast full AV state so AV admin hydrates from relay
+                    wsBroadcast('av:state', {
+                      _from_mc: true,
+                      phase: 'idle',
+                      videoUrl: s.avVideoUrl,
+                      videoPlay: false,
                       teamA: ranked[0].name,
                       teamB: ranked[1].name,
+                      mcScoreA: ranked[0].score,
+                      mcScoreB: ranked[1].score,
+                      questions: s.avQuestions.map(q => ({ ...q, revealed: false, answeredBy: null })),
+                      currentQ: 0,
+                      timerStart: null,
+                      scoreA: ranked[0].score,
+                      scoreB: ranked[1].score,
+                      correctA: 0,
+                      correctB: 0,
                     })
                     setAvSent(true)
                     setTimeout(() => router.push('/audio-visual/admin'), 800)
                   }}
-                  className={`w-full font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors ${avSent ? 'bg-green-700 text-white cursor-default' : 'bg-purple-700 hover:bg-purple-600 text-white'}`}
+                  className={`w-full font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors ${
+                    avSent
+                      ? 'bg-green-700 text-white cursor-default'
+                      : 'bg-purple-600 hover:bg-purple-500 text-white'
+                  }`}
                 >
                   {avSent
-                    ? <>✓ Sent! Open the Audio Visual admin to continue</>
-                    : <>📺 Advance Top 2 to Audio Visual Round <span className="text-purple-300 font-normal text-sm">({ranked[0].name} &amp; {ranked[1].name})</span></>
+                    ? '✓ Teams sent — navigating to AV admin…'
+                    : '📺 Advance Top 2 → Audio Visual Round'
                   }
                 </button>
-              )
-            })()}
-            <button onClick={reset} className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl">
-              Start New Game
-            </button>
-          </div>
-        )}
+              </div>
+
+              <button onClick={reset} className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl">
+                Start New Game
+              </button>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

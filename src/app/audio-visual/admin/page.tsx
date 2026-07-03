@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 
 const WS_URL = 'ws://localhost:3001'
 const CHANNEL = 'av:state'
-const TIME_PER_Q = 30 // seconds per question
+const TIME_PER_Q = 30
 
 type AVQuestion = {
   id: string
@@ -14,44 +14,63 @@ type AVQuestion = {
 }
 
 type AVState = {
+  _from_mc?: boolean
   phase: 'idle' | 'watching' | 'qa_a' | 'break' | 'qa_b' | 'done'
   videoUrl: string
   videoPlay: boolean
   teamA: string
   teamB: string
+  mcScoreA: number   // carry-forward from Mystery Chain
+  mcScoreB: number
   questions: AVQuestion[]
   currentQ: number
   timerStart: number | null
-  scoreA: number
+  scoreA: number     // mcScoreA + AV round pts
   scoreB: number
   correctA: number
   correctB: number
 }
 
-// Big Buck Bunny — Blender Foundation (public domain, guaranteed available)
-const DEFAULT_VIDEO = 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1'
+const DEFAULT_STATE: AVState = {
+  phase: 'idle',
+  videoUrl: 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1',
+  videoPlay: false,
+  teamA: 'Team A',
+  teamB: 'Team B',
+  mcScoreA: 0,
+  mcScoreB: 0,
+  questions: [],
+  currentQ: 0,
+  timerStart: null,
+  scoreA: 0,
+  scoreB: 0,
+  correctA: 0,
+  correctB: 0,
+}
 
-const DEFAULT_QUESTIONS: AVQuestion[] = [
-  { id: '1',  text: 'What is the title of the animation that was shown?',                                         answer: 'Big Buck Bunny',                                    revealed: false, answeredBy: null },
-  { id: '2',  text: 'What colour is the large main character in the video?',                                      answer: 'White / cream',                                     revealed: false, answeredBy: null },
-  { id: '3',  text: 'In which type of environment does the story take place?',                                    answer: 'A forest / meadow / countryside',                    revealed: false, answeredBy: null },
-  { id: '4',  text: 'What is the main character doing at the very start of the video?',                           answer: 'Sleeping / resting under a tree',                    revealed: false, answeredBy: null },
-  { id: '5',  text: 'Name the type of small animals that act as antagonists in the clip.',                        answer: 'Squirrels / rodents / chinchillas',                  revealed: false, answeredBy: null },
-  { id: '6',  text: 'What do the small animals do that first provokes the main character?',                       answer: 'They pop his butterflies / hurt small animals',      revealed: false, answeredBy: null },
-  { id: '7',  text: 'What gentle creatures does the main character interact with peacefully at the beginning?',   answer: 'Butterflies / birds / small animals',               revealed: false, answeredBy: null },
-  { id: '8',  text: 'How does the main character ultimately deal with the antagonists?',                          answer: 'He sets traps / chases and catches them',           revealed: false, answeredBy: null },
-  { id: '9',  text: 'What word or phrase appears as the title card on screen?',                                   answer: 'Big Buck Bunny',                                    revealed: false, answeredBy: null },
-  { id: '10', text: 'Which organisation produced this animated film?',                                            answer: 'The Blender Foundation / Blender Institute',        revealed: false, answeredBy: null },
-]
+// ── WebSocket ─────────────────────────────────────────────────────────────────
 
-function useWs() {
+function useWs(onIncoming: (s: AVState) => void) {
   const ws = useRef<WebSocket | null>(null)
   const [connected, setConnected] = useState(false)
+  const onIncomingRef = useRef(onIncoming)
+  onIncomingRef.current = onIncoming
 
   useEffect(() => {
     function connect() {
       const sock = new WebSocket(WS_URL)
-      sock.onopen = () => { setConnected(true); sock.send(JSON.stringify({ type: 'subscribe', channel: CHANNEL })) }
+      sock.onopen = () => {
+        setConnected(true)
+        sock.send(JSON.stringify({ type: 'subscribe', channel: CHANNEL }))
+      }
+      sock.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data)
+          if (msg.type === 'update' && msg.channel === CHANNEL && msg.payload) {
+            onIncomingRef.current(msg.payload as AVState)
+          }
+        } catch {}
+      }
       sock.onclose = () => { setConnected(false); setTimeout(connect, 2000) }
       sock.onerror = () => sock.close()
       ws.current = sock
@@ -69,73 +88,38 @@ function useWs() {
   return { connected, broadcast }
 }
 
-function toEmbedUrl(raw: string): string {
-  const m = raw.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([A-Za-z0-9_-]{11})/)
-  if (m) return `https://www.youtube.com/embed/${m[1]}?enablejsapi=1`
-  return raw
-}
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AVAdmin() {
-  const { connected, broadcast } = useWs()
-
-  const [state, setState] = useState<AVState>({
-    phase: 'idle',
-    videoUrl: DEFAULT_VIDEO,
-    videoPlay: false,
-    teamA: 'Team Alpha',
-    teamB: 'Team Beta',
-    questions: DEFAULT_QUESTIONS,
-    currentQ: 0,
-    timerStart: null,
-    scoreA: 0,
-    scoreB: 0,
-    correctA: 0,
-    correctB: 0,
-  })
-
-  const [rawUrl, setRawUrl] = useState('')
-  const [newQ, setNewQ] = useState('')
-  const [newA, setNewA] = useState('')
+  const [state, setState] = useState<AVState>(DEFAULT_STATE)
   const [timer, setTimer] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Listen for incoming AV state pushed from Mystery Chain admin
-  const [mcPush, setMcPush] = useState<{ teamA: string; teamB: string } | null>(null)
-  useEffect(() => {
-    const ws = new WebSocket(WS_URL)
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', channel: 'mc:av_handoff' }))
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data)
-        if (msg.channel === 'mc:av_handoff' && msg.payload?.teamA) {
-          // Auto-apply teams immediately — admin navigated straight here from MC
-          setState(prev => ({
-            ...prev,
-            teamA: msg.payload.teamA,
-            teamB: msg.payload.teamB,
-          }))
-          setMcPush({ teamA: msg.payload.teamA, teamB: msg.payload.teamB })
-        }
-      } catch {}
-    }
-    ws.onerror = () => ws.close()
-    return () => ws.close()
-  }, [])
+  // Hydration: receive pre-configured state from MC admin (broadcasted to relay)
+  const hydrated = useRef(false)
+  const skipBroadcast = useRef(true) // skip the first render after hydration
 
-  // broadcast whenever state changes
+  const { connected, broadcast } = useWs((incoming) => {
+    if (!hydrated.current && incoming._from_mc) {
+      hydrated.current = true
+      skipBroadcast.current = true
+      setState(incoming)
+    }
+  })
+
+  // Broadcast state to audience — skip first render to avoid overwriting relay cache
   useEffect(() => {
+    if (skipBroadcast.current) { skipBroadcast.current = false; return }
     broadcast(state)
   }, [state, broadcast])
 
-  // local countdown display
+  // Countdown timer
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current)
     if (state.timerStart && (state.phase === 'qa_a' || state.phase === 'qa_b')) {
       timerRef.current = setInterval(() => {
-        const elapsed = (Date.now() - state.timerStart!) / 1000
-        const left = Math.max(0, TIME_PER_Q - elapsed)
-        setTimer(left)
-      }, 200)
+        setTimer(Math.max(0, TIME_PER_Q - (Date.now() - state.timerStart!) / 1000))
+      }, 100)
     } else {
       setTimer(0)
     }
@@ -146,39 +130,34 @@ export default function AVAdmin() {
     setState(prev => ({ ...prev, ...patch }))
   }
 
-  function startWatching() {
-    update({ phase: 'watching', videoPlay: true })
-  }
-
-  function stopVideo() {
-    update({ videoPlay: false })
-  }
+  // Phase transitions
+  function startWatching() { update({ phase: 'watching', videoPlay: true }) }
+  function stopVideo()     { update({ videoPlay: false }) }
 
   function startQA_A() {
     const resetQ = state.questions.map(q => ({ ...q, revealed: false, answeredBy: null }))
-    update({ phase: 'qa_a', videoPlay: false, currentQ: 0, timerStart: Date.now(), questions: resetQ, correctA: 0, scoreA: 0 })
+    // scoreA resets to MC carry-forward baseline
+    update({ phase: 'qa_a', videoPlay: false, currentQ: 0, timerStart: Date.now(), questions: resetQ, correctA: 0, scoreA: state.mcScoreA })
   }
 
   function startQA_B() {
     const resetQ = state.questions.map(q => ({ ...q, revealed: false, answeredBy: null }))
-    update({ phase: 'qa_b', videoPlay: false, currentQ: 0, timerStart: Date.now(), questions: resetQ, correctB: 0, scoreB: 0 })
+    update({ phase: 'qa_b', videoPlay: false, currentQ: 0, timerStart: Date.now(), questions: resetQ, correctB: 0, scoreB: state.mcScoreB })
   }
 
   function nextQuestion() {
     const next = state.currentQ + 1
     if (next >= state.questions.length) {
-      if (state.phase === 'qa_a') update({ phase: 'break', timerStart: null })
-      else update({ phase: 'done', timerStart: null })
+      update({ phase: state.phase === 'qa_a' ? 'break' : 'done', timerStart: null })
     } else {
       update({ currentQ: next, timerStart: Date.now() })
     }
   }
 
   function markCorrect() {
-    const q = state.questions[state.currentQ]
-    const team = state.phase === 'qa_a' ? 'A' : 'B'
+    const team: 'A' | 'B' = state.phase === 'qa_a' ? 'A' : 'B'
     const updQ = state.questions.map((x, i) => i === state.currentQ ? { ...x, revealed: true, answeredBy: team } : x)
-    const pts = Math.max(0, Math.ceil((timer / TIME_PER_Q) * 10)) // 0–10 pts based on speed
+    const pts = Math.max(1, Math.ceil((timer / TIME_PER_Q) * 10))
     if (state.phase === 'qa_a') {
       update({ questions: updQ, scoreA: state.scoreA + pts, correctA: state.correctA + 1, timerStart: null })
     } else {
@@ -191,49 +170,11 @@ export default function AVAdmin() {
     update({ questions: updQ, timerStart: null })
   }
 
-  function resetAll() {
-    setState({
-      phase: 'idle',
-      videoUrl: DEFAULT_VIDEO,
-      videoPlay: false,
-      teamA: 'Team Alpha',
-      teamB: 'Team Beta',
-      questions: DEFAULT_QUESTIONS,
-      currentQ: 0,
-      timerStart: null,
-      scoreA: 0,
-      scoreB: 0,
-      correctA: 0,
-      correctB: 0,
-    })
-    setRawUrl('')
-  }
-
-  function addQuestion() {
-    if (!newQ.trim()) return
-    const q: AVQuestion = {
-      id: Date.now().toString(),
-      text: newQ.trim(),
-      answer: newA.trim() || '(no answer set)',
-      revealed: false,
-      answeredBy: null,
-    }
-    update({ questions: [...state.questions, q] })
-    setNewQ(''); setNewA('')
-  }
-
-  function removeQuestion(id: string) {
-    update({ questions: state.questions.filter(q => q.id !== id) })
-  }
-
-  function applyUrl() {
-    if (!rawUrl.trim()) return
-    update({ videoUrl: toEmbedUrl(rawUrl.trim()) })
-    setRawUrl('')
-  }
-
-  const currentTeam = state.phase === 'qa_a' ? state.teamA : state.phase === 'qa_b' ? state.teamB : null
+  const currentTeam = state.phase === 'qa_a' ? state.teamA : state.teamB
   const currentQ = state.questions[state.currentQ]
+  const avScoreA = state.scoreA - state.mcScoreA
+  const avScoreB = state.scoreB - state.mcScoreB
+  const fromMC = hydrated.current || state._from_mc
 
   return (
     <div className="min-h-screen bg-[#0a0c14] text-white p-4">
@@ -241,155 +182,173 @@ export default function AVAdmin() {
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-black text-white">📺 Audio Visual — Admin</h1>
+          <div>
+            <p className="text-yellow-400 text-xs font-bold uppercase tracking-widest">Grand Final</p>
+            <h1 className="text-2xl font-black text-white">📺 Audio Visual Round</h1>
+          </div>
           <div className="flex items-center gap-3">
+            <a href="/audio-visual/audience" target="_blank"
+              className="text-xs bg-purple-600/30 border border-purple-500/40 text-purple-300 px-3 py-1.5 rounded-lg hover:bg-purple-600/50">
+              Audience ↗
+            </a>
             <span className={`px-3 py-1 rounded-full text-xs font-bold ${connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
               {connected ? '● LIVE' : '● OFFLINE'}
             </span>
-            <button onClick={resetAll} className="px-3 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs">Reset All</button>
           </div>
         </div>
 
-        {/* Ready to Play banner — shown when teams are loaded from MC */}
-        {mcPush && state.phase === 'idle' && (
-          <div className="bg-green-900/40 border border-green-500/50 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-green-400 text-xs font-bold uppercase tracking-widest mb-1">✅ Ready to Play</p>
-              <p className="text-white font-bold">
-                <span className="text-green-400">{mcPush.teamA}</span> vs <span className="text-blue-400">{mcPush.teamB}</span>
-                <span className="text-gray-400 font-normal text-sm ml-3">· {state.questions.length} questions loaded · Video ready</span>
-              </p>
-            </div>
-            <button
-              onClick={startWatching}
-              className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-black rounded-xl text-sm shrink-0"
-            >
-              ▶ Play Video Now
-            </button>
+        {/* Waiting for MC setup */}
+        {!fromMC && state.phase === 'idle' && (
+          <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-2xl px-5 py-4 text-center">
+            <p className="text-yellow-400 font-bold text-sm">⏳ Waiting for Mystery Chain to finish</p>
+            <p className="text-gray-400 text-xs mt-1">This page is configured from the Mystery Chain admin. Teams and questions will appear automatically when the host advances the top 2.</p>
           </div>
         )}
 
-        {/* Phase banner */}
+        {/* Ready to Play banner */}
+        {fromMC && state.phase === 'idle' && (
+          <div className="bg-green-900/40 border border-green-500/50 rounded-2xl px-5 py-5">
+            <p className="text-green-400 text-xs font-bold uppercase tracking-widest mb-2">✅ Grand Final Ready</p>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-white font-black text-lg">
+                  <span className="text-green-400">{state.teamA}</span>
+                  <span className="text-gray-500 mx-2 font-normal text-base">vs</span>
+                  <span className="text-blue-400">{state.teamB}</span>
+                </p>
+                <p className="text-gray-400 text-sm mt-1">
+                  MC scores: <span className="text-green-400 font-bold">{state.mcScoreA} pts</span> vs <span className="text-blue-400 font-bold">{state.mcScoreB} pts</span>
+                  <span className="mx-2 text-gray-600">·</span>
+                  {state.questions.length} questions ready
+                </p>
+              </div>
+              <button onClick={startWatching}
+                className="px-8 py-4 bg-green-600 hover:bg-green-500 text-white font-black rounded-2xl text-base shrink-0">
+                ▶ Play Video
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Phase tracker */}
         <div className="bg-[#111827] rounded-2xl p-4 flex items-center justify-between">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {(['idle','watching','qa_a','break','qa_b','done'] as const).map(p => (
-              <span key={p} className={`px-2 py-1 rounded-full text-xs font-bold ${state.phase === p ? 'bg-yellow-400 text-black' : 'bg-gray-700 text-gray-400'}`}>
-                {p.replace('_',' ').toUpperCase()}
+              <span key={p} className={`px-2 py-1 rounded-full text-xs font-bold ${state.phase === p ? 'bg-yellow-400 text-black' : 'bg-gray-800 text-gray-500'}`}>
+                {p === 'qa_a' ? `Q&A ${state.teamA}` : p === 'qa_b' ? `Q&A ${state.teamB}` : p.toUpperCase()}
               </span>
             ))}
           </div>
-          <div className="text-sm font-bold">
-            {state.teamA}: <span className="text-green-400">{state.scoreA}pts</span>
+          <div className="text-sm font-bold shrink-0 ml-2">
+            <span className="text-green-400">{state.teamA} {state.scoreA}pts</span>
             <span className="mx-2 text-gray-600">|</span>
-            {state.teamB}: <span className="text-blue-400">{state.scoreB}pts</span>
+            <span className="text-blue-400">{state.teamB} {state.scoreB}pts</span>
           </div>
         </div>
 
         <div className="grid grid-cols-5 gap-4">
-          {/* Left column: setup */}
+          {/* Left: controls */}
           <div className="col-span-2 space-y-4">
-
-            {/* Teams */}
-            <div className="bg-[#111827] rounded-2xl p-4 space-y-3">
-              <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider">Teams</h2>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">Team A</label>
-                <input value={state.teamA} onChange={e => update({ teamA: e.target.value })}
-                  className="w-full bg-[#1e2533] rounded-lg px-3 py-2 text-sm text-white outline-none border border-gray-700 focus:border-yellow-400" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">Team B</label>
-                <input value={state.teamB} onChange={e => update({ teamB: e.target.value })}
-                  className="w-full bg-[#1e2533] rounded-lg px-3 py-2 text-sm text-white outline-none border border-gray-700 focus:border-yellow-400" />
-              </div>
-            </div>
-
-            {/* Video URL */}
-            <div className="bg-[#111827] rounded-2xl p-4 space-y-3">
-              <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider">Video</h2>
-              <p className="text-xs text-gray-400 break-all line-clamp-2">{state.videoUrl}</p>
-              <div className="flex gap-2">
-                <input
-                  value={rawUrl}
-                  onChange={e => setRawUrl(e.target.value)}
-                  placeholder="Paste YouTube URL..."
-                  className="flex-1 bg-[#1e2533] rounded-lg px-3 py-2 text-xs text-white outline-none border border-gray-700 focus:border-yellow-400"
-                />
-                <button onClick={applyUrl} className="px-3 py-2 bg-yellow-500 hover:bg-yellow-400 text-black text-xs font-bold rounded-lg">Set</button>
-              </div>
-            </div>
 
             {/* Phase controls */}
             <div className="bg-[#111827] rounded-2xl p-4 space-y-2">
-              <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider">Controls</h2>
-              {state.phase === 'idle' && (
-                <button onClick={startWatching} className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold">
-                  ▶ Show Video to Audience
-                </button>
+              <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider mb-2">Controls</h2>
+
+              {state.phase === 'idle' && !fromMC && (
+                <p className="text-gray-500 text-xs text-center py-2">Waiting for Mystery Chain to advance teams…</p>
               )}
               {state.phase === 'watching' && (<>
                 <button onClick={stopVideo} className="w-full py-2 bg-orange-600 hover:bg-orange-500 rounded-xl font-bold text-sm">
-                  ⏸ Pause / Stop Video
+                  ⏸ Stop Video
                 </button>
                 <button onClick={startQA_A} className="w-full py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold">
-                  🎯 Start Q&A → {state.teamA}
+                  🎯 Start Q&A — {state.teamA}
                 </button>
               </>)}
               {state.phase === 'qa_a' && (
                 <button onClick={() => update({ phase: 'break', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
-                  → End {state.teamA} — Go to Break
+                  End {state.teamA} → Break
                 </button>
               )}
               {state.phase === 'break' && (<>
-                <div className="text-center py-2 bg-blue-900/40 rounded-xl text-blue-300 text-sm font-bold">
-                  Break — {state.teamA} finished with {state.correctA}/{state.questions.length} correct
+                <div className="text-center py-3 bg-[#0d1117] rounded-xl border border-gray-700">
+                  <p className="text-gray-400 text-xs mb-1">{state.teamA} finished</p>
+                  <p className="text-green-400 font-black text-2xl">{state.scoreA} pts</p>
+                  <p className="text-gray-600 text-xs">MC {state.mcScoreA} + AV {avScoreA}</p>
                 </div>
                 <button onClick={startQA_B} className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold">
-                  🎯 Start Q&A → {state.teamB}
+                  🎯 Start Q&A — {state.teamB}
                 </button>
               </>)}
               {state.phase === 'qa_b' && (
                 <button onClick={() => update({ phase: 'done', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
-                  → End {state.teamB} — Finish Round
+                  End {state.teamB} → Results
                 </button>
               )}
               {state.phase === 'done' && (
-                <div className="text-center py-4">
-                  <p className="text-2xl font-black text-yellow-400">Round Complete!</p>
-                  <p className="text-sm text-gray-400 mt-1">{state.teamA}: {state.scoreA}pts · {state.teamB}: {state.scoreB}pts</p>
+                <div className="text-center py-4 space-y-2">
+                  <p className="text-2xl font-black text-yellow-400">🏆 Competition Complete!</p>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div className="bg-green-900/30 rounded-xl p-2 text-center">
+                      <p className="text-xs text-gray-400">{state.teamA}</p>
+                      <p className="text-xl font-black text-green-400">{state.scoreA}</p>
+                      <p className="text-xs text-gray-600">MC {state.mcScoreA} + AV {avScoreA}</p>
+                    </div>
+                    <div className="bg-blue-900/30 rounded-xl p-2 text-center">
+                      <p className="text-xs text-gray-400">{state.teamB}</p>
+                      <p className="text-xl font-black text-blue-400">{state.scoreB}</p>
+                      <p className="text-xs text-gray-600">MC {state.mcScoreB} + AV {avScoreB}</p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
+
+            {/* Score breakdown */}
+            <div className="bg-[#111827] rounded-2xl p-4">
+              <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider mb-3">Score Breakdown</h2>
+              <div className="space-y-3">
+                {[
+                  { name: state.teamA, total: state.scoreA, mc: state.mcScoreA, av: avScoreA, correct: state.correctA, color: 'green' },
+                  { name: state.teamB, total: state.scoreB, mc: state.mcScoreB, av: avScoreB, correct: state.correctB, color: 'blue' },
+                ].map(t => (
+                  <div key={t.name} className={`rounded-xl p-3 bg-${t.color}-900/20 border border-${t.color}-500/20`}>
+                    <p className={`text-xs text-${t.color}-400 font-bold`}>{t.name}</p>
+                    <p className={`text-3xl font-black text-${t.color}-400`}>{t.total} pts</p>
+                    <div className="flex gap-3 text-xs text-gray-500 mt-1">
+                      <span>🔐 MC: {t.mc}</span>
+                      <span>📺 AV: +{t.av}</span>
+                      <span>✓ {t.correct}/{state.questions.length}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Right column: Q&A or questions list */}
+          {/* Right: active Q + question list */}
           <div className="col-span-3 space-y-4">
 
-            {/* Active question panel */}
+            {/* Active question */}
             {(state.phase === 'qa_a' || state.phase === 'qa_b') && currentQ && (
               <div className="bg-[#111827] rounded-2xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="font-bold text-sm text-gray-400">
-                    Q{state.currentQ + 1}/{state.questions.length} · <span className="text-white">{currentTeam}</span>
-                  </h2>
+                  <div>
+                    <p className="text-xs text-gray-400">Q {state.currentQ + 1} / {state.questions.length}</p>
+                    <p className="font-bold text-white">{currentTeam}</p>
+                  </div>
                   <div className={`text-4xl font-black tabular-nums ${timer < 10 ? 'text-red-400' : 'text-yellow-400'}`}>
                     {timer.toFixed(1)}s
                   </div>
                 </div>
                 <p className="text-xl font-bold leading-snug">{currentQ.text}</p>
-                <div className={`rounded-xl p-3 bg-gray-800 transition-all ${currentQ.revealed ? 'opacity-100' : 'opacity-0'}`}>
-                  <span className="text-xs text-gray-400 uppercase tracking-wider">Answer: </span>
+                <div className={`rounded-xl p-3 bg-gray-800 transition-opacity ${currentQ.revealed ? 'opacity-100' : 'opacity-0'}`}>
+                  <span className="text-xs text-gray-400">Answer: </span>
                   <span className="font-bold text-green-400">{currentQ.answer}</span>
                 </div>
                 <div className="flex gap-3">
-                  <button onClick={markCorrect}
-                    className="flex-1 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-black text-lg">
-                    ✓ Correct
-                  </button>
-                  <button onClick={markWrong}
-                    className="flex-1 py-3 bg-red-700 hover:bg-red-600 rounded-xl font-black text-lg">
-                    ✗ Wrong
-                  </button>
+                  <button onClick={markCorrect} className="flex-1 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-black text-lg">✓ Correct</button>
+                  <button onClick={markWrong} className="flex-1 py-3 bg-red-700 hover:bg-red-600 rounded-xl font-black text-lg">✗ Wrong</button>
                 </div>
                 <button onClick={nextQuestion} className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-xl font-bold text-sm">
                   → Next Question
@@ -398,48 +357,34 @@ export default function AVAdmin() {
             )}
 
             {/* Questions list */}
-            <div className="bg-[#111827] rounded-2xl p-4 space-y-3">
-              <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider">Questions ({state.questions.length})</h2>
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {state.questions.map((q, i) => (
-                  <div key={q.id} className={`rounded-xl p-3 flex items-start gap-2 ${i === state.currentQ && (state.phase === 'qa_a' || state.phase === 'qa_b') ? 'bg-yellow-500/20 border border-yellow-500/40' : 'bg-[#1e2533]'}`}>
-                    <span className="text-xs text-gray-500 font-bold mt-0.5 w-5 shrink-0">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-snug">{q.text}</p>
-                      <p className="text-xs text-gray-500 mt-0.5 truncate">A: {q.answer}</p>
+            <div className="bg-[#111827] rounded-2xl p-4">
+              <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider mb-3">
+                Questions ({state.questions.length}) — set before the match in Mystery Chain setup
+              </h2>
+              {state.questions.length === 0 ? (
+                <p className="text-gray-600 text-sm text-center py-4">No questions yet — configure them in the Mystery Chain admin setup screen before starting the competition.</p>
+              ) : (
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {state.questions.map((q, i) => (
+                    <div key={q.id} className={`rounded-xl p-3 flex items-start gap-2 ${
+                      i === state.currentQ && (state.phase === 'qa_a' || state.phase === 'qa_b')
+                        ? 'bg-yellow-500/20 border border-yellow-500/40'
+                        : 'bg-[#1e2533]'
+                    }`}>
+                      <span className="text-xs text-gray-500 font-bold mt-0.5 w-5 shrink-0">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium leading-snug">{q.text}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">A: {q.answer}</p>
+                      </div>
+                      {q.revealed && (
+                        <span className={`text-xs font-bold shrink-0 ${q.answeredBy ? 'text-green-400' : 'text-red-400'}`}>
+                          {q.answeredBy ? '✓' : '✗'}
+                        </span>
+                      )}
                     </div>
-                    {(state.phase === 'idle' || state.phase === 'watching') && (
-                      <button onClick={() => removeQuestion(q.id)} className="text-gray-600 hover:text-red-400 text-xs shrink-0">✕</button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {(state.phase === 'idle' || state.phase === 'watching') && (
-                <div className="space-y-2 pt-2 border-t border-gray-700">
-                  <input value={newQ} onChange={e => setNewQ(e.target.value)} placeholder="New question..."
-                    className="w-full bg-[#1e2533] rounded-lg px-3 py-2 text-sm text-white outline-none border border-gray-700 focus:border-yellow-400" />
-                  <input value={newA} onChange={e => setNewA(e.target.value)} placeholder="Answer..."
-                    className="w-full bg-[#1e2533] rounded-lg px-3 py-2 text-sm text-white outline-none border border-gray-700 focus:border-yellow-400" />
-                  <button onClick={addQuestion} className="w-full py-2 bg-yellow-500 hover:bg-yellow-400 text-black text-sm font-bold rounded-lg">+ Add Question</button>
+                  ))}
                 </div>
               )}
-            </div>
-
-            {/* Score summary */}
-            <div className="bg-[#111827] rounded-2xl p-4">
-              <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider mb-3">Scores</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-green-900/30 rounded-xl p-3 text-center">
-                  <p className="text-xs text-gray-400">{state.teamA}</p>
-                  <p className="text-3xl font-black text-green-400">{state.scoreA}</p>
-                  <p className="text-xs text-gray-500">{state.correctA}/{state.questions.length} correct</p>
-                </div>
-                <div className="bg-blue-900/30 rounded-xl p-3 text-center">
-                  <p className="text-xs text-gray-400">{state.teamB}</p>
-                  <p className="text-3xl font-black text-blue-400">{state.scoreB}</p>
-                  <p className="text-xs text-gray-500">{state.correctB}/{state.questions.length} correct</p>
-                </div>
-              </div>
             </div>
           </div>
         </div>
