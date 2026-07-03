@@ -42,7 +42,15 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   const [displayed, setDisplayed] = useState('')
   const [cursorVisible, setCursorVisible] = useState(true)
   const [done, setDone] = useState(false)
+  const [hideSubtitle, setHideSubtitle] = useState(false)
   const indexRef = useRef(0)
+
+  // Fade the subtitle away shortly after the story finishes typing
+  useEffect(() => {
+    if (!done) { setHideSubtitle(false); return }
+    const t = setTimeout(() => setHideSubtitle(true), 1500)
+    return () => clearTimeout(t)
+  }, [done])
 
   // Typewriter
   useEffect(() => {
@@ -109,20 +117,27 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
         </p>
       </div>
 
-      {/* ── SUBTITLE BAR – pinned to bottom, over the scene ── */}
-      <div className="absolute bottom-0 inset-x-0 z-20 px-4 pb-4 pt-2"
-        style={{background:'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.7) 70%, transparent 100%)'}}>
-        <p className="text-white font-semibold text-center text-lg leading-7 min-h-[3.5rem] drop-shadow"
-          style={{textShadow:'0 2px 8px rgba(0,0,0,0.9), 0 0 2px #000'}}>
-          {displayed}
-          <span className={`inline-block w-0.5 h-5 bg-white ml-1 align-middle transition-opacity ${cursorVisible ? 'opacity-100' : 'opacity-0'}`} />
-        </p>
-        {done && (
-          <p className="text-center text-[#f5a623] text-sm font-bold tracking-widest animate-pulse mt-1">
+      {/* ── SUBTITLE BAR – pinned to bottom, unmounts after story finishes ── */}
+      {!hideSubtitle && (
+        <div className="absolute bottom-0 inset-x-0 z-20 px-4 pb-4 pt-2"
+          style={{background:'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.7) 70%, transparent 100%)'}}>
+          <p className="text-white font-semibold text-center text-lg leading-7 min-h-[3.5rem] drop-shadow"
+            style={{textShadow:'0 2px 8px rgba(0,0,0,0.9), 0 0 2px #000'}}>
+            {displayed}
+            <span className={`inline-block w-0.5 h-5 bg-white ml-1 align-middle transition-opacity ${cursorVisible ? 'opacity-100' : 'opacity-0'}`} />
+          </p>
+        </div>
+      )}
+
+      {/* Small waiting hint — stays visible even after subtitle fades */}
+      {done && (
+        <div className="absolute bottom-3 inset-x-0 z-30 text-center pointer-events-none">
+          <p className="text-[#f5a623] text-xs font-bold tracking-widest animate-pulse drop-shadow-lg"
+            style={{textShadow:'0 2px 8px rgba(0,0,0,0.9)'}}>
             ● WAITING FOR RIDDLES TO BEGIN…
           </p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
