@@ -187,7 +187,7 @@ export default function AVAdmin() {
             <h1 className="text-2xl font-black text-white">📺 Audio Visual Round</h1>
           </div>
           <div className="flex items-center gap-3">
-            <a href="/audio-visual/audience" target="_blank"
+            <a href="/mystery-chain/audience" target="_blank"
               className="text-xs bg-purple-600/30 border border-purple-500/40 text-purple-300 px-3 py-1.5 rounded-lg hover:bg-purple-600/50">
               Audience ↗
             </a>

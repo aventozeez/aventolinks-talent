@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { wsSubscribe } from '@/lib/ws-sync'
+import AVAudienceView from '@/components/av-audience-view'
 
 const CHANNEL = 'mc:state'
 const MC_TIME_MS = 60_000
@@ -549,14 +550,18 @@ function Scoreboard({ s, activeKey }: { s: MCAudienceState; activeKey: string | 
 export default function MCAudiencePage() {
   const [s, setS] = useState<MCAudienceState | null>(null)
   const [timeLeft, setTimeLeft] = useState(MC_TIME_MS)
+  const [showAV, setShowAV] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    const unsub = wsSubscribe(CHANNEL, (data: MCAudienceState) => setS(data))
-    // When MC admin advances to AV, redirect this display to the AV audience
-    const unsubGoto = wsSubscribe('mc:goto_av', () => {
-      window.location.href = '/audio-visual/audience'
+    const unsub = wsSubscribe(CHANNEL, (data: MCAudienceState) => {
+      setS(data)
+      // Reset back to MC view when the host starts a new game
+      if (data.phase === 'setup' || data.phase === 'intro') setShowAV(false)
     })
+    // When MC admin advances to AV, swap this display to the AV view (same URL).
+    // The relay caches this signal, so viewers who open the URL later still see AV.
+    const unsubGoto = wsSubscribe('mc:goto_av', () => setShowAV(true))
     return () => { unsub(); unsubGoto() }
   }, [])
 
@@ -567,6 +572,9 @@ export default function MCAudiencePage() {
     tick(); timerRef.current = setInterval(tick, 250)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [s?.timerStart])
+
+  // After all hooks — safe to short-circuit into the AV view once the host advances.
+  if (showAV) return <AVAudienceView />
 
   const pct = timeLeft / MC_TIME_MS
   const timerColor = pct > 0.4 ? '#22c55e' : pct > 0.2 ? '#f59e0b' : '#ef4444'
