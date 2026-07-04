@@ -73,6 +73,19 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
     const voices = window.speechSynthesis.getVoices()
     const preferred = voices.find(v => /male|david|google uk|daniel/i.test(v.name))
 
+    // Time-based fallback for when speech synthesis is blocked (autoplay policy)
+    // Roughly matches natural reading pace: 55ms per character + min 2s per sentence.
+    const readingDurationMs = (text: string) => Math.max(2000, text.length * 55)
+
+    function advanceAfter(ms: number) {
+      setTimeout(() => {
+        if (!isCurrent()) return
+        idx++
+        setCurrentSentence('')
+        setTimeout(speakNext, 220)
+      }, ms)
+    }
+
     function speakNext() {
       if (!isCurrent()) return
       if (idx >= sentences.length) {
@@ -82,23 +95,52 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
       }
       const sentence = sentences[idx]
       setCurrentSentence(sentence)
+
+      // If TTS is available, try speaking; otherwise fall through to timer.
+      if (!window.speechSynthesis) {
+        advanceAfter(readingDurationMs(sentence))
+        return
+      }
+
       const utter = new SpeechSynthesisUtterance(sentence)
       utter.rate = 0.88
       utter.pitch = 0.95
       utter.volume = 1
       if (preferred) utter.voice = preferred
-      utter.onstart = () => { if (isCurrent()) setTtsState('speaking') }
-      utter.onend = () => {
-        if (!isCurrent()) return
-        idx++
-        setCurrentSentence('')
-        setTimeout(speakNext, 220)
+
+      let advanced = false
+      const doAdvance = (delay: number) => {
+        if (advanced) return
+        advanced = true
+        setTimeout(() => {
+          if (!isCurrent()) return
+          idx++
+          setCurrentSentence('')
+          setTimeout(speakNext, 220)
+        }, delay)
       }
+
+      utter.onstart = () => { if (isCurrent()) setTtsState('speaking') }
+      utter.onend = () => doAdvance(0)
       utter.onerror = (e) => {
         if (!isCurrent()) return
         if (e.error === 'not-allowed' || e.error === 'audio-busy') setTtsState('blocked')
+        // Even on error, keep the story moving using the reading-time fallback
+        doAdvance(readingDurationMs(sentence))
       }
+
       window.speechSynthesis.speak(utter)
+
+      // Safety net: if speech never started AND never ended after the expected
+      // reading time + a grace window, force-advance so the story is not stuck.
+      setTimeout(() => {
+        if (!isCurrent() || advanced) return
+        // If TTS never started, mark blocked and use the fallback duration
+        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+          setTtsState('blocked')
+          doAdvance(0) // advance immediately since we've already been sitting here
+        }
+      }, readingDurationMs(sentence) + 1500)
     }
 
     // Small delay after cancel so the browser has drained the previous queue,
