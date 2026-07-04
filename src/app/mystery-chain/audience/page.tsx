@@ -42,6 +42,7 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   // Sentence-level subtitle synced to speech
   const [currentSentence, setCurrentSentence] = useState('')
   const [done, setDone] = useState(false)
+  const [ttsState, setTtsState] = useState<'idle' | 'speaking' | 'blocked'>('idle')
 
   // Split story into sentences (keep the terminator so pacing feels natural)
   const sentences = useMemo(() => {
@@ -78,14 +79,26 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
       utter.pitch = 0.95
       utter.volume = 1
       if (preferred) utter.voice = preferred
+      utter.onstart = () => { if (!cancelled) setTtsState('speaking') }
       utter.onend = () => {
         if (cancelled) return
         idx++
-        // Small pause between sentences with subtitle cleared, for a clean beat
         setCurrentSentence('')
         setTimeout(speakNext, 220)
       }
+      utter.onerror = (e) => {
+        if (cancelled) return
+        // Autoplay policy in some browsers blocks TTS until user interacts
+        if (e.error === 'not-allowed' || e.error === 'audio-busy') setTtsState('blocked')
+      }
       window.speechSynthesis.speak(utter)
+      // If speak() silently fails (voices absent or blocked), reflect it after a beat
+      setTimeout(() => {
+        if (cancelled) return
+        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+          setTtsState('blocked')
+        }
+      }, 500)
     }
 
     // Give voices a moment to load if not yet available
@@ -101,6 +114,41 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
 
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden relative">
+
+      {/* ── TTS indicator (top-right) ── */}
+      <div className="absolute top-3 right-3 z-30 pointer-events-auto">
+        {ttsState === 'speaking' && (
+          <div className="flex items-center gap-2 bg-green-900/70 border border-green-500/40 text-green-300 text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm shadow-lg">
+            <span className="text-sm animate-pulse">🔊</span>
+            <span>Narrating…</span>
+            {/* animated soundwave bars */}
+            <span className="inline-flex gap-0.5 items-end">
+              {[0, 0.15, 0.3].map((delay, i) => (
+                <span key={i} className="w-0.5 bg-green-300 inline-block rounded-full"
+                  style={{ height: '10px', animation: `mcBar 0.8s ${delay}s ease-in-out infinite` }} />
+              ))}
+            </span>
+          </div>
+        )}
+        {ttsState === 'blocked' && (
+          <button
+            onClick={() => {
+              // Manual retry — kicks the sound off after user interaction
+              setTtsState('idle')
+              if (typeof window !== 'undefined' && window.speechSynthesis) {
+                window.speechSynthesis.cancel()
+                const nudge = new SpeechSynthesisUtterance(' ')
+                nudge.volume = 1
+                window.speechSynthesis.speak(nudge)
+              }
+              window.location.reload()
+            }}
+            className="flex items-center gap-2 bg-yellow-900/70 border border-yellow-500/50 text-yellow-200 text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm shadow-lg hover:bg-yellow-800/80">
+            <span className="text-sm">🔇</span>
+            <span>Sound blocked — click to enable</span>
+          </button>
+        )}
+      </div>
 
       {/* ── FULL-SCREEN CARTOON SCENE ── */}
       <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
@@ -139,11 +187,15 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
           </p>
         </div>
       )}
-      {/* keyframes for the subtitle fade-in */}
+      {/* keyframes for the subtitle fade-in and the TTS soundwave bars */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes mcSubIn {
           from { opacity: 0; transform: translateY(6px); }
           to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes mcBar {
+          0%, 100% { transform: scaleY(0.4); }
+          50%      { transform: scaleY(1); }
         }
       `}} />
 
