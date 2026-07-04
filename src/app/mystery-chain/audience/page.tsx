@@ -743,7 +743,8 @@ export default function MCAudiencePage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    const unsub = wsSubscribe(CHANNEL, (data: MCAudienceState) => {
+    const unsub = wsSubscribe(CHANNEL, (payload: unknown) => {
+      const data = payload as MCAudienceState
       setS(data)
       // Reset back to MC view when the host starts a new game
       if (data.phase === 'setup' || data.phase === 'intro') setShowAV(false)
