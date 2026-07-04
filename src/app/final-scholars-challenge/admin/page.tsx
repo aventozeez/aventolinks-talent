@@ -8,6 +8,7 @@ import {
   Plus, Trash2, Check, X, SkipForward,
   Bell, Zap, Lightbulb, Loader2, ChevronDown,
   ChevronUp, Timer, ArrowRight, RefreshCw, Layers, Pencil,
+  Sparkles, Copy, ExternalLink,
 } from 'lucide-react'
 import {
   FSCState, BZPhase, MCPhase, AVPhase,
@@ -29,7 +30,7 @@ import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type Tab = 'schools' | 'bracket' | 'mystery' | 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'simulator'
+type Tab = 'schools' | 'bracket' | 'mystery' | 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'grand-final' | 'simulator'
 
 type FSCTeam = {
   id: string
@@ -1172,6 +1173,7 @@ export default function AdminPage() {
     { key: 'pools'     as Tab, label: 'Question Banks',Icon: Layers     },
     { key: 'matches'   as Tab, label: 'Matches',       Icon: Rocket     },
     { key: 'live'      as Tab, label: 'Live Control',  Icon: Radio      },
+    { key: 'grand-final' as Tab, label: 'Grand Final',   Icon: Sparkles   },
     { key: 'simulator' as Tab, label: 'Emergency',     Icon: Zap        },
   ]
 
@@ -2989,10 +2991,100 @@ export default function AdminPage() {
           </>}
         </>}
 
+        {/* ════════════════ GRAND FINAL — Mystery Chain + AV Round ════════════════ */}
+        {activeTab === 'grand-final' && <GrandFinalTab />}
+
         {/* ════════════════ SIMULATOR ════════════════ */}
         {activeTab === 'simulator' && <EmergencyTab />}
 
       </div>
     </div>
+  )
+}
+
+// ── Grand Final tab ───────────────────────────────────────────────────────────
+// Launch pad for the standalone Mystery Chain (3-team) and Audio Visual Round
+// (top-2 grand final). Setup, scoring, and audience displays all live at their
+// own URLs — this tab just makes it easy to open each screen.
+function GrandFinalTab() {
+  const [origin, setOrigin] = useState('')
+  const [copied, setCopied] = useState<string | null>(null)
+
+  useEffect(() => { setOrigin(window.location.origin) }, [])
+
+  const copy = (path: string) => {
+    if (!origin) return
+    navigator.clipboard.writeText(origin + path)
+    setCopied(path)
+    setTimeout(() => setCopied(null), 1600)
+  }
+
+  const Row = ({ path, label, desc, emoji }: { path: string; label: string; desc: string; emoji: string }) => (
+    <div className="flex items-center gap-3 bg-[#0a1628] border border-white/10 rounded-2xl px-4 py-3">
+      <span className="text-2xl shrink-0">{emoji}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-white font-black text-sm">{label}</p>
+        <p className="text-slate-400 text-[11px] leading-snug">{desc}</p>
+      </div>
+      <div className="flex gap-2 shrink-0">
+        <a href={path} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors">
+          <ExternalLink size={11} /> Open
+        </a>
+        <button onClick={() => copy(path)}
+          className="flex items-center gap-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors">
+          {copied === path ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <>
+      <div>
+        <h2 className="font-black text-white text-sm">Grand Final Stages</h2>
+        <p className="text-[11px] text-slate-400 mt-0.5">
+          Two linked rounds. Configure the whole flow inside Mystery Chain admin — the top 2 teams and the AV Round questions
+          all carry forward automatically when the host advances.
+        </p>
+      </div>
+
+      {/* Stage 1 — Mystery Chain */}
+      <section className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🔐</span>
+          <div>
+            <p className="text-white font-black text-sm">Stage 1 — Mystery Chain</p>
+            <p className="text-slate-500 text-[11px]">3 teams pick a mystery pack each · 60 s per team · top 2 advance</p>
+          </div>
+        </div>
+        <Row path="/mystery-chain/admin"    label="Host / Admin"       desc="Set teams + AV Round upfront, run the game, advance top 2 to AV" emoji="🎛️" />
+        <Row path="/mystery-chain/audience" label="Audience Projector" desc="Big-screen animated scene, story narration, live scores"          emoji="📺" />
+        <Row path="/mystery-chain/team-a"   label="Team A Screen"      desc="Same live scene as the audience, mirrored on Team A's device"     emoji="🅰️" />
+        <Row path="/mystery-chain/team-b"   label="Team B Screen"      desc="Same live scene as the audience, mirrored on Team B's device"     emoji="🅱️" />
+        <Row path="/mystery-chain/team-c"   label="Team C Screen"      desc="Same live scene as the audience, mirrored on Team C's device"     emoji="🅲" />
+      </section>
+
+      {/* Stage 2 — Audio Visual Round */}
+      <section className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">📺</span>
+          <div>
+            <p className="text-white font-black text-sm">Stage 2 — Audio Visual Round</p>
+            <p className="text-slate-500 text-[11px]">2 min video · 60 s per team · +10 per correct · MC scores carry forward</p>
+          </div>
+        </div>
+        <Row path="/audio-visual/admin"    label="Host / Admin"       desc="Auto-hydrates from Mystery Chain — one click starts the video"      emoji="🎛️" />
+        <Row path="/audio-visual/audience" label="Audience Projector" desc="Full-screen video then per-team Q&A with countdown timer"           emoji="📺" />
+      </section>
+
+      <div className="bg-[#f5a623]/5 border border-[#f5a623]/20 rounded-2xl p-3">
+        <p className="text-[#f5a623] text-[11px] font-bold uppercase tracking-widest mb-1">Tip · Same audience URL</p>
+        <p className="text-slate-300 text-[11px] leading-snug">
+          The audience projector at <code className="text-white font-mono">/mystery-chain/audience</code> automatically swaps
+          to the AV video when the host clicks &quot;Advance Top 2&quot; — you don&apos;t need to touch that screen between rounds.
+        </p>
+      </div>
+    </>
   )
 }
