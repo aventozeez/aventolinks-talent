@@ -1,7 +1,15 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 
-const WS_URL = 'ws://localhost:3001'
+// Derives the WS URL from the current page host so other computers on the same
+// LAN can connect (they load the page from http://<host-ip>:3457 and the
+// WebSocket then targets ws://<host-ip>:3001 automatically).
+const getWsUrl = () => {
+  if (typeof window === 'undefined') return 'ws://localhost:3001'
+  const { protocol, hostname } = window.location
+  const wsProto = protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${wsProto}//${hostname}:3001`
+}
 const CHANNEL = 'av:state'
 const ROUND_MS = 60_000
 
@@ -43,7 +51,7 @@ export default function AVAudienceView() {
 
   useEffect(() => {
     function connect() {
-      const ws = new WebSocket(WS_URL)
+      const ws = new WebSocket(getWsUrl())
       ws.onopen = () => {
         setConnected(true)
         ws.send(JSON.stringify({ type: 'subscribe', channel: CHANNEL }))

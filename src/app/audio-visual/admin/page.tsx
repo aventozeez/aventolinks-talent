@@ -1,7 +1,14 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-const WS_URL = 'ws://localhost:3001'
+// Derives the WS URL from the current page host so other computers on the
+// same LAN can connect to the admin over Wi-Fi.
+const getWsUrl = () => {
+  if (typeof window === 'undefined') return 'ws://localhost:3001'
+  const { protocol, hostname } = window.location
+  const wsProto = protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${wsProto}//${hostname}:3001`
+}
 const CHANNEL = 'av:state'
 const ROUND_MS = 60_000  // 60 seconds per team
 const PTS_CORRECT = 10
@@ -57,7 +64,7 @@ function useWs(onIncoming: (s: AVState) => void) {
 
   useEffect(() => {
     function connect() {
-      const sock = new WebSocket(WS_URL)
+      const sock = new WebSocket(getWsUrl())
       sock.onopen = () => {
         setConnected(true)
         sock.send(JSON.stringify({ type: 'subscribe', channel: CHANNEL }))

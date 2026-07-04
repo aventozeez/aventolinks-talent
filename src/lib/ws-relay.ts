@@ -16,7 +16,8 @@ export function createWsRelay() {
     }
   }
 
-  const wss = new WebSocketServer({ port: wsPort })
+  // Bind on 0.0.0.0 so other computers on the LAN can connect
+  const wss = new WebSocketServer({ port: wsPort, host: '0.0.0.0' })
 
   wss.on('connection', (ws) => {
     clients.set(ws, new Set())
