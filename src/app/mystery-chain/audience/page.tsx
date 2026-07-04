@@ -43,6 +43,10 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   const [currentSentence, setCurrentSentence] = useState('')
   const [done, setDone] = useState(false)
   const [ttsState, setTtsState] = useState<'idle' | 'speaking' | 'blocked'>('idle')
+  // Bumped every time the narration effect re-runs; stale callbacks
+  // from a previous mount check against this to avoid the strict-mode
+  // "both instances speak the story at once" bug.
+  const sessionRef = useRef(0)
 
   // Split story into sentences (keep the terminator so pacing feels natural)
   const sentences = useMemo(() => {
@@ -55,18 +59,22 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   // When speech ends, clear the subtitle and speak the next one.
   useEffect(() => {
     if (!fullText || typeof window === 'undefined' || !window.speechSynthesis) return
+
+    // Own this session so any stale callback from a prior effect run bails out
+    const mySession = ++sessionRef.current
+    const isCurrent = () => sessionRef.current === mySession
+
+    // Kill anything already speaking or queued and let the browser settle
     window.speechSynthesis.cancel()
     setCurrentSentence('')
     setDone(false)
 
-    let cancelled = false
     let idx = 0
-
     const voices = window.speechSynthesis.getVoices()
     const preferred = voices.find(v => /male|david|google uk|daniel/i.test(v.name))
 
     function speakNext() {
-      if (cancelled) return
+      if (!isCurrent()) return
       if (idx >= sentences.length) {
         setCurrentSentence('')
         setDone(true)
@@ -79,34 +87,28 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
       utter.pitch = 0.95
       utter.volume = 1
       if (preferred) utter.voice = preferred
-      utter.onstart = () => { if (!cancelled) setTtsState('speaking') }
+      utter.onstart = () => { if (isCurrent()) setTtsState('speaking') }
       utter.onend = () => {
-        if (cancelled) return
+        if (!isCurrent()) return
         idx++
         setCurrentSentence('')
         setTimeout(speakNext, 220)
       }
       utter.onerror = (e) => {
-        if (cancelled) return
-        // Autoplay policy in some browsers blocks TTS until user interacts
+        if (!isCurrent()) return
         if (e.error === 'not-allowed' || e.error === 'audio-busy') setTtsState('blocked')
       }
       window.speechSynthesis.speak(utter)
-      // If speak() silently fails (voices absent or blocked), reflect it after a beat
-      setTimeout(() => {
-        if (cancelled) return
-        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
-          setTtsState('blocked')
-        }
-      }, 500)
     }
 
-    // Give voices a moment to load if not yet available
-    const delay = voices.length === 0 ? 350 : 0
+    // Small delay after cancel so the browser has drained the previous queue,
+    // and to give voices a moment to load if they weren't ready yet.
+    const delay = voices.length === 0 ? 350 : 120
     const t = setTimeout(speakNext, delay)
 
     return () => {
-      cancelled = true
+      // Invalidate this session — any callback firing later will noop
+      sessionRef.current++
       clearTimeout(t)
       window.speechSynthesis.cancel()
     }
