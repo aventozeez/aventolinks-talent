@@ -1,14 +1,9 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 
-// Derives the WS URL from the current page host so other computers on the
-// same LAN can connect to the admin over Wi-Fi.
-const getWsUrl = () => {
-  if (typeof window === 'undefined') return 'ws://localhost:3001'
-  const { protocol, hostname } = window.location
-  const wsProto = protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${wsProto}//${hostname}:3001`
-}
+// Uses the shared sync lib so both LAN (local WS relay) and public URL
+// (Supabase Realtime broadcast) transports work.
 const CHANNEL = 'av:state'
 const ROUND_MS = 60_000  // 60 seconds per team
 const PTS_CORRECT = 10
@@ -57,38 +52,20 @@ const DEFAULT_STATE: AVState = {
 }
 
 function useWs(onIncoming: (s: AVState) => void) {
-  const ws = useRef<WebSocket | null>(null)
   const [connected, setConnected] = useState(false)
   const onIncomingRef = useRef(onIncoming)
   onIncomingRef.current = onIncoming
 
   useEffect(() => {
-    function connect() {
-      const sock = new WebSocket(getWsUrl())
-      sock.onopen = () => {
-        setConnected(true)
-        sock.send(JSON.stringify({ type: 'subscribe', channel: CHANNEL }))
-      }
-      sock.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data)
-          if (msg.type === 'update' && msg.channel === CHANNEL && msg.payload) {
-            onIncomingRef.current(msg.payload as AVState)
-          }
-        } catch {}
-      }
-      sock.onclose = () => { setConnected(false); setTimeout(connect, 2000) }
-      sock.onerror = () => sock.close()
-      ws.current = sock
-    }
-    connect()
-    return () => ws.current?.close()
+    const unsub = wsSubscribe(CHANNEL, (payload) => {
+      setConnected(true)
+      if (payload) onIncomingRef.current(payload as AVState)
+    })
+    return () => { unsub() }
   }, [])
 
   const broadcast = useCallback((payload: AVState) => {
-    if (ws.current?.readyState === 1) {
-      ws.current.send(JSON.stringify({ type: 'broadcast', channel: CHANNEL, payload }))
-    }
+    wsBroadcast(CHANNEL, payload)
   }, [])
 
   return { connected, broadcast }

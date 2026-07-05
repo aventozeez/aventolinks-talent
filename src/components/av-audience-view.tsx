@@ -1,15 +1,9 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { wsSubscribe } from '@/lib/ws-sync'
 
-// Derives the WS URL from the current page host so other computers on the same
-// LAN can connect (they load the page from http://<host-ip>:3457 and the
-// WebSocket then targets ws://<host-ip>:3001 automatically).
-const getWsUrl = () => {
-  if (typeof window === 'undefined') return 'ws://localhost:3001'
-  const { protocol, hostname } = window.location
-  const wsProto = protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${wsProto}//${hostname}:3001`
-}
+// Uses the shared sync lib so both LAN (local WS relay) and public URL
+// (Supabase Realtime broadcast) transports work.
 const CHANNEL = 'av:state'
 const ROUND_MS = 60_000
 
@@ -45,29 +39,15 @@ export default function AVAudienceView() {
   const [connected, setConnected] = useState(false)
   const [timer, setTimer] = useState(ROUND_MS / 1000)
   const [pulse, setPulse] = useState(false)
-  const wsRef = useRef<WebSocket | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
   useEffect(() => {
-    function connect() {
-      const ws = new WebSocket(getWsUrl())
-      ws.onopen = () => {
-        setConnected(true)
-        ws.send(JSON.stringify({ type: 'subscribe', channel: CHANNEL }))
-      }
-      ws.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data)
-          if (msg.channel === CHANNEL && msg.payload) setS(msg.payload)
-        } catch {}
-      }
-      ws.onclose = () => { setConnected(false); setTimeout(connect, 2000) }
-      ws.onerror = () => ws.close()
-      wsRef.current = ws
-    }
-    connect()
-    return () => wsRef.current?.close()
+    const unsub = wsSubscribe(CHANNEL, (payload) => {
+      setConnected(true)
+      if (payload) setS(payload as AVState)
+    })
+    return () => { unsub() }
   }, [])
 
   // Pulse when the front-of-queue question changes
