@@ -727,12 +727,17 @@ export default function MCAdminPage() {
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              {[{name:s.teamA,score:s.scoreA,k:'A'},{name:s.teamB,score:s.scoreB,k:'B'},{name:s.teamC,score:s.scoreC,k:'C'}].map(t => {
+              {[
+                {name:s.teamA, semi:s.semiA, mc:s.scoreA, k:'A'},
+                {name:s.teamB, semi:s.semiB, mc:s.scoreB, k:'B'},
+                {name:s.teamC, semi:s.semiC, mc:s.scoreC, k:'C'},
+              ].map(t => {
                 const active = (s.phase==='a_playing'&&t.k==='A')||(s.phase==='b_playing'&&t.k==='B')||(s.phase==='c_playing'&&t.k==='C')
                 return (
                   <div key={t.k} className={`rounded-xl p-3 text-center border ${active ? 'bg-purple-600/20 border-purple-500' : 'bg-white/5 border-white/10'}`}>
                     <p className="text-slate-300 text-xs font-semibold truncate">{t.name}</p>
-                    <p className="text-white text-2xl font-black">{t.score}</p>
+                    <p className="text-white text-2xl font-black">{t.semi + t.mc}</p>
+                    <p className="text-slate-500 text-[10px]">Semi {t.semi} + MC {t.mc}</p>
                   </div>
                 )
               })}

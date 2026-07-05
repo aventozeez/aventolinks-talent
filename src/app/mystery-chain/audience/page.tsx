@@ -683,15 +683,26 @@ function SceneVanishingCoach() {
 }
 
 function Scoreboard({ s, activeKey }: { s: MCAudienceState; activeKey: string | null }) {
+  // Display cumulative (semi + MC) — semi carries forward from the semi-final
+  const rows = [
+    { name: s.teamA, semi: s.semiA ?? 0, mc: s.scoreA, k: 'A' },
+    { name: s.teamB, semi: s.semiB ?? 0, mc: s.scoreB, k: 'B' },
+    { name: s.teamC, semi: s.semiC ?? 0, mc: s.scoreC, k: 'C' },
+  ]
   return (
     <div className="grid grid-cols-3 gap-3">
-      {[{name:s.teamA,score:s.scoreA,k:'A'},{name:s.teamB,score:s.scoreB,k:'B'},{name:s.teamC,score:s.scoreC,k:'C'}].map(t => (
+      {rows.map(t => (
         <div key={t.k} className={`rounded-xl p-3 text-center border transition-all ${
           activeKey === t.k ? 'bg-purple-600/30 border-purple-400 shadow-lg shadow-purple-500/20' : 'bg-white/5 border-white/10'
         }`}>
           {activeKey === t.k && <p className="text-purple-300 text-[10px] font-bold uppercase tracking-widest mb-1">Playing</p>}
           <p className="text-slate-300 text-sm font-semibold truncate">{t.name}</p>
-          <p className="text-white text-3xl font-black">{t.score}</p>
+          <p className="text-white text-3xl font-black">{t.semi + t.mc}</p>
+          {(t.semi > 0 || t.mc > 0) && (
+            <p className="text-slate-500 text-[10px] font-medium mt-0.5">
+              Semi {t.semi} + MC {t.mc}
+            </p>
+          )}
         </div>
       ))}
     </div>
