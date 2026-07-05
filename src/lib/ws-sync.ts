@@ -26,7 +26,17 @@ const listeners = new Map<string, Set<Listener>>()
 const lastSig = new WeakMap<Listener, Map<string, string>>()
 
 // ── Supabase Realtime transport ───────────────────────────────────────────────
-const sbChannels = new Map<string, SBChannel>()
+// Each channel tracks its own subscribe state + a pending-send queue that
+// flushes the moment the channel actually reaches SUBSCRIBED. Without this
+// queue, any broadcast issued in the ~1-2s after wsBroadcast() first touches
+// a channel is silently dropped by Supabase (the client's send() no-ops until
+// the WebSocket handshake completes).
+type SbEntry = {
+  channel: SBChannel
+  ready: boolean
+  pending: unknown[]
+}
+const sbChannels = new Map<string, SbEntry>()
 
 function getWsUrl(): string {
   if (typeof window === 'undefined') return ''
@@ -38,14 +48,13 @@ function getWsUrl(): string {
 function dispatch(channel: string, payload: unknown) {
   const subs = listeners.get(channel)
   if (!subs) return
-  // Cheap sig for dedupe — string form of the payload
   const sig = (() => { try { return JSON.stringify(payload) } catch { return '' } })()
   subs.forEach(fn => {
     const map = lastSig.get(fn) ?? new Map<string, string>()
     if (map.get(channel) === sig) return
     map.set(channel, sig)
     lastSig.set(fn, map)
-    try { fn(payload) } catch { /* swallow — one listener error shouldn't kill others */ }
+    try { fn(payload) } catch { /* one listener error shouldn't kill others */ }
   })
 }
 
@@ -74,19 +83,33 @@ function ensureWsConnected() {
   ws.onerror = () => { ws?.close() }
 }
 
-function ensureSbChannel(channel: string) {
-  if (typeof window === 'undefined') return
-  if (sbChannels.has(channel)) return
+function ensureSbChannel(channel: string): SbEntry | null {
+  if (typeof window === 'undefined') return null
+  const existing = sbChannels.get(channel)
+  if (existing) return existing
   try {
-    // Sanitize channel name: Supabase channel names can't contain ':' for realtime
+    // Supabase channel names must be alphanumeric-ish; replace any punctuation
     const sbName = 'sync_' + channel.replace(/[^a-zA-Z0-9_-]/g, '_')
     const ch = supabase.channel(sbName, { config: { broadcast: { self: false } } })
+    const entry: SbEntry = { channel: ch, ready: false, pending: [] }
     ch.on('broadcast', { event: 'msg' }, (msg: { payload?: unknown }) => {
       dispatch(channel, msg?.payload)
     })
-    ch.subscribe()
-    sbChannels.set(channel, ch)
-  } catch { /* Supabase unavailable — fall back to WS only */ }
+    ch.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
+        entry.ready = true
+        // Flush anything that tried to send while we were connecting
+        for (const p of entry.pending) {
+          try { ch.send({ type: 'broadcast', event: 'msg', payload: p }) } catch { /* noop */ }
+        }
+        entry.pending.length = 0
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        entry.ready = false
+      }
+    })
+    sbChannels.set(channel, entry)
+    return entry
+  } catch { return null }
 }
 
 export function wsSubscribe(channel: string, cb: Listener): () => void {
@@ -104,26 +127,28 @@ export function wsSubscribe(channel: string, cb: Listener): () => void {
     const subs = listeners.get(channel)
     subs?.delete(cb)
     lastSig.get(cb)?.delete(channel)
-    // If no subscribers left on this channel, tear down its Supabase channel too
     if (subs && subs.size === 0) {
-      const sbCh = sbChannels.get(channel)
-      if (sbCh) { try { supabase.removeChannel(sbCh) } catch { /* noop */ } sbChannels.delete(channel) }
+      const entry = sbChannels.get(channel)
+      if (entry) { try { supabase.removeChannel(entry.channel) } catch { /* noop */ } sbChannels.delete(channel) }
     }
   }
 }
 
 export function wsBroadcast(channel: string, payload: unknown) {
   ensureWsConnected()
-  ensureSbChannel(channel)
+  const entry = ensureSbChannel(channel)
 
   // Local WS — instant on LAN
   const msg = JSON.stringify({ type: 'broadcast', channel, payload })
   if (wsReady && ws) ws.send(msg)
   else wsQueue.push(msg)
 
-  // Supabase Realtime — works on the public URL
-  const sbCh = sbChannels.get(channel)
-  if (sbCh) {
-    try { sbCh.send({ type: 'broadcast', event: 'msg', payload }) } catch { /* swallow */ }
+  // Supabase Realtime — send now if subscribed, otherwise queue until it is
+  if (entry) {
+    if (entry.ready) {
+      try { entry.channel.send({ type: 'broadcast', event: 'msg', payload }) } catch { /* noop */ }
+    } else {
+      entry.pending.push(payload)
+    }
   }
 }
