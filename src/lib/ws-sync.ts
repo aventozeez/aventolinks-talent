@@ -90,19 +90,20 @@ function ensureSbChannel(channel: string): SbEntry | null {
   try {
     // Supabase channel names must be alphanumeric-ish; replace any punctuation
     const sbName = 'sync_' + channel.replace(/[^a-zA-Z0-9_-]/g, '_')
-    console.log('[ws-sync] creating Supabase channel', sbName, 'for logical channel', channel)
-    const ch = supabase.channel(sbName, { config: { broadcast: { self: false } } })
+    console.log('[ws-sync] creating Supabase channel', sbName)
+    // Match the working buzzer pattern: no config option, just the name
+    const ch = supabase.channel(sbName)
     const entry: SbEntry = { channel: ch, ready: false, pending: [] }
-    ch.on('broadcast', { event: 'msg' }, (msg: { payload?: unknown }) => {
-      console.log('[ws-sync] received Supabase broadcast on', sbName, msg)
-      dispatch(channel, msg?.payload)
+    ch.on('broadcast', { event: 'msg' }, ({ payload }: { payload?: unknown }) => {
+      console.log('[ws-sync] received broadcast on', sbName, payload)
+      dispatch(channel, payload)
     })
     ch.subscribe((status: string) => {
       console.log('[ws-sync] Supabase channel', sbName, 'status ->', status)
       if (status === 'SUBSCRIBED') {
         entry.ready = true
         for (const p of entry.pending) {
-          try { ch.send({ type: 'broadcast', event: 'msg', payload: p }) } catch { /* noop */ }
+          try { ch.send({ type: 'broadcast', event: 'msg', payload: p }).catch(() => {}) } catch { /* noop */ }
         }
         entry.pending.length = 0
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -148,7 +149,7 @@ export function wsBroadcast(channel: string, payload: unknown) {
   // Supabase Realtime — send now if subscribed, otherwise queue until it is
   if (entry) {
     if (entry.ready) {
-      try { entry.channel.send({ type: 'broadcast', event: 'msg', payload }) } catch { /* noop */ }
+      try { entry.channel.send({ type: 'broadcast', event: 'msg', payload }).catch(() => {}) } catch { /* noop */ }
     } else {
       entry.pending.push(payload)
     }
