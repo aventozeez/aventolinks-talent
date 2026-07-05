@@ -44,6 +44,10 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   const fullText = s.activeOpeningStory
   const storyStartAt = s.storyStartAt ?? 0
   const [ttsState, setTtsState] = useState<'idle' | 'speaking' | 'blocked'>('idle')
+  // Only the main audience projector plays narration. Team screens
+  // (team-a / team-b / team-c) stay silent so we don't get 3-4 overlapping
+  // voices reading the same sentence out of phase.
+  const isProjector = typeof window !== 'undefined' && window.location.pathname.includes('/mystery-chain/audience')
 
   // Split story into sentences. Same input → same output on every screen.
   const sentences = useMemo(() => {
@@ -78,13 +82,11 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   const currentSentence = currentIdx >= 0 ? sentences[currentIdx] : ''
   const done = storyStartAt > 0 && elapsed >= totalMs
 
-  // Speech synthesis: speak whichever sentence is currently on screen. When
-  // currentIdx changes, cancel any in-flight speech and start the new one.
-  // Every screen has its own audio, but since the sentence is the same everywhere,
-  // they will roughly match — and even if audio drifts, the SUBTITLE is
-  // deterministic and identical across screens.
+  // Speech synthesis — only on the /mystery-chain/audience projector so team
+  // screens don't create overlapping copies of the narration.
   const spokenIdxRef = useRef(-2)
   useEffect(() => {
+    if (!isProjector) return
     if (typeof window === 'undefined' || !window.speechSynthesis) return
     if (currentIdx < 0) return
     if (spokenIdxRef.current === currentIdx) return
@@ -121,9 +123,9 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden relative">
 
-      {/* ── TTS indicator (top-right) ── */}
+      {/* ── TTS indicator (top-right) — only on the projector ── */}
       <div className="absolute top-3 right-3 z-30 pointer-events-auto">
-        {ttsState === 'speaking' && (
+        {isProjector && ttsState === 'speaking' && (
           <div className="flex items-center gap-2 bg-green-900/70 border border-green-500/40 text-green-300 text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm shadow-lg">
             <span className="text-sm animate-pulse">🔊</span>
             <span>Narrating…</span>
@@ -136,7 +138,7 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
             </span>
           </div>
         )}
-        {ttsState === 'blocked' && (
+        {isProjector && ttsState === 'blocked' && (
           <button
             onClick={() => {
               // Manual retry — kicks the sound off after user interaction
