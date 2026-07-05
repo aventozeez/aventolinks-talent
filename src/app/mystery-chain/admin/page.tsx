@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { wsBroadcast } from '@/lib/ws-sync'
+import { supabase } from '@/lib/supabase'
+
+type RegisteredTeam = { id: string; name: string; school: string }
 
 const CHANNEL = 'mc:state'
 const MC_TIME_MS = 60_000
@@ -13,7 +16,8 @@ type MCPhase =
   | 'pick_A' | 'story_A' | 'a_playing'
   | 'pick_B' | 'story_B' | 'b_playing'
   | 'pick_C' | 'story_C' | 'c_playing'
-  | 'done'
+  | 'done'                    // Regular rankings screen
+  | 'declare_second_runnerup' // Dedicated Second Runner Up declaration
 
 type MCPuzzle = {
   id: string
@@ -43,6 +47,9 @@ type AVQSetup = {
 type MCState = {
   phase: MCPhase
   teamA: string; teamB: string; teamC: string
+  // Semi-final scores carried in from the semi-final round; add to MC score
+  // for the cumulative total that decides Second Runner Up + advancement.
+  semiA: number; semiB: number; semiC: number
   packs: MCPack[]
   chosenA: string | null; chosenB: string | null; chosenC: string | null
   queueA: MCPuzzle[]; queueB: MCPuzzle[]; queueC: MCPuzzle[]
@@ -76,6 +83,7 @@ function safeForAudience(s: MCState) {
   return {
     phase: s.phase,
     teamA: s.teamA, teamB: s.teamB, teamC: s.teamC,
+    semiA: s.semiA, semiB: s.semiB, semiC: s.semiC,
     packs: s.packs.map(p => ({ id: p.id, title: p.title, emoji: p.emoji, teaser: p.teaser })),
     chosenA: s.chosenA, chosenB: s.chosenB, chosenC: s.chosenC,
     activePackTitle: activePack?.title ?? '',
@@ -221,6 +229,7 @@ const DEFAULT_AV_QUESTIONS_B: Omit<AVQSetup,'id'>[] = [
 const defaultState = (): MCState => ({
   phase: 'setup',
   teamA: '', teamB: '', teamC: '',
+  semiA: 0, semiB: 0, semiC: 0,
   packs: PACKS,
   chosenA: null, chosenB: null, chosenC: null,
   queueA: [], queueB: [], queueC: [],
@@ -244,12 +253,34 @@ export default function MCAdminPage() {
   const [avTab, setAvTab] = useState<'A' | 'B'>('A')
   const [newQ, setNewQ] = useState({ text: '', answer: '' })
   const [editingQ, setEditingQ] = useState<string | null>(null)
+  // Registered teams pulled from Supabase for the dropdown selectors
+  const [registeredTeams, setRegisteredTeams] = useState<RegisteredTeam[]>([])
+  const [teamsLoading, setTeamsLoading] = useState(true)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const stateRef = useRef(s)
   stateRef.current = s
 
   const broadcast = useCallback((st: MCState) => wsBroadcast(CHANNEL, safeForAudience(st)), [])
   const update = useCallback((st: MCState) => { setS(st); broadcast(st) }, [broadcast])
+
+  // Load registered teams from Supabase on mount so setup can pick from a
+  // dropdown. Fails silently to text input if the DB is unreachable.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase as any)
+          .from('fsc_teams')
+          .select('id, name, school')
+          .eq('status', 'active')
+          .order('name')
+        if (!cancelled && data) setRegisteredTeams(data as RegisteredTeam[])
+      } catch { /* offline / DB unreachable — dropdown just stays empty */ }
+      finally { if (!cancelled) setTeamsLoading(false) }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // Timer
   useEffect(() => {
@@ -386,14 +417,51 @@ export default function MCAdminPage() {
             {/* Team names + mysteries in one row for compactness */}
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-3 space-y-2">
-                <h2 className="text-white font-bold text-sm">Team Names</h2>
-                <div className="grid grid-cols-1 gap-2">
-                  {(['teamA','teamB','teamC'] as const).map((k, i) => (
-                    <input key={k} value={s[k]} onChange={e => setS(p => ({ ...p, [k]: e.target.value }))}
-                      placeholder={`Team ${['A','B','C'][i]}`}
-                      className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm" />
-                  ))}
+                <div className="flex items-baseline justify-between">
+                  <h2 className="text-white font-bold text-sm">Teams &amp; Semi-Final Scores</h2>
+                  <span className="text-[10px] text-slate-500">
+                    {teamsLoading ? 'loading teams…' : `${registeredTeams.length} registered`}
+                  </span>
                 </div>
+                <div className="grid grid-cols-1 gap-2">
+                  {(['A','B','C'] as const).map((letter) => {
+                    const nameKey = `team${letter}` as const
+                    const semiKey = `semi${letter}` as const
+                    return (
+                      <div key={letter} className="flex gap-1.5 items-center">
+                        <span className="text-[10px] font-bold text-slate-500 w-3 shrink-0">{letter}</span>
+                        {registeredTeams.length > 0 ? (
+                          <select
+                            value={s[nameKey]}
+                            onChange={e => setS(p => ({ ...p, [nameKey]: e.target.value }))}
+                            className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-1.5 py-1.5 text-white text-xs min-w-0"
+                          >
+                            <option value="">— select team —</option>
+                            {registeredTeams.map(t => (
+                              <option key={t.id} value={t.name}>{t.name}{t.school ? ` (${t.school})` : ''}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            value={s[nameKey]}
+                            onChange={e => setS(p => ({ ...p, [nameKey]: e.target.value }))}
+                            placeholder={`Team ${letter}`}
+                            className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs min-w-0"
+                          />
+                        )}
+                        <input
+                          type="number" min="0"
+                          value={s[semiKey] || ''}
+                          onChange={e => setS(p => ({ ...p, [semiKey]: Number(e.target.value) || 0 }))}
+                          placeholder="Semi"
+                          title="Semi-final score (carries into MC total)"
+                          className="w-14 bg-slate-800 border border-slate-600 rounded-lg px-1.5 py-1.5 text-white text-xs text-center"
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-500">Semi-final score carries forward into every round.</p>
               </div>
 
               <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-3 space-y-2">
@@ -716,96 +784,140 @@ export default function MCAdminPage() {
           </div>
         )}
 
-        {/* ─── DONE ────────────────────────────────────────────────────────── */}
-        {s.phase === 'done' && (() => {
+        {/* ─── DONE (Regular results screen) ─────────────────────────────── */}
+        {(s.phase === 'done' || s.phase === 'declare_second_runnerup') && (() => {
+          // Sort by CUMULATIVE score (semi-final + Mystery Chain).
+          // The lowest cumulative is the Second Runner Up of Oyo State Scholars Challenge 2026.
           const ranked = [
-            { name: s.teamA, score: s.scoreA },
-            { name: s.teamB, score: s.scoreB },
-            { name: s.teamC, score: s.scoreC },
-          ].sort((a, b) => b.score - a.score)
+            { name: s.teamA, semi: s.semiA, mc: s.scoreA, packId: s.chosenA, rev: s.revealedA },
+            { name: s.teamB, semi: s.semiB, mc: s.scoreB, packId: s.chosenB, rev: s.revealedB },
+            { name: s.teamC, semi: s.semiC, mc: s.scoreC, packId: s.chosenC, rev: s.revealedC },
+          ].map(t => ({ ...t, total: t.semi + t.mc }))
+            .sort((a, b) => b.total - a.total)
 
+          const secondRunnerUp = ranked[2]
+          const winners = ranked.slice(0, 2)
+
+          // ── Dedicated Second Runner Up declaration page ──
+          if (s.phase === 'declare_second_runnerup') {
+            return (
+              <div className="min-h-[75vh] flex flex-col items-center justify-center gap-6 text-center px-4">
+                <p className="text-[#f5a623] text-xs font-bold uppercase tracking-[0.3em]">Oyo State Scholars Challenge 2026</p>
+                <div className="text-7xl animate-bounce">🥉</div>
+                <p className="text-purple-300 text-sm font-bold uppercase tracking-widest">And the</p>
+                <h1 className="text-5xl md:text-6xl font-black text-white leading-tight">Second Runner Up</h1>
+                <p className="text-slate-400 text-sm">is</p>
+                <div className="bg-gradient-to-br from-orange-900/40 to-purple-900/40 border-2 border-[#f5a623]/60 rounded-3xl px-10 py-8 shadow-2xl">
+                  <p className="text-4xl md:text-5xl font-black text-[#f5a623] leading-tight">{secondRunnerUp.name}</p>
+                  <p className="text-slate-300 text-sm mt-3">
+                    Semi: <span className="font-bold text-white">{secondRunnerUp.semi}</span>
+                    <span className="mx-2 text-slate-600">+</span>
+                    Mystery Chain: <span className="font-bold text-white">{secondRunnerUp.mc}</span>
+                    <span className="mx-2 text-slate-600">=</span>
+                    <span className="font-black text-2xl text-white ml-1">{secondRunnerUp.total}</span>
+                  </p>
+                </div>
+                <p className="text-slate-500 text-xs italic max-w-md">
+                  Congratulations. The competition continues with {winners[0].name} and {winners[1].name} advancing to the Grand Final Audio Visual Round.
+                </p>
+                <button
+                  onClick={() => update({ ...s, phase: 'done' })}
+                  className="mt-4 text-xs bg-white/10 hover:bg-white/20 border border-white/20 text-white px-4 py-2 rounded-lg">
+                  ← Back to results
+                </button>
+              </div>
+            )
+          }
+
+          // ── Regular results screen ──
           return (
             <div className="space-y-4">
               <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-6">
-                <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest text-center mb-4">Final Results</p>
+                <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest text-center mb-4">
+                  Cumulative Results (Semi + Mystery Chain)
+                </p>
                 <div className="space-y-3">
-                  {[
-                    {name:s.teamA,score:s.scoreA,rev:s.revealedA,packId:s.chosenA},
-                    {name:s.teamB,score:s.scoreB,rev:s.revealedB,packId:s.chosenB},
-                    {name:s.teamC,score:s.scoreC,rev:s.revealedC,packId:s.chosenC},
-                  ].sort((a,b) => b.score - a.score).map((t, i) => {
+                  {ranked.map((t, i) => {
                     const pack = s.packs.find(p => p.id === t.packId)
+                    const isLast = i === 2
                     return (
-                      <div key={t.name} className="bg-white/5 rounded-xl p-4 flex items-center justify-between">
+                      <div key={t.name}
+                        className={`rounded-xl p-4 flex items-center justify-between ${
+                          isLast ? 'bg-[#f5a623]/10 border border-[#f5a623]/30' : 'bg-white/5'
+                        }`}>
                         <div className="flex items-center gap-3">
                           <span className="text-2xl">{['🥇','🥈','🥉'][i]}</span>
                           <div>
                             <p className="text-white font-bold">{t.name}</p>
-                            <p className="text-slate-500 text-xs">{pack?.emoji} {pack?.title} · {t.rev.length} clues unlocked</p>
+                            <p className="text-slate-500 text-xs">
+                              {pack?.emoji} {pack?.title} · Semi {t.semi} + MC {t.mc}
+                              {isLast && <span className="text-[#f5a623] font-bold ml-1">· Second Runner Up</span>}
+                            </p>
                           </div>
                         </div>
-                        <span className="text-white text-2xl font-black">{t.score} pts</span>
+                        <span className="text-white text-2xl font-black">{t.total} pts</span>
                       </div>
                     )
                   })}
                 </div>
               </div>
 
+              {/* Declare Second Runner Up */}
+              <button
+                onClick={() => update({ ...s, phase: 'declare_second_runnerup' })}
+                className="w-full bg-[#f5a623]/20 hover:bg-[#f5a623]/30 border border-[#f5a623]/50 text-[#f5a623] font-bold py-3 rounded-xl">
+                🥉 Declare Second Runner Up — {secondRunnerUp.name}
+              </button>
+
               {/* Advance to AV Round */}
               <div className="bg-purple-900/20 border border-purple-500/40 rounded-2xl p-4 space-y-3">
                 <div>
                   <p className="text-purple-300 text-xs font-bold uppercase tracking-widest">Grand Final — Audio Visual Round</p>
                   <p className="text-white font-bold mt-1">
-                    <span className="text-green-400">{ranked[0].name}</span>
-                    <span className="text-slate-400 text-sm font-normal"> ({ranked[0].score} pts) </span>
+                    <span className="text-green-400">{winners[0].name}</span>
+                    <span className="text-slate-400 text-sm font-normal"> ({winners[0].total} pts) </span>
                     <span className="text-slate-500">vs</span>
-                    <span className="text-blue-400"> {ranked[1].name}</span>
-                    <span className="text-slate-400 text-sm font-normal"> ({ranked[1].score} pts)</span>
+                    <span className="text-blue-400"> {winners[1].name}</span>
+                    <span className="text-slate-400 text-sm font-normal"> ({winners[1].total} pts)</span>
                   </p>
                   <p className="text-slate-500 text-xs mt-1">
-                    {s.avQuestionsA.length + s.avQuestionsB.length} questions ready ({s.avQuestionsA.length} A · {s.avQuestionsB.length} B) · scores carry forward · video pre-configured
+                    Cumulative scores carry forward · {s.avQuestionsA.length}+{s.avQuestionsB.length} questions · video pre-configured
                   </p>
                 </div>
                 <button
                   onClick={() => {
-                    // Build fresh queues from source questions (source stays immutable for reference)
                     const buildQs = (arr: AVQSetup[]) =>
                       arr.map(q => ({ id: q.id, text: q.text, answer: q.answer, revealed: false, answeredBy: null as 'A' | 'B' | null }))
-                    // Broadcast full AV state so AV admin hydrates from relay
+                    // Field name kept as mcScoreA/B for schema stability — it now
+                    // holds the cumulative (semi + MC) carried forward into AV.
                     wsBroadcast('av:state', {
                       _from_mc: true,
                       phase: 'idle',
                       videoUrl: s.avVideoUrl,
                       videoPlay: false,
-                      teamA: ranked[0].name,
-                      teamB: ranked[1].name,
-                      mcScoreA: ranked[0].score,
-                      mcScoreB: ranked[1].score,
+                      teamA: winners[0].name,
+                      teamB: winners[1].name,
+                      mcScoreA: winners[0].total,
+                      mcScoreB: winners[1].total,
                       questionsA: buildQs(s.avQuestionsA),
                       questionsB: buildQs(s.avQuestionsB),
                       queueA: buildQs(s.avQuestionsA),
                       queueB: buildQs(s.avQuestionsB),
                       timerStart: null,
-                      scoreA: ranked[0].score,
-                      scoreB: ranked[1].score,
+                      scoreA: winners[0].total,
+                      scoreB: winners[1].total,
                       correctA: 0,
                       correctB: 0,
                     })
-                    // Redirect the MC audience display to the AV audience
                     wsBroadcast('mc:goto_av', { at: Date.now() })
                     setAvSent(true)
                     setTimeout(() => router.push('/audio-visual/admin'), 800)
                   }}
                   className={`w-full font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors ${
-                    avSent
-                      ? 'bg-green-700 text-white cursor-default'
-                      : 'bg-purple-600 hover:bg-purple-500 text-white'
+                    avSent ? 'bg-green-700 text-white cursor-default' : 'bg-purple-600 hover:bg-purple-500 text-white'
                   }`}
                 >
-                  {avSent
-                    ? '✓ Teams sent — navigating to AV admin…'
-                    : '📺 Advance Top 2 → Audio Visual Round'
-                  }
+                  {avSent ? '✓ Teams sent — navigating to AV admin…' : '📺 Advance Top 2 → Audio Visual Round'}
                 </button>
               </div>
 

@@ -23,7 +23,7 @@ type AVQuestion = {
 
 type AVState = {
   _from_mc?: boolean
-  phase: 'idle' | 'watching' | 'qa_a' | 'break' | 'qa_b' | 'done'
+  phase: 'idle' | 'watching' | 'qa_a' | 'break' | 'qa_b' | 'done' | 'declare_first_runnerup' | 'declare_winner'
   videoUrl: string
   videoPlay: boolean
   teamA: string
@@ -307,20 +307,44 @@ export default function AVAdmin() {
                   End {state.teamB} → Results
                 </button>
               )}
-              {state.phase === 'done' && (
-                <div className="text-center py-4 space-y-2">
-                  <p className="text-2xl font-black text-yellow-400">🏆 Competition Complete!</p>
+              {(state.phase === 'done' || state.phase === 'declare_first_runnerup' || state.phase === 'declare_winner') && (
+                <div className="text-center py-3 space-y-2">
+                  <p className="text-lg font-black text-yellow-400">🏆 Grand Final Complete!</p>
                   <div className="grid grid-cols-2 gap-2 mt-2">
-                    <div className="bg-green-900/30 rounded-xl p-2 text-center">
+                    <div className={`rounded-xl p-2 text-center ${state.scoreA >= state.scoreB ? 'bg-yellow-500/20 border border-yellow-500/40' : 'bg-green-900/30'}`}>
                       <p className="text-xs text-gray-400">{state.teamA}</p>
-                      <p className="text-xl font-black text-green-400">{state.scoreA}</p>
-                      <p className="text-xs text-gray-600">MC {state.mcScoreA} + AV {avScoreA}</p>
+                      <p className="text-lg font-black text-green-400">{state.scoreA}</p>
+                      <p className="text-[10px] text-gray-600">Prior {state.mcScoreA} + AV {avScoreA}</p>
                     </div>
-                    <div className="bg-blue-900/30 rounded-xl p-2 text-center">
+                    <div className={`rounded-xl p-2 text-center ${state.scoreB > state.scoreA ? 'bg-yellow-500/20 border border-yellow-500/40' : 'bg-blue-900/30'}`}>
                       <p className="text-xs text-gray-400">{state.teamB}</p>
-                      <p className="text-xl font-black text-blue-400">{state.scoreB}</p>
-                      <p className="text-xs text-gray-600">MC {state.mcScoreB} + AV {avScoreB}</p>
+                      <p className="text-lg font-black text-blue-400">{state.scoreB}</p>
+                      <p className="text-[10px] text-gray-600">Prior {state.mcScoreB} + AV {avScoreB}</p>
                     </div>
+                  </div>
+                  {/* Ceremony reveal buttons */}
+                  <div className="flex flex-col gap-2 mt-2">
+                    {state.phase === 'done' && (
+                      <button onClick={() => update({ phase: 'declare_first_runnerup' })}
+                        className="w-full py-2 bg-[#f5a623]/20 hover:bg-[#f5a623]/30 border border-[#f5a623]/50 text-[#f5a623] rounded-xl font-bold text-sm">
+                        🥈 Declare First Runner Up
+                      </button>
+                    )}
+                    {state.phase === 'declare_first_runnerup' && (
+                      <button onClick={() => update({ phase: 'declare_winner' })}
+                        className="w-full py-2 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/50 text-yellow-300 rounded-xl font-bold text-sm">
+                        🏆 Declare Winner
+                      </button>
+                    )}
+                    {state.phase === 'declare_winner' && (
+                      <p className="text-xs text-yellow-400 font-bold italic pt-1">Winner declared. See audience screen.</p>
+                    )}
+                    {state.phase !== 'done' && (
+                      <button onClick={() => update({ phase: 'done' })}
+                        className="w-full py-1.5 bg-white/5 hover:bg-white/10 text-slate-400 rounded-lg text-[10px]">
+                        ← Back to results
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

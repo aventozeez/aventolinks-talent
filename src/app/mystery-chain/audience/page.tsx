@@ -13,12 +13,14 @@ type MCPhase =
   | 'pick_B' | 'story_B' | 'b_playing'
   | 'pick_C' | 'story_C' | 'c_playing'
   | 'done'
+  | 'declare_second_runnerup'
 
 type PackCard = { id: string; title: string; emoji: string; teaser: string }
 
 type MCAudienceState = {
   phase: MCPhase
   teamA: string; teamB: string; teamC: string
+  semiA?: number; semiB?: number; semiC?: number
   packs: PackCard[]
   chosenA: string | null; chosenB: string | null; chosenC: string | null
   activePackTitle: string
@@ -917,17 +919,49 @@ export default function MCAudiencePage() {
     </div>
   )
 
-  // Done
+  // ── Dedicated Second Runner Up declaration ──
+  if (s.phase === 'declare_second_runnerup') {
+    const teams = [
+      { name: s.teamA, semi: s.semiA ?? 0, mc: s.scoreA },
+      { name: s.teamB, semi: s.semiB ?? 0, mc: s.scoreB },
+      { name: s.teamC, semi: s.semiC ?? 0, mc: s.scoreC },
+    ].map(t => ({ ...t, total: t.semi + t.mc })).sort((a, b) => b.total - a.total)
+    const secondRunnerUp = teams[2]
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#1a0a2a] to-[#0a0a1a] text-white flex flex-col items-center justify-center gap-8 px-6">
+        <p className="text-[#f5a623] text-sm font-bold uppercase tracking-[0.4em]">Oyo State Scholars Challenge 2026</p>
+        <div className="text-9xl animate-bounce">🥉</div>
+        <p className="text-purple-300 text-lg font-bold uppercase tracking-widest">And the</p>
+        <h1 className="text-6xl md:text-8xl font-black text-white leading-tight text-center">Second Runner Up</h1>
+        <p className="text-slate-400 text-lg">is</p>
+        <div className="bg-gradient-to-br from-orange-900/40 to-purple-900/40 border-2 border-[#f5a623]/60 rounded-3xl px-16 py-12 shadow-2xl backdrop-blur-sm">
+          <p className="text-6xl md:text-7xl font-black text-[#f5a623] leading-tight text-center">{secondRunnerUp.name}</p>
+          <p className="text-slate-300 text-base mt-6 text-center">
+            Semi: <span className="font-bold text-white">{secondRunnerUp.semi}</span>
+            <span className="mx-3 text-slate-600">+</span>
+            Mystery Chain: <span className="font-bold text-white">{secondRunnerUp.mc}</span>
+            <span className="mx-3 text-slate-600">=</span>
+            <span className="font-black text-3xl text-white ml-1">{secondRunnerUp.total} pts</span>
+          </p>
+        </div>
+        <p className="text-slate-500 text-sm italic text-center max-w-xl">
+          Congratulations {secondRunnerUp.name}. The Grand Final continues with {teams[0].name} and {teams[1].name}.
+        </p>
+      </div>
+    )
+  }
+
+  // Done — cumulative results view
   return (
     <div className="min-h-screen bg-[#0a0a1a] text-white p-4 flex flex-col gap-6 items-center justify-center">
-      <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest">Mysteries Solved — Final Results</p>
+      <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest">Mysteries Solved — Cumulative Results</p>
 
       <div className="w-full max-w-sm space-y-3">
         {[
-          {name:s.teamA,score:s.scoreA,rev:s.revealedA,cid:s.chosenA},
-          {name:s.teamB,score:s.scoreB,rev:s.revealedB,cid:s.chosenB},
-          {name:s.teamC,score:s.scoreC,rev:s.revealedC,cid:s.chosenC},
-        ].sort((a,b) => b.score - a.score).map((t, i) => {
+          {name:s.teamA,mc:s.scoreA,semi:s.semiA ?? 0,rev:s.revealedA,cid:s.chosenA},
+          {name:s.teamB,mc:s.scoreB,semi:s.semiB ?? 0,rev:s.revealedB,cid:s.chosenB},
+          {name:s.teamC,mc:s.scoreC,semi:s.semiC ?? 0,rev:s.revealedC,cid:s.chosenC},
+        ].map(t => ({...t, score: t.mc + t.semi})).sort((a,b) => b.score - a.score).map((t, i) => {
           const pack = s.packs.find(p => p.id === t.cid)
           return (
             <div key={t.name} className={`rounded-xl px-5 py-4 border ${
@@ -940,7 +974,7 @@ export default function MCAudiencePage() {
                   <span className="text-2xl">{['🥇','🥈','🥉'][i]}</span>
                   <div>
                     <p className="text-white font-bold">{t.name}</p>
-                    <p className="text-slate-400 text-xs">{pack?.emoji} {pack?.title} · {t.rev.length} clues</p>
+                    <p className="text-slate-400 text-xs">{pack?.emoji} {pack?.title} · Semi {t.semi} + MC {t.mc}</p>
                   </div>
                 </div>
                 <span className="text-white text-2xl font-black">{t.score}</span>
