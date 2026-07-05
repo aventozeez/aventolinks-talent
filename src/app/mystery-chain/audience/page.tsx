@@ -9,9 +9,9 @@ const MC_TIME_MS = 60_000
 
 type MCPhase =
   | 'setup' | 'intro'
-  | 'pick_A' | 'story_A' | 'a_playing'
-  | 'pick_B' | 'story_B' | 'b_playing'
-  | 'pick_C' | 'story_C' | 'c_playing'
+  | 'pick_A' | 'story_A' | 'a_playing' | 'summary_A'
+  | 'pick_B' | 'story_B' | 'b_playing' | 'summary_B'
+  | 'pick_C' | 'story_C' | 'c_playing' | 'summary_C'
   | 'done'
   | 'declare_second_runnerup'
 
@@ -23,6 +23,7 @@ type MCAudienceState = {
   semiA?: number; semiB?: number; semiC?: number
   packs: PackCard[]
   chosenA: string | null; chosenB: string | null; chosenC: string | null
+  chosenSnippetsA?: string[]; chosenSnippetsB?: string[]; chosenSnippetsC?: string[]
   activePackTitle: string
   activePackEmoji: string
   activeOpeningStory: string
@@ -927,22 +928,50 @@ export default function MCAudiencePage() {
         </div>
       )}
 
-      {/* Story so far */}
-      {s.activeRevealedStory && s.activeRevealedStory.length > 0 && (
-        <div className="bg-blue-900/20 border border-blue-500/30 rounded-2xl p-4">
-          <p className="text-blue-300 text-xs font-bold uppercase tracking-widest mb-3 text-center">Story Unfolding…</p>
-          <div className="space-y-2">
-            {s.activeRevealedStory.map((snippet, i) => (
-              <div key={i} className="flex gap-2">
-                <span className="text-blue-500 font-bold text-sm shrink-0">{i + 1}.</span>
-                <p className="text-blue-100 text-sm leading-relaxed">{snippet}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Story review is shown only at end-of-round on the summary screen,
+          not during play — that way the puzzle stays the focus. */}
     </div>
   )
+
+  // ── Per-team round summary — green (unlocked) / red (missed) ──
+  if (s.phase === 'summary_A' || s.phase === 'summary_B' || s.phase === 'summary_C') {
+    const teamName = s.phase === 'summary_A' ? s.teamA : s.phase === 'summary_B' ? s.teamB : s.teamC
+    const packId = s.phase === 'summary_A' ? s.chosenA : s.phase === 'summary_B' ? s.chosenB : s.chosenC
+    const revealed = s.phase === 'summary_A' ? s.revealedA : s.phase === 'summary_B' ? s.revealedB : s.revealedC
+    const mcScore = s.phase === 'summary_A' ? s.scoreA : s.phase === 'summary_B' ? s.scoreB : s.scoreC
+    const snippets = s.phase === 'summary_A' ? (s.chosenSnippetsA ?? [])
+      : s.phase === 'summary_B' ? (s.chosenSnippetsB ?? [])
+      : (s.chosenSnippetsC ?? [])
+    const pack = s.packs.find(p => p.id === packId)
+    const unlockedSet = new Set(revealed)
+    const correctCount = snippets.filter(sn => unlockedSet.has(sn)).length
+    return (
+      <div className="min-h-screen bg-[#06080f] text-white p-6 flex flex-col gap-4 items-center">
+        <p className="text-[#f5a623] text-xs font-bold uppercase tracking-[0.3em]">Round Complete</p>
+        <p className="text-3xl md:text-4xl font-black text-white text-center">{pack?.emoji} {teamName}</p>
+        <div className="flex items-center justify-center gap-6 text-base">
+          <span className="text-slate-400">Unlocked: <b className="text-green-400 text-xl">{correctCount}</b> <span className="text-slate-600">/ {snippets.length}</span></span>
+          <span className="text-slate-700">·</span>
+          <span className="text-slate-400">This round: <b className="text-[#f5a623] text-xl">{mcScore}</b> pts</span>
+        </div>
+        <div className="w-full max-w-2xl space-y-1.5 mt-2">
+          {snippets.map((sn, i) => {
+            const unlocked = unlockedSet.has(sn)
+            return (
+              <div key={i} className={`rounded-xl px-4 py-2.5 flex items-start gap-3 border ${
+                unlocked ? 'bg-green-500/15 border-green-500/40' : 'bg-red-500/10 border-red-500/30'
+              }`}>
+                <span className={`text-sm font-black w-6 shrink-0 mt-0.5 ${unlocked ? 'text-green-400' : 'text-red-400'}`}>{i + 1}.</span>
+                <p className={`text-sm md:text-base leading-snug ${unlocked ? 'text-green-100' : 'text-red-200/70 line-through'}`}>{sn}</p>
+                <span className={`ml-auto text-lg font-bold shrink-0 ${unlocked ? 'text-green-400' : 'text-red-400'}`}>{unlocked ? '✓' : '✗'}</span>
+              </div>
+            )
+          })}
+        </div>
+        <p className="text-slate-500 text-xs italic mt-4">Waiting for the host to continue…</p>
+      </div>
+    )
+  }
 
   // ── Dedicated Second Runner Up declaration ──
   if (s.phase === 'declare_second_runnerup') {

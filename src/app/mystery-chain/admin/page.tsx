@@ -13,9 +13,9 @@ const MC_PTS = 10
 
 type MCPhase =
   | 'setup' | 'intro'
-  | 'pick_A' | 'story_A' | 'a_playing'
-  | 'pick_B' | 'story_B' | 'b_playing'
-  | 'pick_C' | 'story_C' | 'c_playing'
+  | 'pick_A' | 'story_A' | 'a_playing' | 'summary_A'
+  | 'pick_B' | 'story_B' | 'b_playing' | 'summary_B'
+  | 'pick_C' | 'story_C' | 'c_playing' | 'summary_C'
   | 'done'                    // Regular rankings screen
   | 'declare_second_runnerup' // Dedicated Second Runner Up declaration
 
@@ -89,6 +89,11 @@ function safeForAudience(s: MCState) {
     semiA: s.semiA, semiB: s.semiB, semiC: s.semiC,
     packs: s.packs.map(p => ({ id: p.id, title: p.title, emoji: p.emoji, teaser: p.teaser })),
     chosenA: s.chosenA, chosenB: s.chosenB, chosenC: s.chosenC,
+    // Story snippets of each chosen pack — needed by summary phases so
+    // audience/team screens can render the green/red review.
+    chosenSnippetsA: (s.chosenA ? (s.packs.find(p => p.id === s.chosenA)?.puzzles ?? []).map(p => p.storySnippet) : []),
+    chosenSnippetsB: (s.chosenB ? (s.packs.find(p => p.id === s.chosenB)?.puzzles ?? []).map(p => p.storySnippet) : []),
+    chosenSnippetsC: (s.chosenC ? (s.packs.find(p => p.id === s.chosenC)?.puzzles ?? []).map(p => p.storySnippet) : []),
     activePackTitle: activePack?.title ?? '',
     activePackEmoji: activePack?.emoji ?? '',
     activeOpeningStory: activePack?.openingStory ?? '',
@@ -297,9 +302,11 @@ export default function MCAdminPage() {
       if (left === 0) {
         const cur = stateRef.current
         if (!['a_playing','b_playing','c_playing'].includes(cur.phase)) return
+        // Time expired → move to that team's summary screen (green/red review).
+        // Admin decides when to continue to the next team.
         const next: MCState = {
           ...cur,
-          phase: cur.phase === 'a_playing' ? 'pick_B' : cur.phase === 'b_playing' ? 'pick_C' : 'done',
+          phase: cur.phase === 'a_playing' ? 'summary_A' : cur.phase === 'b_playing' ? 'summary_B' : 'summary_C',
           timerStart: null, revealed: false,
         }
         setS(next); broadcast(next); clearInterval(timerRef.current!)
@@ -341,15 +348,49 @@ export default function MCAdminPage() {
     const nextRevealed = result === 'correct' && puzzle.storySnippet
       ? [...cur[revKey], puzzle.storySnippet]
       : [...cur[revKey]]
-    update({ ...cur, [qKey]: queue, [scoreKey]: result === 'correct' ? cur[scoreKey] + MC_PTS : cur[scoreKey], [revKey]: nextRevealed, revealed: false })
+    // If this correct answer emptied the queue (all 10 unlocked), auto-transition
+    // to that team's summary screen and stop the timer.
+    const nextPhase: MCPhase = queue.length === 0
+      ? (cur.phase === 'a_playing' ? 'summary_A' : cur.phase === 'b_playing' ? 'summary_B' : 'summary_C')
+      : cur.phase
+    const nextTimerStart = queue.length === 0 ? null : cur.timerStart
+    update({
+      ...cur,
+      phase: nextPhase,
+      timerStart: nextTimerStart,
+      [qKey]: queue,
+      [scoreKey]: result === 'correct' ? cur[scoreKey] + MC_PTS : cur[scoreKey],
+      [revKey]: nextRevealed,
+      revealed: false,
+    })
   }
 
   const reveal = () => update({ ...s, revealed: !s.revealed })
 
+  // Skip to the current team's summary immediately (host cuts the round short)
+  const endRound = () => {
+    const cur = stateRef.current
+    const next: MCPhase =
+      cur.phase === 'a_playing' ? 'summary_A' :
+      cur.phase === 'b_playing' ? 'summary_B' :
+      cur.phase === 'c_playing' ? 'summary_C' :
+      cur.phase
+    update({ ...cur, phase: next, timerStart: null, revealed: false })
+  }
+
+  // From a team's summary → next team's pick, or MC done for team C
+  const continueFromSummary = () => {
+    update({
+      ...s,
+      phase: s.phase === 'summary_A' ? 'pick_B' : s.phase === 'summary_B' ? 'pick_C' : 'done',
+      timerStart: null, revealed: false,
+    })
+  }
+
   const nextTeam = () => {
     update({
       ...s,
-      phase: s.phase === 'a_playing' ? 'pick_B' : s.phase === 'b_playing' ? 'pick_C' : 'done',
+      phase: s.phase === 'a_playing' ? 'summary_A' : s.phase === 'b_playing' ? 'summary_B' : 'summary_C',
       timerStart: null, revealed: false,
     })
   }
@@ -789,11 +830,63 @@ export default function MCAdminPage() {
               </button>
             </div>
 
-            <button onClick={nextTeam} className="w-full border border-slate-600 text-slate-400 hover:text-white hover:border-slate-400 py-3 rounded-xl text-sm font-semibold">
-              {s.phase === 'c_playing' ? 'End Round →' : `Time Up — ${s.phase === 'a_playing' ? s.teamB : s.teamC} chooses next →`}
+            <button onClick={endRound} className="w-full border border-slate-600 text-slate-400 hover:text-white hover:border-slate-400 py-3 rounded-xl text-sm font-semibold">
+              End Round Early → Review
             </button>
           </div>
         )}
+
+        {/* ─── SUMMARY (per-team review after playing) ───────────────────── */}
+        {(s.phase === 'summary_A' || s.phase === 'summary_B' || s.phase === 'summary_C') && (() => {
+          const teamName = s.phase === 'summary_A' ? s.teamA : s.phase === 'summary_B' ? s.teamB : s.teamC
+          const packId = s.phase === 'summary_A' ? s.chosenA : s.phase === 'summary_B' ? s.chosenB : s.chosenC
+          const revealed = s.phase === 'summary_A' ? s.revealedA : s.phase === 'summary_B' ? s.revealedB : s.revealedC
+          const mcScore = s.phase === 'summary_A' ? s.scoreA : s.phase === 'summary_B' ? s.scoreB : s.scoreC
+          const pack = s.packs.find(p => p.id === packId)
+          const puzzles = pack?.puzzles ?? []
+          const unlockedSet = new Set(revealed)
+          const correctCount = puzzles.filter(p => unlockedSet.has(p.storySnippet)).length
+          const isLastTeam = s.phase === 'summary_C'
+          const nextTeamName = s.phase === 'summary_A' ? s.teamB : s.phase === 'summary_B' ? s.teamC : ''
+          return (
+            <div className="space-y-3">
+              {/* Header — team + score for this round */}
+              <div className="bg-[#0d1f3c] border border-purple-500/40 rounded-2xl p-4 text-center space-y-1">
+                <p className="text-purple-300 text-[10px] font-bold uppercase tracking-widest">Round Complete</p>
+                <p className="text-white font-black text-lg">{pack?.emoji} {teamName}</p>
+                <div className="flex items-center justify-center gap-4 mt-2">
+                  <span className="text-slate-400 text-xs">Unlocked: <b className="text-green-400">{correctCount}</b> / {puzzles.length}</span>
+                  <span className="text-slate-600">·</span>
+                  <span className="text-slate-400 text-xs">This round: <b className="text-[#f5a623]">{mcScore} pts</b></span>
+                </div>
+              </div>
+
+              {/* All 10 story snippets — green if unlocked, red if not */}
+              <div className="bg-[#0d1f3c] border border-slate-700 rounded-2xl p-4 space-y-2">
+                <p className="text-[#f5a623] text-[10px] font-bold uppercase tracking-widest mb-2">Story review</p>
+                <div className="space-y-1.5">
+                  {puzzles.map((p, i) => {
+                    const unlocked = unlockedSet.has(p.storySnippet)
+                    return (
+                      <div key={p.id} className={`rounded-lg px-3 py-2 flex items-start gap-2 border ${
+                        unlocked ? 'bg-green-500/15 border-green-500/40' : 'bg-red-500/10 border-red-500/30'
+                      }`}>
+                        <span className={`text-xs font-black w-5 shrink-0 mt-0.5 ${unlocked ? 'text-green-400' : 'text-red-400'}`}>{i + 1}.</span>
+                        <p className={`text-sm leading-snug ${unlocked ? 'text-green-100' : 'text-red-200/70 line-through'}`}>{p.storySnippet}</p>
+                        <span className="ml-auto text-xs font-bold shrink-0">{unlocked ? '✓' : '✗'}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <button onClick={continueFromSummary}
+                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl">
+                {isLastTeam ? 'Show Final Results →' : `Continue to ${nextTeamName} →`}
+              </button>
+            </div>
+          )
+        })()}
 
         {/* ─── DONE (Regular results screen) ─────────────────────────────── */}
         {(s.phase === 'done' || s.phase === 'declare_second_runnerup') && (() => {
