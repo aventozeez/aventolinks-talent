@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useMemo } from 'react'
-import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
+import { wsSubscribe } from '@/lib/ws-sync'
 import AVAudienceView from '@/components/av-audience-view'
 
 const CHANNEL = 'mc:state'
@@ -44,67 +44,79 @@ const fmtTime = (ms: number) => {
 function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string }) {
   const fullText = s.activeOpeningStory
   const storyStartAt = s.storyStartAt ?? 0
-  const [ttsState, setTtsState] = useState<'idle' | 'speaking' | 'blocked'>('idle')
-  // Only the main audience projector plays narration. Team screens
-  // (team-a / team-b / team-c) stay silent and follow the projector's
-  // actual speech progress via broadcast so nothing gets cut off mid-sentence.
+
+  // The /mystery-chain/audience URL is the "projector" — it speaks audio.
+  // Team screens stay silent. Two audience projectors on the same LAN will
+  // both speak because they use identical wall-clock timing, so they stay
+  // reasonably in sync (may sound slightly reverby but not off).
   const isProjector = typeof window !== 'undefined' && window.location.pathname.includes('/mystery-chain/audience')
 
-  // Split story into sentences. Same input → same output on every screen.
+  // Autoplay: browsers block speechSynthesis until the user gestures.
+  // Track unlock state; the overlay below asks for that one click.
+  const [audioUnlocked, setAudioUnlocked] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return sessionStorage.getItem('mcAudioUnlocked') === '1'
+  })
+
+  const unlockAudio = () => {
+    try {
+      const u = new SpeechSynthesisUtterance('')
+      u.volume = 0
+      window.speechSynthesis.speak(u)
+    } catch { /* noop */ }
+    try { sessionStorage.setItem('mcAudioUnlocked', '1') } catch { /* noop */ }
+    setAudioUnlocked(true)
+  }
+
+  // Sentence split — identical on every screen given identical fullText.
   const sentences = useMemo(() => {
     if (!fullText) return []
     return fullText.match(/[^.!?]+[.!?]+(?:\s+|$)/g)?.map(s => s.trim()).filter(Boolean) ?? [fullText]
   }, [fullText])
 
-  // Current sentence index — driven by real speech progress on the projector,
-  // received via broadcast on team screens. Reset to 0 whenever a new story
-  // starts (storyStartAt changes).
-  const [currentIdx, setCurrentIdx] = useState<number>(-1)
+  // Wall-clock timeline. 110ms/char (generous margin over TTS rate 0.88 which
+  // is ~68ms/char) plus 3s minimum per sentence plus a 500ms breather. Speech
+  // finishes well within its window on virtually every device, so the next
+  // sentence never cuts the previous one off.
+  const { cumulative, totalMs } = useMemo(() => {
+    const cum: number[] = []
+    let sum = 0
+    for (const sn of sentences) {
+      sum += Math.max(3000, sn.length * 110) + 500
+      cum.push(sum)
+    }
+    return { cumulative: cum, totalMs: sum }
+  }, [sentences])
+
+  // Tick every 100ms; derives currentIdx purely from (Date.now() - storyStartAt).
+  const [tick, setTick] = useState(() => Date.now())
   useEffect(() => {
-    if (storyStartAt > 0) setCurrentIdx(0)
-    else setCurrentIdx(-1)
-  }, [storyStartAt])
+    const iv = setInterval(() => setTick(Date.now()), 100)
+    return () => clearInterval(iv)
+  }, [])
 
-  // Team screens follow the projector's broadcast idx
-  useEffect(() => {
-    if (isProjector) return
-    const unsub = wsSubscribe('mc:story_idx', (payload) => {
-      const p = payload as { idx?: number; storyStartAt?: number }
-      if (typeof p?.idx !== 'number') return
-      // Only honour the idx if it belongs to the current story
-      if (p.storyStartAt && p.storyStartAt !== storyStartAt) return
-      setCurrentIdx(p.idx)
-    })
-    return () => unsub()
-  }, [isProjector, storyStartAt])
-
-  const currentSentence = currentIdx >= 0 && currentIdx < sentences.length ? sentences[currentIdx] : ''
-  const done = storyStartAt > 0 && currentIdx >= sentences.length
-
-  // Advance helper — called on utter.onend / onerror on the projector.
-  // Bumps local idx and broadcasts to team screens.
-  const advance = (fromIdx: number) => {
-    const next = fromIdx + 1
-    setCurrentIdx(next)
-    wsBroadcast('mc:story_idx', { idx: next, storyStartAt })
+  const elapsed = storyStartAt > 0 ? Math.max(0, tick - storyStartAt) : 0
+  let currentIdx = -1
+  if (storyStartAt > 0 && sentences.length > 0 && elapsed < totalMs) {
+    currentIdx = cumulative.findIndex(c => elapsed < c)
   }
+  const currentSentence = currentIdx >= 0 ? sentences[currentIdx] : ''
+  const done = storyStartAt > 0 && elapsed >= totalMs
 
-  // Speech synthesis — projector-only. Fires ONE utterance per currentIdx,
-  // waits for actual onend before advancing so sentences are never cut off.
+  // Speak whichever sentence is currently showing. Every projector speaks,
+  // driven by wall-clock so multiple projectors stay in sync.
   const spokenIdxRef = useRef(-2)
   useEffect(() => {
     if (!isProjector) return
+    if (!audioUnlocked) return
     if (typeof window === 'undefined' || !window.speechSynthesis) return
     if (currentIdx < 0 || currentIdx >= sentences.length) return
     if (spokenIdxRef.current === currentIdx) return
     spokenIdxRef.current = currentIdx
 
-    // Publish this sentence to team screens right away so they don't wait
-    wsBroadcast('mc:story_idx', { idx: currentIdx, storyStartAt })
-
-    window.speechSynthesis.cancel()
     const sentence = sentences[currentIdx]
     if (!sentence) return
+    window.speechSynthesis.cancel()
 
     const voices = window.speechSynthesis.getVoices()
     const preferred = voices.find(v => /male|david|google uk|daniel/i.test(v.name))
@@ -113,37 +125,8 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
     utter.pitch = 0.95
     utter.volume = 1
     if (preferred) utter.voice = preferred
-
-    let advanced = false
-    const advanceOnce = () => {
-      if (advanced) return
-      advanced = true
-      // Small breather between sentences
-      setTimeout(() => advance(currentIdx), 220)
-    }
-
-    utter.onstart = () => setTtsState('speaking')
-    utter.onend = () => advanceOnce()
-    utter.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'audio-busy') setTtsState('blocked')
-      // If speech won't play, keep the story moving on a reading-pace timer
-      // (~90ms per char, min 2.5s) so team screens still see the whole story.
-      setTimeout(advanceOnce, Math.max(2500, sentence.length * 90))
-    }
-
     window.speechSynthesis.speak(utter)
-
-    // Autoplay-blocked detection: if speech never actually started, mark
-    // blocked and fall back to reading-pace advance so we don't stall.
-    setTimeout(() => {
-      if (advanced) return
-      if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
-        setTtsState('blocked')
-        setTimeout(advanceOnce, Math.max(2500, sentence.length * 90))
-      }
-    }, 700)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIdx, sentences, isProjector])
+  }, [currentIdx, sentences, isProjector, audioUnlocked])
 
   // Cancel any in-flight speech on unmount so the next phase starts clean
   useEffect(() => {
@@ -153,13 +136,28 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden relative">
 
-      {/* ── TTS indicator (top-right) — only on the projector ── */}
-      <div className="absolute top-3 right-3 z-30 pointer-events-auto">
-        {isProjector && ttsState === 'speaking' && (
+      {/* ── One-time audio unlock overlay — projector only, before story starts ── */}
+      {isProjector && !audioUnlocked && (
+        <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center gap-6 cursor-pointer"
+          onClick={unlockAudio}>
+          <div className="text-7xl animate-pulse">🔊</div>
+          <p className="text-white text-3xl font-black text-center px-6">Tap to enable sound</p>
+          <p className="text-slate-400 text-sm text-center max-w-md px-6">
+            Browsers require one tap before playing audio. After this, the narration will play automatically for the whole competition.
+          </p>
+          <button
+            className="mt-4 px-10 py-4 bg-[#f5a623] hover:bg-[#e0951b] text-black text-lg font-black rounded-2xl shadow-lg"
+            onClick={(e) => { e.stopPropagation(); unlockAudio() }}>
+            ▶ Enable Narration
+          </button>
+        </div>
+      )}
+      {/* ── Small speaker indicator top-right (projector only, after unlock) ── */}
+      {isProjector && audioUnlocked && currentSentence && (
+        <div className="absolute top-3 right-3 z-30 pointer-events-none">
           <div className="flex items-center gap-2 bg-green-900/70 border border-green-500/40 text-green-300 text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm shadow-lg">
             <span className="text-sm animate-pulse">🔊</span>
             <span>Narrating…</span>
-            {/* animated soundwave bars */}
             <span className="inline-flex gap-0.5 items-end">
               {[0, 0.15, 0.3].map((delay, i) => (
                 <span key={i} className="w-0.5 bg-green-300 inline-block rounded-full"
@@ -167,26 +165,8 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
               ))}
             </span>
           </div>
-        )}
-        {isProjector && ttsState === 'blocked' && (
-          <button
-            onClick={() => {
-              // Manual retry — kicks the sound off after user interaction
-              setTtsState('idle')
-              if (typeof window !== 'undefined' && window.speechSynthesis) {
-                window.speechSynthesis.cancel()
-                const nudge = new SpeechSynthesisUtterance(' ')
-                nudge.volume = 1
-                window.speechSynthesis.speak(nudge)
-              }
-              window.location.reload()
-            }}
-            className="flex items-center gap-2 bg-yellow-900/70 border border-yellow-500/50 text-yellow-200 text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm shadow-lg hover:bg-yellow-800/80">
-            <span className="text-sm">🔇</span>
-            <span>Sound blocked — click to enable</span>
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── FULL-SCREEN CARTOON SCENE ── */}
       <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
