@@ -332,7 +332,9 @@ export default function MCAdminPage() {
     update({
       ...cur,
       phase: cur.phase === 'story_A' ? 'a_playing' : cur.phase === 'story_B' ? 'b_playing' : 'c_playing',
-      timerStart: Date.now(), revealed: false,
+      timerStart: Date.now(),
+      // Answer is always visible for every riddle — host doesn't have to click reveal.
+      revealed: true,
     })
   }
 
@@ -361,7 +363,8 @@ export default function MCAdminPage() {
       [qKey]: queue,
       [scoreKey]: result === 'correct' ? cur[scoreKey] + MC_PTS : cur[scoreKey],
       [revKey]: nextRevealed,
-      revealed: false,
+      // Keep answer visible for the next puzzle too — no click needed.
+      revealed: true,
     })
   }
 
@@ -784,19 +787,6 @@ export default function MCAdminPage() {
               })}
             </div>
 
-            {currentRevealed.length > 0 && (
-              <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
-                <p className="text-blue-300 text-xs font-bold uppercase tracking-widest mb-2">Story Unlocked</p>
-                <div className="space-y-1">
-                  {currentRevealed.map((snippet, i) => (
-                    <p key={i} className="text-blue-100 text-sm leading-relaxed">
-                      <span className="text-blue-400 font-bold mr-1">{i + 1}.</span>{snippet}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {currentPuzzle ? (
               <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-5 space-y-3">
                 <div className="flex justify-center">
@@ -804,15 +794,16 @@ export default function MCAdminPage() {
                     <p className="text-7xl">{currentPuzzle.picture}</p>
                   </div>
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-slate-400 text-sm flex-1">Clue: <span className="text-white font-semibold">{currentPuzzle.clue}</span></p>
-                  <button onClick={reveal}
-                    className={`text-xs px-3 py-1 rounded-lg border font-semibold shrink-0 ${s.revealed ? 'bg-green-600/30 border-green-500 text-green-300' : 'bg-white/5 border-white/20 text-slate-400'}`}>
-                    {s.revealed ? 'Hide' : 'Reveal'}
-                  </button>
-                </div>
+                <p className="text-slate-400 text-sm text-center">
+                  Clue: <span className="text-white font-semibold">{currentPuzzle.clue}</span>
+                </p>
                 <p className="text-[#f5a623] text-4xl font-black tracking-[0.25em] text-center">{currentPuzzle.scrambled}</p>
-                {s.revealed && <p className="text-green-400 text-xl font-bold text-center">{currentPuzzle.answer}</p>}
+                {/* Answer is always visible on the admin — the host needs it to
+                    judge answers instantly without an extra click. */}
+                <div className="bg-green-500/15 border border-green-500/40 rounded-xl px-4 py-2 text-center">
+                  <span className="text-green-400 text-[10px] font-bold uppercase tracking-widest mr-2">Answer</span>
+                  <span className="text-green-300 text-2xl font-black tracking-[0.15em]">{currentPuzzle.answer}</span>
+                </div>
               </div>
             ) : (
               <div className="bg-white/5 border border-white/10 rounded-xl p-6 text-center text-slate-500">No more puzzles</div>
