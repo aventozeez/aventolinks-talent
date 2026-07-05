@@ -234,6 +234,11 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
           0%, 100% { transform: scaleY(0.4); }
           50%      { transform: scaleY(1); }
         }
+        @keyframes mcReveal {
+          0%   { transform: scale(0.9); opacity: 0; }
+          60%  { transform: scale(1.04); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
       `}} />
 
       {/* Small waiting hint — stays visible even after subtitle fades */}
@@ -891,12 +896,30 @@ export default function MCAudiencePage() {
             Clue: <span className="text-white font-semibold">{s.currentPuzzle.clue}</span>
           </p>
           <p className="text-[#f5a623] text-5xl font-black tracking-[0.3em]">{s.currentPuzzle.scrambled}</p>
-          {s.revealed && s.currentPuzzle.answer && (
-            <div className="bg-green-500/20 border border-green-500/40 rounded-xl px-6 py-3">
-              <p className="text-green-300 text-xs font-bold uppercase tracking-widest mb-1">Answer</p>
-              <p className="text-white text-2xl font-black">{s.currentPuzzle.answer}</p>
-            </div>
-          )}
+          {/* Answer slot — always reserved so the page layout never jumps when
+              the admin toggles reveal. Placeholder is subtle; reveal is a
+              colourful gradient banner. */}
+          <div className="w-full min-h-[76px] flex items-center justify-center">
+            {s.revealed && s.currentPuzzle.answer ? (
+              <div className="w-full rounded-2xl px-6 py-3 shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 30%, #f5a623 65%, #ec4899 100%)',
+                  boxShadow: '0 6px 24px rgba(34,197,94,0.35), 0 2px 8px rgba(245,166,35,0.25)',
+                  animation: 'mcReveal 500ms ease-out',
+                }}>
+                <p className="text-white text-[10px] font-bold uppercase tracking-[0.3em] mb-1 opacity-90">✨ Answer Revealed ✨</p>
+                <p className="text-white text-3xl font-black tracking-[0.15em] drop-shadow"
+                  style={{ textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
+                  {s.currentPuzzle.answer}
+                </p>
+              </div>
+            ) : (
+              <div className="w-full rounded-2xl px-6 py-3 border border-dashed border-slate-700 bg-slate-900/40">
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.3em]">Answer</p>
+                <p className="text-slate-700 text-2xl font-black tracking-[0.15em] select-none">— — — —</p>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center">
