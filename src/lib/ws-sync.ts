@@ -90,15 +90,17 @@ function ensureSbChannel(channel: string): SbEntry | null {
   try {
     // Supabase channel names must be alphanumeric-ish; replace any punctuation
     const sbName = 'sync_' + channel.replace(/[^a-zA-Z0-9_-]/g, '_')
+    console.log('[ws-sync] creating Supabase channel', sbName, 'for logical channel', channel)
     const ch = supabase.channel(sbName, { config: { broadcast: { self: false } } })
     const entry: SbEntry = { channel: ch, ready: false, pending: [] }
     ch.on('broadcast', { event: 'msg' }, (msg: { payload?: unknown }) => {
+      console.log('[ws-sync] received Supabase broadcast on', sbName, msg)
       dispatch(channel, msg?.payload)
     })
     ch.subscribe((status: string) => {
+      console.log('[ws-sync] Supabase channel', sbName, 'status ->', status)
       if (status === 'SUBSCRIBED') {
         entry.ready = true
-        // Flush anything that tried to send while we were connecting
         for (const p of entry.pending) {
           try { ch.send({ type: 'broadcast', event: 'msg', payload: p }) } catch { /* noop */ }
         }
@@ -109,7 +111,7 @@ function ensureSbChannel(channel: string): SbEntry | null {
     })
     sbChannels.set(channel, entry)
     return entry
-  } catch { return null }
+  } catch (e) { console.error('[ws-sync] ensureSbChannel failed', e); return null }
 }
 
 export function wsSubscribe(channel: string, cb: Listener): () => void {
