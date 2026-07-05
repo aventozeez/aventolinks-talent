@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useMemo } from 'react'
-import { wsSubscribe } from '@/lib/ws-sync'
+import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 import AVAudienceView from '@/components/av-audience-view'
 
 const CHANNEL = 'mc:state'
@@ -45,8 +45,8 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   const storyStartAt = s.storyStartAt ?? 0
   const [ttsState, setTtsState] = useState<'idle' | 'speaking' | 'blocked'>('idle')
   // Only the main audience projector plays narration. Team screens
-  // (team-a / team-b / team-c) stay silent so we don't get 3-4 overlapping
-  // voices reading the same sentence out of phase.
+  // (team-a / team-b / team-c) stay silent and follow the projector's
+  // actual speech progress via broadcast so nothing gets cut off mid-sentence.
   const isProjector = typeof window !== 'undefined' && window.location.pathname.includes('/mystery-chain/audience')
 
   // Split story into sentences. Same input → same output on every screen.
@@ -55,46 +55,56 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
     return fullText.match(/[^.!?]+[.!?]+(?:\s+|$)/g)?.map(s => s.trim()).filter(Boolean) ?? [fullText]
   }, [fullText])
 
-  // Precompute reading duration for each sentence + cumulative timeline.
-  // 55ms/char + 2s minimum + 220ms breather between sentences.
-  const { durations, cumulative, totalMs } = useMemo(() => {
-    const d = sentences.map(sn => Math.max(2000, sn.length * 55))
-    const c: number[] = []
-    let sum = 0
-    for (const ms of d) { sum += ms + 220; c.push(sum) }
-    return { durations: d, cumulative: c, totalMs: sum }
-  }, [sentences])
-
-  // Tick every 100ms — cheap. Derives currentIdx purely from (Date.now() - storyStartAt),
-  // so every screen shows the same sentence at the same wall-clock instant.
-  const [tick, setTick] = useState(() => Date.now())
+  // Current sentence index — driven by real speech progress on the projector,
+  // received via broadcast on team screens. Reset to 0 whenever a new story
+  // starts (storyStartAt changes).
+  const [currentIdx, setCurrentIdx] = useState<number>(-1)
   useEffect(() => {
-    const iv = setInterval(() => setTick(Date.now()), 100)
-    return () => clearInterval(iv)
-  }, [])
+    if (storyStartAt > 0) setCurrentIdx(0)
+    else setCurrentIdx(-1)
+  }, [storyStartAt])
 
-  const elapsed = storyStartAt > 0 ? Math.max(0, tick - storyStartAt) : 0
-  let currentIdx = -1
-  if (storyStartAt > 0 && sentences.length > 0) {
-    if (elapsed >= totalMs) currentIdx = -1 // done — no active sentence
-    else currentIdx = cumulative.findIndex(c => elapsed < c)
+  // Team screens follow the projector's broadcast idx
+  useEffect(() => {
+    if (isProjector) return
+    const unsub = wsSubscribe('mc:story_idx', (payload) => {
+      const p = payload as { idx?: number; storyStartAt?: number }
+      if (typeof p?.idx !== 'number') return
+      // Only honour the idx if it belongs to the current story
+      if (p.storyStartAt && p.storyStartAt !== storyStartAt) return
+      setCurrentIdx(p.idx)
+    })
+    return () => unsub()
+  }, [isProjector, storyStartAt])
+
+  const currentSentence = currentIdx >= 0 && currentIdx < sentences.length ? sentences[currentIdx] : ''
+  const done = storyStartAt > 0 && currentIdx >= sentences.length
+
+  // Advance helper — called on utter.onend / onerror on the projector.
+  // Bumps local idx and broadcasts to team screens.
+  const advance = (fromIdx: number) => {
+    const next = fromIdx + 1
+    setCurrentIdx(next)
+    wsBroadcast('mc:story_idx', { idx: next, storyStartAt })
   }
-  const currentSentence = currentIdx >= 0 ? sentences[currentIdx] : ''
-  const done = storyStartAt > 0 && elapsed >= totalMs
 
-  // Speech synthesis — only on the /mystery-chain/audience projector so team
-  // screens don't create overlapping copies of the narration.
+  // Speech synthesis — projector-only. Fires ONE utterance per currentIdx,
+  // waits for actual onend before advancing so sentences are never cut off.
   const spokenIdxRef = useRef(-2)
   useEffect(() => {
     if (!isProjector) return
     if (typeof window === 'undefined' || !window.speechSynthesis) return
-    if (currentIdx < 0) return
+    if (currentIdx < 0 || currentIdx >= sentences.length) return
     if (spokenIdxRef.current === currentIdx) return
     spokenIdxRef.current = currentIdx
-    window.speechSynthesis.cancel()
 
+    // Publish this sentence to team screens right away so they don't wait
+    wsBroadcast('mc:story_idx', { idx: currentIdx, storyStartAt })
+
+    window.speechSynthesis.cancel()
     const sentence = sentences[currentIdx]
     if (!sentence) return
+
     const voices = window.speechSynthesis.getVoices()
     const preferred = voices.find(v => /male|david|google uk|daniel/i.test(v.name))
     const utter = new SpeechSynthesisUtterance(sentence)
@@ -102,18 +112,37 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
     utter.pitch = 0.95
     utter.volume = 1
     if (preferred) utter.voice = preferred
+
+    let advanced = false
+    const advanceOnce = () => {
+      if (advanced) return
+      advanced = true
+      // Small breather between sentences
+      setTimeout(() => advance(currentIdx), 220)
+    }
+
     utter.onstart = () => setTtsState('speaking')
+    utter.onend = () => advanceOnce()
     utter.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'audio-busy') setTtsState('blocked')
+      // If speech won't play, keep the story moving on a reading-pace timer
+      // (~90ms per char, min 2.5s) so team screens still see the whole story.
+      setTimeout(advanceOnce, Math.max(2500, sentence.length * 90))
     }
+
     window.speechSynthesis.speak(utter)
-    // Detect autoplay block: if nothing started after 500ms, mark blocked
+
+    // Autoplay-blocked detection: if speech never actually started, mark
+    // blocked and fall back to reading-pace advance so we don't stall.
     setTimeout(() => {
+      if (advanced) return
       if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
         setTtsState('blocked')
+        setTimeout(advanceOnce, Math.max(2500, sentence.length * 90))
       }
-    }, 500)
-  }, [currentIdx, sentences])
+    }, 700)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIdx, sentences, isProjector])
 
   // Cancel any in-flight speech on unmount so the next phase starts clean
   useEffect(() => {
