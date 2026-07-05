@@ -30,6 +30,7 @@ type MCAudienceState = {
   revealedA: string[]; revealedB: string[]; revealedC: string[]
   scoreA: number; scoreB: number; scoreC: number
   timerStart: number | null
+  storyStartAt?: number | null   // wall-clock ms; drives synced subtitle progression
   revealed: boolean
   currentPuzzle: { picture: string; clue: string; scrambled: string; answer?: string } | null
 }
@@ -41,122 +42,81 @@ const fmtTime = (ms: number) => {
 
 function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string }) {
   const fullText = s.activeOpeningStory
-  // Sentence-level subtitle synced to speech
-  const [currentSentence, setCurrentSentence] = useState('')
-  const [done, setDone] = useState(false)
+  const storyStartAt = s.storyStartAt ?? 0
   const [ttsState, setTtsState] = useState<'idle' | 'speaking' | 'blocked'>('idle')
-  // Bumped every time the narration effect re-runs; stale callbacks
-  // from a previous mount check against this to avoid the strict-mode
-  // "both instances speak the story at once" bug.
-  const sessionRef = useRef(0)
 
-  // Split story into sentences (keep the terminator so pacing feels natural)
+  // Split story into sentences. Same input → same output on every screen.
   const sentences = useMemo(() => {
     if (!fullText) return []
-    // Split on sentence terminators while keeping them attached
     return fullText.match(/[^.!?]+[.!?]+(?:\s+|$)/g)?.map(s => s.trim()).filter(Boolean) ?? [fullText]
   }, [fullText])
 
-  // Narrate one sentence at a time; show that sentence as subtitle while it plays.
-  // When speech ends, clear the subtitle and speak the next one.
+  // Precompute reading duration for each sentence + cumulative timeline.
+  // 55ms/char + 2s minimum + 220ms breather between sentences.
+  const { durations, cumulative, totalMs } = useMemo(() => {
+    const d = sentences.map(sn => Math.max(2000, sn.length * 55))
+    const c: number[] = []
+    let sum = 0
+    for (const ms of d) { sum += ms + 220; c.push(sum) }
+    return { durations: d, cumulative: c, totalMs: sum }
+  }, [sentences])
+
+  // Tick every 100ms — cheap. Derives currentIdx purely from (Date.now() - storyStartAt),
+  // so every screen shows the same sentence at the same wall-clock instant.
+  const [tick, setTick] = useState(() => Date.now())
   useEffect(() => {
-    if (!fullText || typeof window === 'undefined' || !window.speechSynthesis) return
+    const iv = setInterval(() => setTick(Date.now()), 100)
+    return () => clearInterval(iv)
+  }, [])
 
-    // Own this session so any stale callback from a prior effect run bails out
-    const mySession = ++sessionRef.current
-    const isCurrent = () => sessionRef.current === mySession
+  const elapsed = storyStartAt > 0 ? Math.max(0, tick - storyStartAt) : 0
+  let currentIdx = -1
+  if (storyStartAt > 0 && sentences.length > 0) {
+    if (elapsed >= totalMs) currentIdx = -1 // done — no active sentence
+    else currentIdx = cumulative.findIndex(c => elapsed < c)
+  }
+  const currentSentence = currentIdx >= 0 ? sentences[currentIdx] : ''
+  const done = storyStartAt > 0 && elapsed >= totalMs
 
-    // Kill anything already speaking or queued and let the browser settle
+  // Speech synthesis: speak whichever sentence is currently on screen. When
+  // currentIdx changes, cancel any in-flight speech and start the new one.
+  // Every screen has its own audio, but since the sentence is the same everywhere,
+  // they will roughly match — and even if audio drifts, the SUBTITLE is
+  // deterministic and identical across screens.
+  const spokenIdxRef = useRef(-2)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return
+    if (currentIdx < 0) return
+    if (spokenIdxRef.current === currentIdx) return
+    spokenIdxRef.current = currentIdx
     window.speechSynthesis.cancel()
-    setCurrentSentence('')
-    setDone(false)
 
-    let idx = 0
+    const sentence = sentences[currentIdx]
+    if (!sentence) return
     const voices = window.speechSynthesis.getVoices()
     const preferred = voices.find(v => /male|david|google uk|daniel/i.test(v.name))
-
-    // Time-based fallback for when speech synthesis is blocked (autoplay policy)
-    // Roughly matches natural reading pace: 55ms per character + min 2s per sentence.
-    const readingDurationMs = (text: string) => Math.max(2000, text.length * 55)
-
-    function advanceAfter(ms: number) {
-      setTimeout(() => {
-        if (!isCurrent()) return
-        idx++
-        setCurrentSentence('')
-        setTimeout(speakNext, 220)
-      }, ms)
+    const utter = new SpeechSynthesisUtterance(sentence)
+    utter.rate = 0.88
+    utter.pitch = 0.95
+    utter.volume = 1
+    if (preferred) utter.voice = preferred
+    utter.onstart = () => setTtsState('speaking')
+    utter.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'audio-busy') setTtsState('blocked')
     }
-
-    function speakNext() {
-      if (!isCurrent()) return
-      if (idx >= sentences.length) {
-        setCurrentSentence('')
-        setDone(true)
-        return
+    window.speechSynthesis.speak(utter)
+    // Detect autoplay block: if nothing started after 500ms, mark blocked
+    setTimeout(() => {
+      if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+        setTtsState('blocked')
       }
-      const sentence = sentences[idx]
-      setCurrentSentence(sentence)
+    }, 500)
+  }, [currentIdx, sentences])
 
-      // If TTS is available, try speaking; otherwise fall through to timer.
-      if (!window.speechSynthesis) {
-        advanceAfter(readingDurationMs(sentence))
-        return
-      }
-
-      const utter = new SpeechSynthesisUtterance(sentence)
-      utter.rate = 0.88
-      utter.pitch = 0.95
-      utter.volume = 1
-      if (preferred) utter.voice = preferred
-
-      let advanced = false
-      const doAdvance = (delay: number) => {
-        if (advanced) return
-        advanced = true
-        setTimeout(() => {
-          if (!isCurrent()) return
-          idx++
-          setCurrentSentence('')
-          setTimeout(speakNext, 220)
-        }, delay)
-      }
-
-      utter.onstart = () => { if (isCurrent()) setTtsState('speaking') }
-      utter.onend = () => doAdvance(0)
-      utter.onerror = (e) => {
-        if (!isCurrent()) return
-        if (e.error === 'not-allowed' || e.error === 'audio-busy') setTtsState('blocked')
-        // Even on error, keep the story moving using the reading-time fallback
-        doAdvance(readingDurationMs(sentence))
-      }
-
-      window.speechSynthesis.speak(utter)
-
-      // Safety net: if speech never started AND never ended after the expected
-      // reading time + a grace window, force-advance so the story is not stuck.
-      setTimeout(() => {
-        if (!isCurrent() || advanced) return
-        // If TTS never started, mark blocked and use the fallback duration
-        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
-          setTtsState('blocked')
-          doAdvance(0) // advance immediately since we've already been sitting here
-        }
-      }, readingDurationMs(sentence) + 1500)
-    }
-
-    // Small delay after cancel so the browser has drained the previous queue,
-    // and to give voices a moment to load if they weren't ready yet.
-    const delay = voices.length === 0 ? 350 : 120
-    const t = setTimeout(speakNext, delay)
-
-    return () => {
-      // Invalidate this session — any callback firing later will noop
-      sessionRef.current++
-      clearTimeout(t)
-      window.speechSynthesis.cancel()
-    }
-  }, [fullText, sentences])
+  // Cancel any in-flight speech on unmount so the next phase starts clean
+  useEffect(() => {
+    return () => { try { window.speechSynthesis?.cancel() } catch { /* noop */ } }
+  }, [])
 
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden relative">

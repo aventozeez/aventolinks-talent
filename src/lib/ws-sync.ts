@@ -109,7 +109,9 @@ function ensurePoller(channel: string) {
   const existing = pollers.get(channel)
   if (existing) { existing.refCount++; return }
   const entry: PollEntry = {
-    interval: setInterval(() => pollOnce(channel, entry), 1000),
+    // 400ms poll — tight enough that screens visibly transition together, still
+    // cheap on the DB (a single indexed row lookup per channel per client).
+    interval: setInterval(() => pollOnce(channel, entry), 400),
     lastUpdatedAt: null,
     refCount: 1,
   }

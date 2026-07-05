@@ -56,6 +56,9 @@ type MCState = {
   revealedA: string[]; revealedB: string[]; revealedC: string[]
   scoreA: number; scoreB: number; scoreC: number
   timerStart: number | null
+  // Wall-clock timestamp when the current story phase started, so every
+  // screen advances the subtitle to the same sentence at the same moment.
+  storyStartAt: number | null
   revealed: boolean
   // AV Round pre-configuration (set during setup before game starts)
   avVideoUrl: string
@@ -93,6 +96,7 @@ function safeForAudience(s: MCState) {
     revealedA: s.revealedA, revealedB: s.revealedB, revealedC: s.revealedC,
     scoreA: s.scoreA, scoreB: s.scoreB, scoreC: s.scoreC,
     timerStart: s.timerStart,
+    storyStartAt: s.storyStartAt,
     revealed: s.revealed,
     currentPuzzle: puzzle ? {
       picture: puzzle.picture,
@@ -235,7 +239,7 @@ const defaultState = (): MCState => ({
   queueA: [], queueB: [], queueC: [],
   revealedA: [], revealedB: [], revealedC: [],
   scoreA: 0, scoreB: 0, scoreC: 0,
-  timerStart: null, revealed: false,
+  timerStart: null, storyStartAt: null, revealed: false,
   // Big Buck Bunny — video ends at 120s (2 min) via YouTube's end= parameter
   avVideoUrl: 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1&end=120',
   avQuestionsA: DEFAULT_AV_QUESTIONS_A.map(q => ({ ...q, id: crypto.randomUUID() })),
@@ -309,9 +313,11 @@ export default function MCAdminPage() {
     const cur = stateRef.current
     const pack = cur.packs.find(p => p.id === packId)!
     const queue = [...pack.puzzles]
-    if (cur.phase === 'pick_A') update({ ...cur, chosenA: packId, phase: 'story_A', queueA: queue })
-    else if (cur.phase === 'pick_B') update({ ...cur, chosenB: packId, phase: 'story_B', queueB: queue })
-    else if (cur.phase === 'pick_C') update({ ...cur, chosenC: packId, phase: 'story_C', queueC: queue })
+    // storyStartAt = now so every screen advances the subtitle in lockstep
+    const now = Date.now()
+    if (cur.phase === 'pick_A') update({ ...cur, chosenA: packId, phase: 'story_A', queueA: queue, storyStartAt: now })
+    else if (cur.phase === 'pick_B') update({ ...cur, chosenB: packId, phase: 'story_B', queueB: queue, storyStartAt: now })
+    else if (cur.phase === 'pick_C') update({ ...cur, chosenC: packId, phase: 'story_C', queueC: queue, storyStartAt: now })
   }
 
   const startRiddles = () => {
