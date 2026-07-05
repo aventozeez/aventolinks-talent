@@ -1,18 +1,20 @@
-// Dual-transport sync — broadcasts on BOTH:
-//   1. Local WebSocket relay (ws://<same-host>:3001) — instant on LAN
-//   2. Supabase Realtime broadcast channel — works on the public URL where
-//      no Node server exists
-// Subscribers receive from whichever path delivers first; duplicates are
-// silently dropped via a per-listener sequence number.
+// Reliable sync transport — uses THREE paths, cascading from fastest to most
+// robust so the app works both on a LAN (with the local dev server running the
+// WS relay) and on a static host like Namecheap where nothing but HTTPS works.
 //
-// Components don't need to know — they just call wsSubscribe/wsBroadcast.
+//   1. Local WebSocket relay (ws://<same-host>:3001)
+//      - Instant on LAN
+//      - Silently unavailable on production
+//   2. Supabase DB row in fsc_match_state (one row per logical channel)
+//      - Every broadcast upserts { id, data, updated_at }
+//      - Every subscriber polls the row every 1s
+//      - Works on ANY host that can reach Supabase over HTTPS
+//   3. Deduplication by JSON signature per listener so the same payload
+//      arriving over multiple transports is only delivered once.
 //
-// Falls back gracefully if WebSocket is unavailable (SSR/build time) or the
-// Supabase client fails to init.
+// Components call the same wsSubscribe / wsBroadcast API as before.
 
 import { supabase } from './supabase'
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SBChannel = any
 
 type Listener = (payload: unknown) => void
 
@@ -25,18 +27,21 @@ const listeners = new Map<string, Set<Listener>>()
 // Track last payload signature per channel per listener to dedupe cross-transport.
 const lastSig = new WeakMap<Listener, Map<string, string>>()
 
-// ── Supabase Realtime transport ───────────────────────────────────────────────
-// Each channel tracks its own subscribe state + a pending-send queue that
-// flushes the moment the channel actually reaches SUBSCRIBED. Without this
-// queue, any broadcast issued in the ~1-2s after wsBroadcast() first touches
-// a channel is silently dropped by Supabase (the client's send() no-ops until
-// the WebSocket handshake completes).
-type SbEntry = {
-  channel: SBChannel
-  ready: boolean
-  pending: unknown[]
+// ── DB polling transport (Supabase fsc_match_state table) ─────────────────────
+// Per-channel poller state — one setInterval regardless of how many listeners
+// share the channel, cleaned up when the last listener unsubscribes.
+type PollEntry = {
+  interval: ReturnType<typeof setInterval>
+  lastUpdatedAt: string | null
+  refCount: number
 }
-const sbChannels = new Map<string, SbEntry>()
+const pollers = new Map<string, PollEntry>()
+
+function channelToRowId(channel: string): string {
+  // Row IDs in fsc_match_state are string keys; namespace to avoid clashing
+  // with existing FSC rows like 'default' / 'bz_pending' / 'fsc_schools'.
+  return 'sync:' + channel
+}
 
 function getWsUrl(): string {
   if (typeof window === 'undefined') return ''
@@ -58,10 +63,10 @@ function dispatch(channel: string, payload: unknown) {
   })
 }
 
+// ── Local WebSocket relay (best-effort — always attempted, silent on failure) ─
 function ensureWsConnected() {
   if (typeof window === 'undefined') return
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
-
   try { ws = new WebSocket(getWsUrl()) } catch { ws = null; return }
   wsReady = false
 
@@ -83,41 +88,50 @@ function ensureWsConnected() {
   ws.onerror = () => { ws?.close() }
 }
 
-function ensureSbChannel(channel: string): SbEntry | null {
-  if (typeof window === 'undefined') return null
-  const existing = sbChannels.get(channel)
-  if (existing) return existing
+// ── DB polling: fetch the row, deliver its payload if updated_at changed ──────
+async function pollOnce(channel: string, entry: PollEntry) {
   try {
-    // Supabase channel names must be alphanumeric-ish; replace any punctuation
-    const sbName = 'sync_' + channel.replace(/[^a-zA-Z0-9_-]/g, '_')
-    console.log('[ws-sync] creating Supabase channel', sbName)
-    // Match the working buzzer pattern: no config option, just the name
-    const ch = supabase.channel(sbName)
-    const entry: SbEntry = { channel: ch, ready: false, pending: [] }
-    ch.on('broadcast', { event: 'msg' }, ({ payload }: { payload?: unknown }) => {
-      console.log('[ws-sync] received broadcast on', sbName, payload)
-      dispatch(channel, payload)
-    })
-    ch.subscribe((status: string) => {
-      console.log('[ws-sync] Supabase channel', sbName, 'status ->', status)
-      if (status === 'SUBSCRIBED') {
-        entry.ready = true
-        for (const p of entry.pending) {
-          try { ch.send({ type: 'broadcast', event: 'msg', payload: p }).catch(() => {}) } catch { /* noop */ }
-        }
-        entry.pending.length = 0
-      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        entry.ready = false
-      }
-    })
-    sbChannels.set(channel, entry)
-    return entry
-  } catch (e) { console.error('[ws-sync] ensureSbChannel failed', e); return null }
+    const rowId = channelToRowId(channel)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any)
+      .from('fsc_match_state')
+      .select('data, updated_at')
+      .eq('id', rowId)
+      .maybeSingle()
+    if (!data) return
+    if (entry.lastUpdatedAt === data.updated_at) return
+    entry.lastUpdatedAt = data.updated_at
+    dispatch(channel, data.data)
+  } catch { /* ignore transient DB errors */ }
 }
 
+function ensurePoller(channel: string) {
+  const existing = pollers.get(channel)
+  if (existing) { existing.refCount++; return }
+  const entry: PollEntry = {
+    interval: setInterval(() => pollOnce(channel, entry), 1000),
+    lastUpdatedAt: null,
+    refCount: 1,
+  }
+  pollers.set(channel, entry)
+  // Fetch immediately on first subscribe so slow openers see current state
+  pollOnce(channel, entry)
+}
+
+function releasePoller(channel: string) {
+  const entry = pollers.get(channel)
+  if (!entry) return
+  entry.refCount--
+  if (entry.refCount <= 0) {
+    clearInterval(entry.interval)
+    pollers.delete(channel)
+  }
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
 export function wsSubscribe(channel: string, cb: Listener): () => void {
   ensureWsConnected()
-  ensureSbChannel(channel)
+  ensurePoller(channel)
 
   if (!listeners.has(channel)) listeners.set(channel, new Set())
   listeners.get(channel)!.add(cb)
@@ -130,28 +144,30 @@ export function wsSubscribe(channel: string, cb: Listener): () => void {
     const subs = listeners.get(channel)
     subs?.delete(cb)
     lastSig.get(cb)?.delete(channel)
-    if (subs && subs.size === 0) {
-      const entry = sbChannels.get(channel)
-      if (entry) { try { supabase.removeChannel(entry.channel) } catch { /* noop */ } sbChannels.delete(channel) }
-    }
+    releasePoller(channel)
   }
 }
 
 export function wsBroadcast(channel: string, payload: unknown) {
   ensureWsConnected()
-  const entry = ensureSbChannel(channel)
 
   // Local WS — instant on LAN
   const msg = JSON.stringify({ type: 'broadcast', channel, payload })
   if (wsReady && ws) ws.send(msg)
   else wsQueue.push(msg)
 
-  // Supabase Realtime — send now if subscribed, otherwise queue until it is
-  if (entry) {
-    if (entry.ready) {
-      try { entry.channel.send({ type: 'broadcast', event: 'msg', payload }).catch(() => {}) } catch { /* noop */ }
-    } else {
-      entry.pending.push(payload)
-    }
-  }
+  // DB write — durable, works on public URL
+  ;(async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('fsc_match_state').upsert(
+        { id: channelToRowId(channel), data: payload, updated_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      )
+    } catch { /* silent — poller will pick up on next successful write */ }
+  })()
+
+  // Locally, dispatch immediately so the sender's own UI reflects the change
+  // without waiting for the poller cycle.
+  dispatch(channel, payload)
 }
