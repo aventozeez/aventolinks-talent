@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
+import PointAdjuster from '@/components/point-adjuster'
 
 // Uses the shared sync lib so both LAN (local WS relay) and public URL
 // (Supabase Realtime broadcast) transports work.
@@ -456,6 +457,17 @@ export default function AVAdmin() {
                       <p className="text-[10px] text-gray-600">Prior {state.mcScoreB} + AV {avScoreB}</p>
                     </div>
                   </div>
+                  {state.phase === 'done' && (
+                    <div className="mt-3">
+                      <PointAdjuster
+                        teams={[
+                          { label: state.teamA, score: state.scoreA, colour: '#22c55e', onAdjust: d => update({ scoreA: Math.max(0, state.scoreA + d) }) },
+                          { label: state.teamB, score: state.scoreB, colour: '#3b82f6', onAdjust: d => update({ scoreB: Math.max(0, state.scoreB + d) }) },
+                        ]}
+                        note="Adjusts the Grand Final total (includes prior + AV). Ranking updates instantly."
+                      />
+                    </div>
+                  )}
                   {/* Ceremony reveal buttons */}
                   <div className="flex flex-col gap-2 mt-2">
                     {/* Tie-Breaker — always available on done. Pulses when scores are tied. */}

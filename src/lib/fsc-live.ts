@@ -24,7 +24,7 @@ export const IS_BONUS_PTS   = 20      // bonus if ALL steps correct
 export type FSCRound  = 'idle' | 'rapid_fire' | 'buzzer' | 'innovation_sprint' | 'mystery_chain' | 'audio_visual' | 'finished'
 export type RFPhase   = 'idle' | 'a_playing' | 'break' | 'b_playing' | 'done'
 export type BZPhase   = 'idle' | 'showing' | 'buzzed_a' | 'buzzed_b' | 'second_chance' | 'revealed' | 'done'
-export type ISPhase   = 'idle' | 'working' | 'collecting' | 'revealed' | 'done'
+export type ISPhase   = 'idle' | 'working' | 'collecting' | 'solution' | 'revealed' | 'done'
 export type BZResult  = null | 'correct_a' | 'correct_b' | 'penalty_a' | 'penalty_b' | 'bonus_a' | 'bonus_b' | 'skip'
 export type MCPhase   = 'idle' | 'story' | 'a_playing' | 'b_playing' | 'c_playing' | 'done'
 export type AVPhase   = 'idle' | 'a_playing' | 'break' | 'b_playing' | 'done'
@@ -154,7 +154,9 @@ export const safeForViewers = (s: FSCState): FSCState => ({
   rf_questions:   s.rf_questions.map(q => ({ ...q, answer: '' })),
   rf_questions_b: (s.rf_questions_b ?? []).map(q => ({ ...q, answer: '' })),
   bz_questions:   s.bz_questions.map(q => ({ ...q, answer: '' })),
-  is_problems:    s.is_problems.map(p => ({ ...p, steps: [] })),
+  is_problems:    (s.is_phase === 'solution' || s.is_phase === 'revealed')
+                    ? s.is_problems
+                    : s.is_problems.map(p => ({ ...p, steps: [] })),
   // Strip MC puzzle answers unless revealed
   mc_puzzles_a: s.mc_revealed ? s.mc_puzzles_a : s.mc_puzzles_a.map(p => ({ ...p, answer: '', story: '' })),
   mc_puzzles_b: s.mc_revealed ? s.mc_puzzles_b : s.mc_puzzles_b.map(p => ({ ...p, answer: '', story: '' })),

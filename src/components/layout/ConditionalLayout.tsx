@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import Navbar from './Navbar'
+import CompetitionBadge from '@/components/competition-badge'
 
 export default function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -15,8 +16,16 @@ export default function ConditionalLayout({ children }: { children: React.ReactN
   const isBZPage    = pathname?.startsWith('/buzzer')
   const isISPage    = pathname?.startsWith('/innovation-sprint')
 
-  if (isStaffPage || isFSCPage || isQuizLive || isMCPage || isAVPage || isTiePage || isRFPage || isBZPage || isISPage) {
-    return <>{children}</>
+  const isCompetitionPage =
+    isFSCPage || isQuizLive || isMCPage || isAVPage || isTiePage || isRFPage || isBZPage || isISPage
+
+  if (isStaffPage || isCompetitionPage) {
+    return (
+      <>
+        {isCompetitionPage && <CompetitionBadge variant="corner" tone="dark" />}
+        {children}
+      </>
+    )
   }
 
   return (

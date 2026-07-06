@@ -454,6 +454,32 @@ export default function AudiencePage() {
               </div>
             )}
 
+            {s?.is_phase === 'solution' && s.is_problems?.[s.is_problem_index] && (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <p className="text-[10px] md:text-xs font-black text-[#f5a623] uppercase tracking-[0.4em]">The correct solution</p>
+                  <p className="text-2xl md:text-4xl font-black text-white mt-2 max-w-3xl mx-auto leading-tight">
+                    {s.is_problems[s.is_problem_index].statement}
+                  </p>
+                </div>
+                <ol className="space-y-3 max-w-3xl mx-auto">
+                  {s.is_problems[s.is_problem_index].steps.map((step, i) => (
+                    <li
+                      key={i}
+                      className="flex items-center gap-4 rounded-2xl border border-[#f5a623]/40 bg-gradient-to-r from-[#f5a623]/15 to-transparent px-5 py-4 shadow-[0_6px_20px_-8px_rgba(245,166,35,0.4)]"
+                      style={{ animationDelay: `${i * 90}ms` }}
+                    >
+                      <span className="shrink-0 w-11 h-11 rounded-full bg-[#f5a623] text-[#0a1628] text-xl font-black flex items-center justify-center shadow-lg">
+                        {i + 1}
+                      </span>
+                      <p className="text-base md:text-xl font-semibold text-white/95 leading-snug">{step}</p>
+                    </li>
+                  ))}
+                </ol>
+                <p className="text-center text-slate-500 text-sm italic">Next: how each team did →</p>
+              </div>
+            )}
+
             {s?.is_phase === 'collecting' && (
               <div className="flex items-center justify-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-8 py-6">
                 <Loader2 className="animate-spin text-[#f5a623]" size={28} />

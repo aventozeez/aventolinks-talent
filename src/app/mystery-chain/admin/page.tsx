@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { wsBroadcast } from '@/lib/ws-sync'
 import { supabase } from '@/lib/supabase'
+import PointAdjuster from '@/components/point-adjuster'
 
 type RegisteredTeam = { id: string; name: string; school: string }
 
@@ -1008,6 +1009,15 @@ export default function MCAdminPage() {
                   })}
                 </div>
               </div>
+
+              <PointAdjuster
+                teams={[
+                  { label: s.teamA || 'Team A', score: s.scoreA, colour: '#22c55e', onAdjust: d => update({ ...s, scoreA: Math.max(0, s.scoreA + d) }) },
+                  { label: s.teamB || 'Team B', score: s.scoreB, colour: '#3b82f6', onAdjust: d => update({ ...s, scoreB: Math.max(0, s.scoreB + d) }) },
+                  { label: s.teamC || 'Team C', score: s.scoreC, colour: '#a855f7', onAdjust: d => update({ ...s, scoreC: Math.max(0, s.scoreC + d) }) },
+                ]}
+                note="Adjusts the Mystery Chain score (semi-final scores stay untouched). Ranking updates instantly."
+              />
 
               {/* Declare Second Runner Up */}
               <button
