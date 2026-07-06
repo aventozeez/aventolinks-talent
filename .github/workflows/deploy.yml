@@ -38,7 +38,7 @@ jobs:
           timeout: 60000
           local-dir: ./out/
           server-dir: /public_html/scholarschallenge.aventolinkshub.com/
-          dangerous-clean-slate: false
+          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.git*/**
