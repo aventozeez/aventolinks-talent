@@ -110,7 +110,7 @@ export default function AVAudienceView() {
 
   if (s.phase === 'idle') {
     return (
-      <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center gap-6 text-white p-6">
+      <div className={`min-h-screen w-full text-white flex items-center justify-center px-6 py-12 bg-gradient-to-br ${ROUND_INFO.audio_visual.gradient}`}>
         <RoundInstructionsInline
           info={ROUND_INFO.audio_visual}
           footerHint={`${s.teamA} vs ${s.teamB} · waiting for the video to start…`}

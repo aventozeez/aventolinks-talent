@@ -778,9 +778,9 @@ export default function MCAudiencePage() {
   const pickingTeam = s?.phase === 'pick_A' ? s.teamA : s?.phase === 'pick_B' ? s.teamB : s?.phase === 'pick_C' ? s.teamC : null
   const takenIds = s ? [s.chosenA, s.chosenB, s.chosenC].filter(Boolean) as string[] : []
 
-  // Waiting — show the full instructions so the quiz master can walk the room through them
+  // Waiting — dedicated full-screen instructions before the round begins
   if (!s || s.phase === 'setup') return (
-    <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center p-6">
+    <div className={`min-h-screen w-full text-white flex items-center justify-center px-6 py-12 bg-gradient-to-br ${ROUND_INFO.mystery_chain.gradient}`}>
       <RoundInstructionsInline
         info={ROUND_INFO.mystery_chain}
         footerHint="Waiting for the host to reveal the opening story…"

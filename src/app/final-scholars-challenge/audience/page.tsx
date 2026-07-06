@@ -80,6 +80,27 @@ export default function AudiencePage() {
     finished: '🏆 Final Scores',
   }
 
+  // Full-screen instructions preempt the normal layout so nothing else shows
+  // on screen when the quiz master is reading rules to the room.
+  const showIntroFor = (() => {
+    if (!s) return null
+    if (round === 'rapid_fire' && s.rf_phase === 'idle' && s.rf_score_a === 0 && s.rf_score_b === 0 && s.rf_q_index === 0) return ROUND_INFO.rapid_fire
+    if (round === 'buzzer' && s.bz_phase === 'idle' && s.bz_score_a === 0 && s.bz_score_b === 0 && s.bz_q_index === 0) return ROUND_INFO.buzzer
+    if (round === 'innovation_sprint' && s.is_phase === 'idle' && s.is_score_a === 0 && s.is_score_b === 0 && s.is_problem_index === 0) return ROUND_INFO.innovation_sprint
+    return null
+  })()
+
+  if (showIntroFor) {
+    return (
+      <div className={`min-h-screen w-full text-white flex items-center justify-center px-6 py-12 bg-gradient-to-br ${showIntroFor.gradient}`}>
+        <RoundInstructionsInline
+          info={showIntroFor}
+          footerHint="Waiting for the host to start the round…"
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#060f1f] text-white flex flex-col select-none">
 
@@ -189,10 +210,11 @@ export default function AudiencePage() {
           <div className="w-full space-y-6">
 
             {s?.rf_phase === 'idle' && (
-              <RoundInstructionsInline
-                info={ROUND_INFO.rapid_fire}
-                footerHint="Waiting for the host to start Team A's 60 seconds…"
-              />
+              <div className="text-center space-y-4">
+                <p className="text-7xl">⚡</p>
+                <h2 className="text-4xl font-black text-white">Rapid Fire Round</h2>
+                <p className="text-slate-400 text-xl">Ready — waiting for the host to start</p>
+              </div>
             )}
 
             {(s?.rf_phase === 'a_playing' || s?.rf_phase === 'b_playing') && (
@@ -302,13 +324,7 @@ export default function AudiencePage() {
               </div>
             </div>
 
-            {s?.bz_phase === 'idle' && s.bz_q_index === 0 && s.bz_score_a === 0 && s.bz_score_b === 0 && (
-              <RoundInstructionsInline
-                info={ROUND_INFO.buzzer}
-                footerHint="Waiting for the first question…"
-              />
-            )}
-            {s?.bz_phase === 'idle' && !(s.bz_q_index === 0 && s.bz_score_a === 0 && s.bz_score_b === 0) && (
+            {s?.bz_phase === 'idle' && (
               <div className="text-center py-8">
                 <p className="text-5xl animate-bounce">🔔</p>
                 <p className="text-white font-bold text-xl mt-3">Next question incoming…</p>
@@ -428,13 +444,7 @@ export default function AudiencePage() {
               </div>
             )}
 
-            {s?.is_phase === 'idle' && s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0 && (
-              <RoundInstructionsInline
-                info={ROUND_INFO.innovation_sprint}
-                footerHint="Waiting for the host to reveal the first problem…"
-              />
-            )}
-            {s?.is_phase === 'idle' && !(s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0) && (
+            {s?.is_phase === 'idle' && (
               <div className="text-center">
                 <p className="text-slate-400 text-lg">Waiting for timer to start…</p>
                 <p className="text-slate-500 text-sm mt-1">Teams will arrange the solution steps</p>
