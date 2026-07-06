@@ -51,20 +51,30 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   // reasonably in sync (may sound slightly reverby but not off).
   const isProjector = typeof window !== 'undefined' && window.location.pathname.includes('/mystery-chain/audience')
 
-  // Autoplay: browsers block speechSynthesis until the user gestures.
-  // Track unlock state; the overlay below asks for that one click.
-  const [audioUnlocked, setAudioUnlocked] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return sessionStorage.getItem('mcAudioUnlocked') === '1'
-  })
+  // Autoplay: browsers block speechSynthesis until the user gestures on THIS
+  // page load. sessionStorage would let us skip the overlay on repeat visits,
+  // but the browser still blocks speak() because the gesture doesn't survive a
+  // page reload — the audience would silently get no sound. So we always
+  // require a fresh tap on every page load.
+  const [audioUnlocked, setAudioUnlocked] = useState(false)
 
   const unlockAudio = () => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      setAudioUnlocked(true)
+      return
+    }
     try {
-      const u = new SpeechSynthesisUtterance('')
-      u.volume = 0
-      window.speechSynthesis.speak(u)
+      // Chrome tabs occasionally leave synthesis in a paused state after the
+      // first user interaction — resume() flips it back on.
+      window.speechSynthesis.resume()
+      // Speak an inaudible warmup utterance. Empty text is a no-op on some
+      // browsers, so we use a short real word at ~volume 0 which is enough
+      // to satisfy the gesture requirement.
+      const warmup = new SpeechSynthesisUtterance('start')
+      warmup.volume = 0.01
+      warmup.rate = 3
+      window.speechSynthesis.speak(warmup)
     } catch { /* noop */ }
-    try { sessionStorage.setItem('mcAudioUnlocked', '1') } catch { /* noop */ }
     setAudioUnlocked(true)
   }
 
