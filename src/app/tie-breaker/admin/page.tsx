@@ -114,10 +114,17 @@ const makePool = (title: string, arr: Omit<TBQuestion, 'id'>[]): TBPool => ({
 })
 
 const DEFAULT_POOLS = () => [
-  makePool('General Knowledge', POOL_1),
-  makePool('Nigerian & African', POOL_2),
-  makePool('Science, Math & History', POOL_3),
+  makePool('Pool 1', POOL_1),
+  makePool('Pool 2', POOL_2),
+  makePool('Pool 3', POOL_3),
 ]
+
+// Blank pool used when the host clicks "+ New Pool"
+const makeEmptyPool = (n: number): TBPool => ({
+  id: crypto.randomUUID(),
+  title: `Pool ${n}`,
+  questions: [],
+})
 
 const DEFAULT_STATE = (): TBState => ({
   phase: 'setup',
@@ -476,20 +483,51 @@ export default function TieBreakerAdmin() {
               </div>
             </div>
 
-            {/* Pool editor — 3 tabs, one per pool */}
+            {/* Pool editor — one tab per pool, "+ New Pool" adds another */}
             <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-2">
-              <h2 className="text-white font-bold text-sm">Edit Pools</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-white font-bold text-sm">Edit Pools</h2>
+                <button onClick={() => {
+                  const nextIdx = safePools.length + 1
+                  const newPool = makeEmptyPool(nextIdx)
+                  setS(p => ({ ...p, pools: [...(p.pools ?? []), newPool] }))
+                  setPoolTab(safePools.length)   // jump to the new tab
+                  setEditingQ(null)
+                }}
+                  className="text-[10px] bg-purple-600/40 hover:bg-purple-600/70 text-purple-200 px-2 py-1 rounded font-bold">
+                  + New Pool
+                </button>
+              </div>
               <div className="flex gap-2 border-b border-slate-700 pb-1 flex-wrap">
                 {safePools.map((pl, i) => (
-                  <button key={pl.id} onClick={() => { setPoolTab(i); setEditingQ(null) }}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-t-lg transition-colors ${
-                      poolTab === i
-                        ? 'bg-purple-700/40 text-white border border-purple-500/40'
-                        : 'text-slate-400 hover:text-white'
-                    }`}>
-                    Pool {i + 1} ({pl.questions.length})
-                    {poolReady(i) && <span className="text-green-400 ml-1">✓</span>}
-                  </button>
+                  <div key={pl.id} className="flex items-center gap-1">
+                    <button onClick={() => { setPoolTab(i); setEditingQ(null) }}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-t-lg transition-colors ${
+                        poolTab === i
+                          ? 'bg-purple-700/40 text-white border border-purple-500/40'
+                          : 'text-slate-400 hover:text-white'
+                      }`}>
+                      Pool {i + 1} ({pl.questions.length})
+                      {poolReady(i) && <span className="text-green-400 ml-1">✓</span>}
+                    </button>
+                    {safePools.length > 1 && (
+                      <button
+                        onClick={() => {
+                          if (!window.confirm(`Delete Pool ${i + 1}? This can't be undone.`)) return
+                          setS(p => {
+                            const newPools = (p.pools ?? []).filter((_, idx) => idx !== i)
+                            const newChosen = p.chosenPoolId === pl.id ? null : p.chosenPoolId
+                            return { ...p, pools: newPools, chosenPoolId: newChosen }
+                          })
+                          setPoolTab(t => Math.max(0, t >= i ? t - 1 : t))
+                          setEditingQ(null)
+                        }}
+                        title={`Delete Pool ${i + 1}`}
+                        className="text-[10px] text-slate-600 hover:text-red-400 px-1 py-0.5 rounded hover:bg-slate-700">
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
 
@@ -497,7 +535,7 @@ export default function TieBreakerAdmin() {
               <div className="space-y-1">
                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">Pool title</label>
                 <input value={currentEditingPool?.title ?? ''} onChange={e => updatePoolTitle(e.target.value)}
-                  placeholder="e.g. General Knowledge"
+                  placeholder="e.g. Pool 1"
                   className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm" />
               </div>
 
