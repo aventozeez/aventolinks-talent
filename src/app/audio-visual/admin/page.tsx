@@ -455,14 +455,15 @@ export default function AVAdmin() {
                   </div>
                   {/* Ceremony reveal buttons */}
                   <div className="flex flex-col gap-2 mt-2">
-                    {state.phase === 'done' && isTied && !state.tieWinner && (
+                    {/* Tie-Breaker — always available on done. Pulses when scores are tied. */}
+                    {state.phase === 'done' && !state.tieWinner && (
                       <button onClick={startTieBreak}
-                        className="w-full py-2 bg-pink-600/30 hover:bg-pink-600/50 border border-pink-500/50 text-pink-300 rounded-xl font-bold text-sm animate-pulse">
-                        🔔 Start Tie-Breaker (buzzer round)
+                        className={`w-full py-2 bg-pink-600/30 hover:bg-pink-600/50 border border-pink-500/50 text-pink-300 rounded-xl font-bold text-sm ${isTied ? 'animate-pulse ring-2 ring-pink-500/40' : ''}`}>
+                        🔔 Start Tie-Breaker {isTied ? '(scores tied!)' : '(buzzer round)'}
                       </button>
                     )}
                     {state.phase === 'done' && state.tieWinner && (
-                      <p className="text-xs text-pink-300 font-bold italic pt-1">
+                      <p className="text-xs text-pink-300 font-bold italic pt-1 text-center">
                         Tie-breaker won by {state.tieWinner === 'A' ? state.teamA : state.teamB}
                       </p>
                     )}

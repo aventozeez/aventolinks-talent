@@ -30,7 +30,7 @@ import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type Tab = 'schools' | 'bracket' | 'mystery' | 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'grand-final' | 'simulator'
+type Tab = 'schools' | 'bracket' | 'mystery' | 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'grand-final' | 'tie-breaker' | 'simulator'
 
 type FSCTeam = {
   id: string
@@ -1174,6 +1174,7 @@ export default function AdminPage() {
     { key: 'matches'   as Tab, label: 'Matches',       Icon: Rocket     },
     { key: 'live'      as Tab, label: 'Live Control',  Icon: Radio      },
     { key: 'grand-final' as Tab, label: 'Grand Final',   Icon: Sparkles   },
+    { key: 'tie-breaker' as Tab, label: 'Tie Breaker',   Icon: Bell       },
     { key: 'simulator' as Tab, label: 'Emergency',     Icon: Zap        },
   ]
 
@@ -2994,6 +2995,9 @@ export default function AdminPage() {
         {/* ════════════════ GRAND FINAL — Mystery Chain + AV Round ════════════════ */}
         {activeTab === 'grand-final' && <GrandFinalTab />}
 
+        {/* ════════════════ TIE BREAKER — standalone buzzer round ════════════════ */}
+        {activeTab === 'tie-breaker' && <TieBreakerTab />}
+
         {/* ════════════════ SIMULATOR ════════════════ */}
         {activeTab === 'simulator' && <EmergencyTab />}
 
@@ -3084,6 +3088,79 @@ function GrandFinalTab() {
           The audience projector at <code className="text-white font-mono">/mystery-chain/audience</code> automatically swaps
           to the AV video when the host clicks &quot;Advance Top 2&quot; — you don&apos;t need to touch that screen between rounds.
         </p>
+      </div>
+    </>
+  )
+}
+
+// ── Tie Breaker tab ───────────────────────────────────────────────────────────
+// Launch pad for the standalone buzzer-style tie-breaker round. Any time two
+// teams end on the same score at any stage of the competition, the host can
+// jump straight to this to resolve it.
+function TieBreakerTab() {
+  const [origin, setOrigin] = useState('')
+  const [copied, setCopied] = useState<string | null>(null)
+
+  useEffect(() => { setOrigin(window.location.origin) }, [])
+
+  const copy = (path: string) => {
+    if (!origin) return
+    navigator.clipboard.writeText(origin + path)
+    setCopied(path)
+    setTimeout(() => setCopied(null), 1600)
+  }
+
+  const Row = ({ path, label, desc, emoji }: { path: string; label: string; desc: string; emoji: string }) => (
+    <div className="flex items-center gap-3 bg-[#0a1628] border border-white/10 rounded-2xl px-4 py-3">
+      <span className="text-2xl shrink-0">{emoji}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-white font-black text-sm">{label}</p>
+        <p className="text-slate-400 text-[11px] leading-snug">{desc}</p>
+      </div>
+      <div className="flex gap-2 shrink-0">
+        <a href={path} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors">
+          <ExternalLink size={11} /> Open
+        </a>
+        <button onClick={() => copy(path)}
+          className="flex items-center gap-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors">
+          {copied === path ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <>
+      <div>
+        <h2 className="font-black text-white text-sm">Tie Breaker · Buzzer Round</h2>
+        <p className="text-[11px] text-slate-400 mt-0.5">
+          Sudden-death buzzer. First team to answer correctly wins. Wrong answers pass the chance to
+          the other team — no negative marks. If neither team knows it, skip to the next question until
+          one team gets one right.
+        </p>
+      </div>
+
+      <section className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🔔</span>
+          <div>
+            <p className="text-white font-black text-sm">Standalone Tie-Breaker</p>
+            <p className="text-slate-500 text-[11px]">Any two teams · any stage of the competition</p>
+          </div>
+        </div>
+        <Row path="/tie-breaker/admin"    label="Host / Admin"       desc="Enter both team names, run the buzzer round, mark correct or wrong" emoji="🎛️" />
+        <Row path="/tie-breaker/audience" label="Audience Projector" desc="Big-screen buzzer display — team names, current question, buzz feedback" emoji="📺" />
+      </section>
+
+      <div className="bg-pink-500/5 border border-pink-500/20 rounded-2xl p-3">
+        <p className="text-pink-300 text-[11px] font-bold uppercase tracking-widest mb-1">How it works</p>
+        <ul className="text-slate-300 text-[11px] leading-relaxed list-disc list-inside space-y-0.5">
+          <li>Host taps the buzz button for whichever team hit their buzzer first.</li>
+          <li>If they answer correctly, they win the tie-breaker.</li>
+          <li>If wrong, the other team gets the chance on the same question.</li>
+          <li>If neither team knows it, skip to the next question and try again.</li>
+        </ul>
       </div>
     </>
   )
