@@ -3133,11 +3133,12 @@ function TieBreakerTab() {
   return (
     <>
       <div>
-        <h2 className="font-black text-white text-sm">Tie Breaker · Buzzer Round</h2>
+        <h2 className="font-black text-white text-sm">Tie Breaker · Rapid Fire</h2>
         <p className="text-[11px] text-slate-400 mt-0.5">
-          Sudden-death buzzer. First team to answer correctly wins. Wrong answers pass the chance to
-          the other team — no negative marks. If neither team knows it, skip to the next question until
-          one team gets one right.
+          Rapid fire. Each team gets <b className="text-white">30 seconds</b> to answer as many
+          questions as they can from an editable pool of <b className="text-white">20</b>.
+          Correct = <b className="text-white">+1 pt</b>, no negative marks. Wrong or skipped
+          questions cycle to the back so teams can retry within their 30 seconds. Highest score wins.
         </p>
       </div>
 
@@ -3149,17 +3150,17 @@ function TieBreakerTab() {
             <p className="text-slate-500 text-[11px]">Any two teams · any stage of the competition</p>
           </div>
         </div>
-        <Row path="/tie-breaker/admin"    label="Host / Admin"       desc="Enter both team names, run the buzzer round, mark correct or wrong" emoji="🎛️" />
-        <Row path="/tie-breaker/audience" label="Audience Projector" desc="Big-screen buzzer display — team names, current question, buzz feedback" emoji="📺" />
+        <Row path="/tie-breaker/admin"    label="Host / Admin"       desc="Set teams and pool, run the 30-second rapid fire, mark correct / wrong / skip" emoji="🎛️" />
+        <Row path="/tie-breaker/audience" label="Audience Projector" desc="Big-screen rapid-fire display — circular timer, current question, live scores" emoji="📺" />
       </section>
 
       <div className="bg-pink-500/5 border border-pink-500/20 rounded-2xl p-3">
         <p className="text-pink-300 text-[11px] font-bold uppercase tracking-widest mb-1">How it works</p>
         <ul className="text-slate-300 text-[11px] leading-relaxed list-disc list-inside space-y-0.5">
-          <li>Host taps the buzz button for whichever team hit their buzzer first.</li>
-          <li>If they answer correctly, they win the tie-breaker.</li>
-          <li>If wrong, the other team gets the chance on the same question.</li>
-          <li>If neither team knows it, skip to the next question and try again.</li>
+          <li>Host sets team names + edits the 20-question pool as needed.</li>
+          <li>Team A gets 30 seconds — host marks each answer Correct / Wrong / Skip.</li>
+          <li>Team B then gets its own fresh 30 seconds on the same pool.</li>
+          <li>Highest score wins. If still tied, run another rapid-fire round.</li>
         </ul>
       </div>
     </>
