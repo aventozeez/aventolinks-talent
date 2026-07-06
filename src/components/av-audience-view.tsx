@@ -15,16 +15,23 @@ type AVQuestion = {
   answeredBy: 'A' | 'B' | null
 }
 
+type AVPool = { id: string; title: string; questions: AVQuestion[] }
+
 type AVState = {
-  phase: 'idle' | 'watching' | 'qa_a' | 'break' | 'qa_b' | 'done' | 'declare_first_runnerup' | 'declare_winner'
+  phase: 'idle' | 'watching'
+    | 'pick_pool_a' | 'qa_a'
+    | 'break'
+    | 'pick_pool_b' | 'qa_b'
+    | 'done' | 'declare_first_runnerup' | 'declare_winner'
   videoUrl: string
   videoPlay: boolean
   teamA: string
   teamB: string
   mcScoreA: number
   mcScoreB: number
-  questionsA: AVQuestion[]
-  questionsB: AVQuestion[]
+  pools: AVPool[]
+  chosenPoolA: string | null
+  chosenPoolB: string | null
   queueA: AVQuestion[]
   queueB: AVQuestion[]
   timerStart: number | null
@@ -86,7 +93,9 @@ export default function AVAudienceView() {
   const teamColor = s.phase === 'qa_a' ? '#22c55e' : '#3b82f6'
   const timerPct = timer / (ROUND_MS / 1000)
   const timerColor = timer < 10 ? '#ef4444' : timer < 20 ? '#f59e0b' : '#22c55e'
-  const totalQ = s.phase === 'qa_a' ? s.questionsA.length : s.phase === 'qa_b' ? s.questionsB.length : 0
+  const poolA = s.pools?.find(p => p.id === s.chosenPoolA)
+  const poolB = s.pools?.find(p => p.id === s.chosenPoolB)
+  const totalQ = s.phase === 'qa_a' ? (poolA?.questions.length ?? 0) : s.phase === 'qa_b' ? (poolB?.questions.length ?? 0) : 0
   const currentCorrect = s.phase === 'qa_a' ? s.correctA : s.correctB
 
   if (s.phase === 'idle') {
@@ -94,17 +103,46 @@ export default function AVAudienceView() {
       <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center gap-6 text-white">
         <div className="text-6xl">📺</div>
         <h1 className="text-4xl font-black tracking-tight">Audio Visual Round</h1>
-        <p className="text-gray-400">Watch the video, then 60 seconds of questions per team</p>
+        <p className="text-gray-400">Watch the video, then each team picks a pool and answers</p>
         <div className="flex gap-6 mt-4">
           <div className="text-center">
             <p className="text-2xl font-black text-green-400">{s.teamA}</p>
-            <p className="text-xs text-gray-500 mt-1">Team A · {s.questionsA.length} questions</p>
           </div>
           <div className="text-gray-600 text-3xl font-thin self-center">vs</div>
           <div className="text-center">
             <p className="text-2xl font-black text-blue-400">{s.teamB}</p>
-            <p className="text-xs text-gray-500 mt-1">Team B · {s.questionsB.length} questions</p>
           </div>
+        </div>
+        <p className="text-slate-500 text-xs mt-2">{s.pools?.length ?? 0} pools of {s.pools?.[0]?.questions.length ?? 0}</p>
+      </div>
+    )
+  }
+
+  // ── Pool picking screens — full-screen list of pools, highlight remaining ──
+  if (s.phase === 'pick_pool_a' || s.phase === 'pick_pool_b') {
+    const pickingTeam = s.phase === 'pick_pool_a' ? s.teamA : s.teamB
+    const teamColour = s.phase === 'pick_pool_a' ? 'green' : 'blue'
+    const takenId = s.phase === 'pick_pool_b' ? s.chosenPoolA : null
+    return (
+      <div className="min-h-screen bg-[#06080f] text-white flex flex-col items-center justify-center gap-8 px-6">
+        <p className={`text-${teamColour}-300 text-sm font-bold uppercase tracking-[0.3em]`}>Picking a Pool</p>
+        <h1 className="text-4xl md:text-5xl font-black text-center">{pickingTeam}</h1>
+        <p className="text-slate-400 text-base">Choose one of the pools below</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl w-full">
+          {(s.pools ?? []).map((pl, i) => {
+            const taken = pl.id === takenId
+            return (
+              <div key={pl.id} className={`rounded-2xl p-5 border-2 text-center ${
+                taken ? 'bg-white/5 border-white/10 opacity-50'
+                      : `bg-${teamColour}-900/20 border-${teamColour}-500/40`
+              }`}>
+                <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest">Pool {i + 1}</p>
+                <p className="text-white font-black text-lg md:text-xl mt-3 leading-snug">{pl.title}</p>
+                <p className="text-slate-500 text-xs mt-3">{pl.questions.length} questions</p>
+                {taken && <p className="text-slate-500 text-[10px] mt-2 font-bold uppercase">Taken by {s.teamA}</p>}
+              </div>
+            )
+          })}
         </div>
       </div>
     )
@@ -156,7 +194,7 @@ export default function AVAudienceView() {
         <div className="bg-green-900/30 border border-green-500/30 rounded-2xl p-6 text-center w-full max-w-sm">
           <p className="text-gray-400 text-sm mb-1">{s.teamA}</p>
           <p className="text-5xl font-black text-green-400">{s.scoreA}</p>
-          <p className="text-xs text-gray-500 mt-1">{s.correctA}/{s.questionsA.length} correct in AV</p>
+          <p className="text-xs text-gray-500 mt-1">{s.correctA}/{poolA?.questions.length ?? 0} correct in AV</p>
         </div>
         <p className="text-yellow-300 font-bold animate-pulse">⏳ {s.teamB} is up next…</p>
       </div>

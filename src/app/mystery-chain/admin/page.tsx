@@ -44,6 +44,14 @@ type AVQSetup = {
   answer: string
 }
 
+// A pool is a themed set of 10 questions that the students can pick from
+// during the AV Round. Three pools are pre-configured; each team picks one.
+type AVPool = {
+  id: string
+  title: string
+  questions: AVQSetup[]
+}
+
 type MCState = {
   phase: MCPhase
   teamA: string; teamB: string; teamC: string
@@ -62,8 +70,7 @@ type MCState = {
   revealed: boolean
   // AV Round pre-configuration (set during setup before game starts)
   avVideoUrl: string
-  avQuestionsA: AVQSetup[]   // 10 questions for Team A round
-  avQuestionsB: AVQSetup[]   // 10 different questions for Team B round
+  avPools: AVPool[]   // 3 pools of 10; each finalist team picks one to play
 }
 
 const fmtTime = (ms: number) => {
@@ -202,35 +209,53 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
 
 const PACKS: MCPack[] = RAW_PACKS.map(p => ({ ...p, id: crypto.randomUUID() }))
 
-// ── Default AV Questions ──────────────────────────────────────────────────────
-// These are shown in the setup screen for the admin to edit before the game starts
+// ── Default AV Pools — Soyuz spacecraft video ────────────────────────────────
+// Three themed pools of 10 questions each; students pick one pool per team.
+// Admin can edit anything in the setup screen before the game starts.
 
-// Default answers cover the first 2 minutes of Big Buck Bunny (the pre-loaded video).
-// Admin can edit any of these before starting the game.
-const DEFAULT_AV_QUESTIONS_A: Omit<AVQSetup,'id'>[] = [
-  { text: 'What kind of animal is the main character?', answer: 'A rabbit / bunny' },
-  { text: 'What colour is the main character?', answer: 'White' },
-  { text: 'What is the setting of the video?', answer: 'A meadow / forest' },
-  { text: 'What is the main character doing at the start?', answer: 'Sleeping / waking up' },
-  { text: 'What time of day does the video begin?', answer: 'Morning / sunrise' },
-  { text: 'What does the rabbit do first when he leaves his home?', answer: 'Stretches / smells a flower' },
-  { text: 'What insect does the rabbit interact with early on?', answer: 'A butterfly' },
-  { text: 'What is the mood of the opening scene?', answer: 'Peaceful / cheerful' },
-  { text: 'What is the general size of the main character?', answer: 'Large / big' },
-  { text: 'What is the art style of the video?', answer: '3D animation / CGI' },
+const POOL_1: Omit<AVQSetup,'id'>[] = [
+  { text: "What is the crew's preparation time before undocking?", answer: '3 hours' },
+  { text: 'At what time (Moscow time) did the Soyuz undock?', answer: '4:03' },
+  { text: "What is the spacecraft's name?", answer: 'Soyuz' },
+  { text: 'What location are they departing from?', answer: 'International Space Station (ISS)' },
+  { text: 'Who is specifically bid farewell during the undocking process?', answer: 'Yuri Ivanovich' },
+  { text: 'How much time passes between undocking and the de-orbiting burn?', answer: '2 hours' },
+  { text: 'How long before landing do the helicopters depart for the landing region?', answer: '1 hour' },
+  { text: 'How long after the burn do the modules disconnect?', answer: '30 minutes' },
+  { text: 'What action does the space propulsion system take at 1:14?', answer: 'Produces a retrograde burn' },
+  { text: 'What is the purpose of the retrograde burn?', answer: 'De-orbiting the Soyuz' },
 ]
 
-const DEFAULT_AV_QUESTIONS_B: Omit<AVQSetup,'id'>[] = [
-  { text: 'Name one plant or flower shown in the opening.', answer: 'A daisy / flowers' },
-  { text: 'What kind of home does the main character live in?', answer: 'A tree / burrow' },
-  { text: 'What sound plays during the opening?', answer: 'Birds chirping / calm music' },
-  { text: 'What does the rabbit do to greet the day?', answer: 'Yawn / stretch' },
-  { text: 'What is the weather like in the video?', answer: 'Sunny / clear' },
-  { text: 'What animals besides the rabbit appear early?', answer: 'Birds / squirrels' },
-  { text: 'What is the main character\'s facial expression at the start?', answer: 'Happy / content' },
-  { text: 'What colour is the sky?', answer: 'Blue' },
-  { text: 'Is the video a musical, silent, or narrated?', answer: 'Silent / no dialogue' },
-  { text: 'What year was Big Buck Bunny released?', answer: '2008' },
+const POOL_2: Omit<AVQSetup,'id'>[] = [
+  { text: 'What is described as the most dangerous stage of the mission?', answer: 'Landing / re-entry' },
+  { text: 'What is the visual appearance of the re-entry capsule?', answer: 'Passive re-entry capsule' },
+  { text: 'What is the maximum acceleration felt by the crew in Gs?', answer: '4G' },
+  { text: 'What forms around the capsule during re-entry?', answer: 'A plasma sheet' },
+  { text: 'What is the temperature of the plasma sheet?', answer: 'Up to 2,000° C' },
+  { text: 'What happens to radio communications during re-entry?', answer: 'The radio link breaks' },
+  { text: 'How do astronauts see outside during the intense re-entry?', answer: 'Through a window' },
+  { text: 'What makes the re-entry phase "grueling"?', answer: 'High-G forces and plasma temperatures' },
+  { text: 'How are the astronauts positioned inside the capsule?', answer: 'In prone beds' },
+  { text: 'What happens to the radio link when the plasma sheet forms?', answer: 'It breaks' },
+]
+
+const POOL_3: Omit<AVQSetup,'id'>[] = [
+  { text: 'What triggers the parachute deployment?', answer: 'Re-entry deceleration' },
+  { text: 'Which parachute deploys first?', answer: 'Auxiliary parachute' },
+  { text: 'Which parachute deploys second?', answer: 'Main parachute' },
+  { text: 'What factor caused the capsule to drift from the original aim point?', answer: 'A strong wind' },
+  { text: 'How far did the wind blow the capsule off-course?', answer: 'Several kilometers' },
+  { text: 'How quickly do rescue teams reach the capsule after landing?', answer: 'A couple of minutes' },
+  { text: 'Who is the first crew member helped out of the capsule?', answer: 'Sergey Volkov' },
+  { text: 'Who is the second crew member to exit?', answer: 'Scott Kelly' },
+  { text: 'Who is the final crew member to exit?', answer: 'Mikhail Kornienko' },
+  { text: 'What phrase is used to welcome Mikhail Kornienko home?', answer: '"Welcome home"' },
+]
+
+const DEFAULT_AV_POOLS: Omit<AVPool,'id'>[] = [
+  { title: 'Undocking & Departure from the ISS',   questions: POOL_1.map(q => ({ ...q, id: crypto.randomUUID() })) },
+  { title: "Re-entry Through Earth's Atmosphere",   questions: POOL_2.map(q => ({ ...q, id: crypto.randomUUID() })) },
+  { title: 'Landing & Recovery',                     questions: POOL_3.map(q => ({ ...q, id: crypto.randomUUID() })) },
 ]
 
 // ── Default State ─────────────────────────────────────────────────────────────
@@ -245,10 +270,9 @@ const defaultState = (): MCState => ({
   revealedA: [], revealedB: [], revealedC: [],
   scoreA: 0, scoreB: 0, scoreC: 0,
   timerStart: null, storyStartAt: null, revealed: false,
-  // Big Buck Bunny — video ends at 120s (2 min) via YouTube's end= parameter
-  avVideoUrl: 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1&end=120',
-  avQuestionsA: DEFAULT_AV_QUESTIONS_A.map(q => ({ ...q, id: crypto.randomUUID() })),
-  avQuestionsB: DEFAULT_AV_QUESTIONS_B.map(q => ({ ...q, id: crypto.randomUUID() })),
+  // Soyuz spacecraft re-entry documentary; capped at 120s (2 min) via end=
+  avVideoUrl: 'https://www.youtube.com/embed/REc5oJUt81E?enablejsapi=1&end=120',
+  avPools: DEFAULT_AV_POOLS.map(p => ({ ...p, id: crypto.randomUUID() })),
 })
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -259,7 +283,7 @@ export default function MCAdminPage() {
   const [timeLeft, setTimeLeft] = useState(MC_TIME_MS)
   const [avSent, setAvSent] = useState(false)
   const [avOpen, setAvOpen] = useState(false)
-  const [avTab, setAvTab] = useState<'A' | 'B'>('A')
+  const [avTab, setAvTab] = useState<number>(0)   // 0 / 1 / 2 → which of the 3 pools is being edited
   const [newQ, setNewQ] = useState({ text: '', answer: '' })
   const [editingQ, setEditingQ] = useState<string | null>(null)
   // Registered teams pulled from Supabase for the dropdown selectors
@@ -400,21 +424,42 @@ export default function MCAdminPage() {
 
   const reset = () => update(defaultState())
 
-  // AV question helpers (local state only — broadcast happens on Advance)
-  const key = avTab === 'A' ? 'avQuestionsA' : 'avQuestionsB'
+  // AV pool helpers (local state only — broadcast happens on Advance)
   const updateAVQ = (id: string, field: 'text' | 'answer', val: string) => {
-    setS(p => ({ ...p, [key]: p[key].map(q => q.id === id ? { ...q, [field]: val } : q) }))
+    setS(p => ({
+      ...p,
+      avPools: p.avPools.map((pl, i) =>
+        i === avTab ? { ...pl, questions: pl.questions.map(q => q.id === id ? { ...q, [field]: val } : q) } : pl
+      ),
+    }))
   }
   const deleteAVQ = (id: string) => {
-    setS(p => ({ ...p, [key]: p[key].filter(q => q.id !== id) }))
+    setS(p => ({
+      ...p,
+      avPools: p.avPools.map((pl, i) =>
+        i === avTab ? { ...pl, questions: pl.questions.filter(q => q.id !== id) } : pl
+      ),
+    }))
   }
   const addAVQ = () => {
     if (!newQ.text.trim()) return
     const q: AVQSetup = { id: crypto.randomUUID(), text: newQ.text.trim(), answer: newQ.answer.trim() }
-    setS(p => ({ ...p, [key]: [...p[key], q] }))
+    setS(p => ({
+      ...p,
+      avPools: p.avPools.map((pl, i) =>
+        i === avTab ? { ...pl, questions: [...pl.questions, q] } : pl
+      ),
+    }))
     setNewQ({ text: '', answer: '' })
   }
-  const currentAVQs = avTab === 'A' ? s.avQuestionsA : s.avQuestionsB
+  const updatePoolTitle = (val: string) => {
+    setS(p => ({
+      ...p,
+      avPools: p.avPools.map((pl, i) => i === avTab ? { ...pl, title: val } : pl),
+    }))
+  }
+  const currentPool = s.avPools[avTab]
+  const currentAVQs = currentPool?.questions ?? []
 
   // Derived
   const currentQueue = s.phase === 'a_playing' ? s.queueA : s.phase === 'b_playing' ? s.queueB : s.queueC
@@ -432,10 +477,9 @@ export default function MCAdminPage() {
   const isPlaying = ['a_playing','b_playing','c_playing'].includes(s.phase)
   const isPicking = ['pick_A','pick_B','pick_C'].includes(s.phase)
   const isStory = ['story_A','story_B','story_C'].includes(s.phase)
-  const avQsAReady = s.avQuestionsA.length >= 10 && s.avQuestionsA.every(q => q.answer.trim())
-  const avQsBReady = s.avQuestionsB.length >= 10 && s.avQuestionsB.every(q => q.answer.trim())
-  const avQsReady = avQsAReady && avQsBReady
-  const canBegin = s.teamA && s.teamB && s.teamC && avQsReady
+  const poolReady = (i: number) => (s.avPools[i]?.questions.length ?? 0) >= 10 && (s.avPools[i]?.questions ?? []).every(q => q.answer.trim())
+  const avPoolsReady = s.avPools.length === 3 && s.avPools.every((_, i) => poolReady(i))
+  const canBegin = s.teamA && s.teamB && s.teamC && avPoolsReady
 
   return (
     <div className="h-screen bg-[#0a1628] text-white p-3 overflow-hidden">
@@ -535,9 +579,9 @@ export default function MCAdminPage() {
               >
                 <div className="flex items-center gap-2">
                   <span className="text-purple-400 font-bold text-sm">📺 Audio Visual Round Setup</span>
-                  {avQsReady
-                    ? <span className="text-xs bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full">✓ Ready (A: {s.avQuestionsA.length} · B: {s.avQuestionsB.length})</span>
-                    : <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded-full">Fill 10 answers per team to unlock</span>
+                  {avPoolsReady
+                    ? <span className="text-xs bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full">✓ Ready · 3 pools of {s.avPools[0]?.questions.length ?? 0}</span>
+                    : <span className="text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded-full">Fill 10 answers in each of the 3 pools</span>
                   }
                 </div>
                 <span className="text-slate-500 text-xs">{avOpen ? '▲' : '▼'}</span>
@@ -546,8 +590,9 @@ export default function MCAdminPage() {
               {avOpen && (
                 <div className="px-4 pb-4 space-y-4 border-t border-purple-700/30">
                   <p className="text-slate-400 text-xs pt-3">
-                    2-minute video, then <b className="text-white">60 seconds per team</b> to answer up to 10 questions.
-                    Each correct answer = <b className="text-white">10 pts</b>. Wrong or skipped questions cycle to the back so teams can retry within the 60s.
+                    2-minute video, then each team picks one of the <b className="text-white">3 themed pools</b> and has
+                    <b className="text-white"> 60 seconds</b> to answer up to 10 questions from that pool.
+                    Correct = <b className="text-white">10 pts</b>. Wrong or skipped questions cycle to the back so teams can retry within the 60s.
                     Scores carry forward from Mystery Chain automatically.
                   </p>
 
@@ -567,26 +612,33 @@ export default function MCAdminPage() {
                     <p className="text-xs text-slate-500">Paste any YouTube URL — it will be converted to embed format automatically.</p>
                   </div>
 
-                  {/* Questions — split by team */}
+                  {/* Questions — 3 pools */}
                   <div className="space-y-2">
-                    {/* Team tabs */}
-                    <div className="flex gap-2 border-b border-slate-700 pb-1">
-                      {(['A','B'] as const).map(t => (
-                        <button key={t} onClick={() => { setAvTab(t); setEditingQ(null) }}
+                    <div className="flex gap-2 border-b border-slate-700 pb-1 flex-wrap">
+                      {s.avPools.map((pl, i) => (
+                        <button key={pl.id} onClick={() => { setAvTab(i); setEditingQ(null) }}
                           className={`text-xs font-bold px-3 py-1.5 rounded-t-lg transition-colors ${
-                            avTab === t
+                            avTab === i
                               ? 'bg-purple-700/40 text-white border border-purple-500/40'
                               : 'text-slate-400 hover:text-white'
                           }`}>
-                          Team {t} ({t === 'A' ? s.avQuestionsA.length : s.avQuestionsB.length})
-                          {(t === 'A' ? avQsAReady : avQsBReady) && <span className="text-green-400 ml-1">✓</span>}
+                          Pool {i + 1} ({pl.questions.length})
+                          {poolReady(i) && <span className="text-green-400 ml-1">✓</span>}
                         </button>
                       ))}
                     </div>
 
+                    {/* Pool title editor */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">Pool title</label>
+                      <input value={currentPool?.title ?? ''} onChange={e => updatePoolTitle(e.target.value)}
+                        placeholder="Themed title, e.g. Undocking & Departure"
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm" />
+                    </div>
+
                     <div className="flex items-center justify-between">
                       <label className="text-xs text-gray-400 font-semibold">
-                        Team {avTab} questions ({currentAVQs.length}/10) — fill in ALL answers
+                        Pool {avTab + 1} questions ({currentAVQs.length}/10) — fill in ALL answers
                       </label>
                     </div>
 
@@ -659,7 +711,7 @@ export default function MCAdminPage() {
             {!canBegin && (
               <p className="text-center text-xs text-slate-500">
                 {!s.teamA || !s.teamB || !s.teamC ? 'Enter all 3 team names · ' : ''}
-                {!avQsReady ? 'Open AV Round Setup and fill in all question answers' : ''}
+                {!avPoolsReady ? 'Open AV Round Setup and fill in all question answers for all 3 pools' : ''}
               </p>
             )}
             <button onClick={() => update({ ...s, phase: 'intro' })}
@@ -976,13 +1028,18 @@ export default function MCAdminPage() {
                     <span className="text-slate-400 text-sm font-normal"> ({winners[1].total} pts)</span>
                   </p>
                   <p className="text-slate-500 text-xs mt-1">
-                    Cumulative scores carry forward · {s.avQuestionsA.length}+{s.avQuestionsB.length} questions · video pre-configured
+                    Cumulative scores carry forward · {s.avPools.length} pools of {s.avPools[0]?.questions.length ?? 0} · video pre-configured
                   </p>
                 </div>
                 <button
                   onClick={() => {
                     const buildQs = (arr: AVQSetup[]) =>
                       arr.map(q => ({ id: q.id, text: q.text, answer: q.answer, revealed: false, answeredBy: null as 'A' | 'B' | null }))
+                    const pools = s.avPools.map(pl => ({
+                      id: pl.id,
+                      title: pl.title,
+                      questions: buildQs(pl.questions),
+                    }))
                     // Field name kept as mcScoreA/B for schema stability — it now
                     // holds the cumulative (semi + MC) carried forward into AV.
                     wsBroadcast('av:state', {
@@ -994,10 +1051,11 @@ export default function MCAdminPage() {
                       teamB: winners[1].name,
                       mcScoreA: winners[0].total,
                       mcScoreB: winners[1].total,
-                      questionsA: buildQs(s.avQuestionsA),
-                      questionsB: buildQs(s.avQuestionsB),
-                      queueA: buildQs(s.avQuestionsA),
-                      queueB: buildQs(s.avQuestionsB),
+                      pools,
+                      chosenPoolA: null,
+                      chosenPoolB: null,
+                      queueA: [],
+                      queueB: [],
                       timerStart: null,
                       scoreA: winners[0].total,
                       scoreB: winners[1].total,

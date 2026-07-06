@@ -16,18 +16,29 @@ type AVQuestion = {
   answeredBy: 'A' | 'B' | null
 }
 
+type AVPool = {
+  id: string
+  title: string
+  questions: AVQuestion[]
+}
+
 type AVState = {
   _from_mc?: boolean
-  phase: 'idle' | 'watching' | 'qa_a' | 'break' | 'qa_b' | 'done' | 'declare_first_runnerup' | 'declare_winner'
+  phase: 'idle' | 'watching'
+    | 'pick_pool_a' | 'qa_a'
+    | 'break'
+    | 'pick_pool_b' | 'qa_b'
+    | 'done' | 'declare_first_runnerup' | 'declare_winner'
   videoUrl: string
   videoPlay: boolean
   teamA: string
   teamB: string
   mcScoreA: number
   mcScoreB: number
-  questionsA: AVQuestion[]   // full source (immutable reference for count)
-  questionsB: AVQuestion[]
-  queueA: AVQuestion[]       // remaining questions for team A (mutates during play)
+  pools: AVPool[]              // 3 pools of 10 questions each
+  chosenPoolA: string | null   // pool id picked by team A
+  chosenPoolB: string | null   // pool id picked by team B
+  queueA: AVQuestion[]         // active play queue for team A
   queueB: AVQuestion[]
   timerStart: number | null
   scoreA: number
@@ -38,13 +49,14 @@ type AVState = {
 
 const DEFAULT_STATE: AVState = {
   phase: 'idle',
-  videoUrl: 'https://www.youtube.com/embed/YE7VzlLtp-4?enablejsapi=1&end=120',
+  videoUrl: 'https://www.youtube.com/embed/REc5oJUt81E?enablejsapi=1&end=120',
   videoPlay: false,
   teamA: 'Team A',
   teamB: 'Team B',
   mcScoreA: 0,
   mcScoreB: 0,
-  questionsA: [], questionsB: [],
+  pools: [],
+  chosenPoolA: null, chosenPoolB: null,
   queueA: [], queueB: [],
   timerStart: null,
   scoreA: 0, scoreB: 0,
@@ -117,18 +129,40 @@ export default function AVAdmin() {
     setState(prev => ({ ...prev, ...patch }))
   }
 
-  function startWatching() { update({ phase: 'watching', videoPlay: true }) }
-  function stopVideo()     { update({ videoPlay: false }) }
+  function startWatching()  { update({ phase: 'watching', videoPlay: true }) }
+  function stopVideo()      { update({ videoPlay: false }) }
+  // After the video, teams pick their pools before answering
+  function goPickPoolA()    { update({ phase: 'pick_pool_a', videoPlay: false }) }
+  function goPickPoolB()    { update({ phase: 'pick_pool_b', videoPlay: false }) }
 
-  function startQA_A() {
-    // Reset queue from source, reset AV score to MC baseline
-    const fresh = state.questionsA.map(q => ({ ...q, revealed: false, answeredBy: null as 'A' | 'B' | null }))
-    update({ phase: 'qa_a', videoPlay: false, queueA: fresh, timerStart: Date.now(), correctA: 0, scoreA: state.mcScoreA })
+  // Team A locks in a pool → 60s Q&A begins
+  function pickPoolA(poolId: string) {
+    const pool = state.pools.find(p => p.id === poolId)
+    if (!pool) return
+    const fresh = pool.questions.map(q => ({ ...q, revealed: false, answeredBy: null as 'A' | 'B' | null }))
+    update({
+      phase: 'qa_a', videoPlay: false,
+      chosenPoolA: poolId,
+      queueA: fresh,
+      timerStart: Date.now(),
+      correctA: 0,
+      scoreA: state.mcScoreA,
+    })
   }
 
-  function startQA_B() {
-    const fresh = state.questionsB.map(q => ({ ...q, revealed: false, answeredBy: null as 'A' | 'B' | null }))
-    update({ phase: 'qa_b', videoPlay: false, queueB: fresh, timerStart: Date.now(), correctB: 0, scoreB: state.mcScoreB })
+  // Team B picks (from whichever remaining pools)
+  function pickPoolB(poolId: string) {
+    const pool = state.pools.find(p => p.id === poolId)
+    if (!pool) return
+    const fresh = pool.questions.map(q => ({ ...q, revealed: false, answeredBy: null as 'A' | 'B' | null }))
+    update({
+      phase: 'qa_b', videoPlay: false,
+      chosenPoolB: poolId,
+      queueB: fresh,
+      timerStart: Date.now(),
+      correctB: 0,
+      scoreB: state.mcScoreB,
+    })
   }
 
   const isQaA = state.phase === 'qa_a'
@@ -219,7 +253,7 @@ export default function AVAdmin() {
                 <p className="text-gray-400 text-sm mt-1">
                   MC scores: <span className="text-green-400 font-bold">{state.mcScoreA} pts</span> vs <span className="text-blue-400 font-bold">{state.mcScoreB} pts</span>
                   <span className="mx-2 text-gray-600">·</span>
-                  {state.questionsA.length} + {state.questionsB.length} questions
+                  {state.pools.length} pools of {state.pools[0]?.questions.length ?? 0}
                 </p>
               </div>
               <button onClick={startWatching}
@@ -233,9 +267,13 @@ export default function AVAdmin() {
         {/* Phase tracker */}
         <div className="bg-[#111827] rounded-2xl p-4 flex items-center justify-between">
           <div className="flex gap-2 flex-wrap">
-            {(['idle','watching','qa_a','break','qa_b','done'] as const).map(p => (
+            {(['idle','watching','pick_pool_a','qa_a','break','pick_pool_b','qa_b','done'] as const).map(p => (
               <span key={p} className={`px-2 py-1 rounded-full text-xs font-bold ${state.phase === p ? 'bg-yellow-400 text-black' : 'bg-gray-800 text-gray-500'}`}>
-                {p === 'qa_a' ? `Q&A ${state.teamA}` : p === 'qa_b' ? `Q&A ${state.teamB}` : p.toUpperCase()}
+                {p === 'qa_a' ? `Q&A ${state.teamA}` :
+                 p === 'qa_b' ? `Q&A ${state.teamB}` :
+                 p === 'pick_pool_a' ? `Pick ${state.teamA}` :
+                 p === 'pick_pool_b' ? `Pick ${state.teamB}` :
+                 p.toUpperCase()}
               </span>
             ))}
           </div>
@@ -260,10 +298,24 @@ export default function AVAdmin() {
                 <button onClick={stopVideo} className="w-full py-2 bg-orange-600 hover:bg-orange-500 rounded-xl font-bold text-sm">
                   ⏸ Stop Video
                 </button>
-                <button onClick={startQA_A} className="w-full py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold">
-                  🎯 Start Q&A — {state.teamA} (60s)
+                <button onClick={goPickPoolA} className="w-full py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold">
+                  🎯 {state.teamA} — Pick Pool
                 </button>
               </>)}
+              {state.phase === 'pick_pool_a' && (
+                <div>
+                  <p className="text-white font-bold text-sm mb-2 text-center">{state.teamA} — pick one pool</p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {state.pools.map((pl, i) => (
+                      <button key={pl.id} onClick={() => pickPoolA(pl.id)}
+                        className="text-left px-3 py-2 bg-green-900/30 hover:bg-green-800/40 border border-green-500/40 rounded-xl">
+                        <p className="text-green-400 text-[10px] font-bold uppercase tracking-widest">Pool {i + 1}</p>
+                        <p className="text-white font-bold text-sm">{pl.title}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {state.phase === 'qa_a' && (
                 <button onClick={() => update({ phase: 'break', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
                   End {state.teamA} → Break
@@ -275,10 +327,27 @@ export default function AVAdmin() {
                   <p className="text-green-400 font-black text-2xl">{state.scoreA} pts</p>
                   <p className="text-gray-600 text-xs">MC {state.mcScoreA} + AV {avScoreA} ({state.correctA} correct)</p>
                 </div>
-                <button onClick={startQA_B} className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold">
-                  🎯 Start Q&A — {state.teamB} (60s)
+                <button onClick={goPickPoolB} className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold">
+                  🎯 {state.teamB} — Pick Pool
                 </button>
               </>)}
+              {state.phase === 'pick_pool_b' && (
+                <div>
+                  <p className="text-white font-bold text-sm mb-2 text-center">{state.teamB} — pick one pool</p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {state.pools.filter(pl => pl.id !== state.chosenPoolA).map((pl) => {
+                      const originalIdx = state.pools.findIndex(p2 => p2.id === pl.id)
+                      return (
+                        <button key={pl.id} onClick={() => pickPoolB(pl.id)}
+                          className="text-left px-3 py-2 bg-blue-900/30 hover:bg-blue-800/40 border border-blue-500/40 rounded-xl">
+                          <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest">Pool {originalIdx + 1}</p>
+                          <p className="text-white font-bold text-sm">{pl.title}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               {state.phase === 'qa_b' && (
                 <button onClick={() => update({ phase: 'done', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
                   End {state.teamB} → Results
@@ -331,10 +400,14 @@ export default function AVAdmin() {
             <div className="bg-[#111827] rounded-2xl p-4">
               <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider mb-3">Score Breakdown</h2>
               <div className="space-y-3">
-                {[
-                  { name: state.teamA, total: state.scoreA, mc: state.mcScoreA, av: avScoreA, correct: state.correctA, total_q: state.questionsA.length, color: 'green' },
-                  { name: state.teamB, total: state.scoreB, mc: state.mcScoreB, av: avScoreB, correct: state.correctB, total_q: state.questionsB.length, color: 'blue' },
-                ].map(t => (
+                {(() => {
+                  const poolA = state.pools.find(p => p.id === state.chosenPoolA)
+                  const poolB = state.pools.find(p => p.id === state.chosenPoolB)
+                  return [
+                    { name: state.teamA, total: state.scoreA, mc: state.mcScoreA, av: avScoreA, correct: state.correctA, total_q: poolA?.questions.length ?? 0, color: 'green' },
+                    { name: state.teamB, total: state.scoreB, mc: state.mcScoreB, av: avScoreB, correct: state.correctB, total_q: poolB?.questions.length ?? 0, color: 'blue' },
+                  ]
+                })().map(t => (
                   <div key={t.name} className={`rounded-xl p-3 bg-${t.color}-900/20 border border-${t.color}-500/20`}>
                     <p className={`text-xs text-${t.color}-400 font-bold`}>{t.name}</p>
                     <p className={`text-3xl font-black text-${t.color}-400`}>{t.total} pts</p>
@@ -418,28 +491,33 @@ export default function AVAdmin() {
               </div>
             )}
 
-            {/* Source questions summary (when not in QA phase) */}
+            {/* Pool summary (when not in QA phase) — shows the 3 pools + any picks */}
             {!isQaA && !isQaB && (
               <div className="bg-[#111827] rounded-2xl p-4">
                 <h2 className="font-bold text-yellow-400 text-sm uppercase tracking-wider mb-3">
-                  Configured Questions
+                  Question Pools
                 </h2>
-                {state.questionsA.length + state.questionsB.length === 0 ? (
-                  <p className="text-gray-600 text-sm text-center py-4">No questions loaded — configure them in the Mystery Chain setup screen.</p>
+                {state.pools.length === 0 ? (
+                  <p className="text-gray-600 text-sm text-center py-4">No pools loaded — configure them in the Mystery Chain setup screen.</p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-green-400 font-bold mb-2">{state.teamA} ({state.questionsA.length})</p>
-                      <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
-                        {state.questionsA.map(q => <li key={q.id}>{q.text}</li>)}
-                      </ol>
-                    </div>
-                    <div>
-                      <p className="text-blue-400 font-bold mb-2">{state.teamB} ({state.questionsB.length})</p>
-                      <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
-                        {state.questionsB.map(q => <li key={q.id}>{q.text}</li>)}
-                      </ol>
-                    </div>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    {state.pools.map((pl, i) => {
+                      const pickedByA = state.chosenPoolA === pl.id
+                      const pickedByB = state.chosenPoolB === pl.id
+                      return (
+                        <div key={pl.id} className={`rounded-xl p-3 border ${
+                          pickedByA ? 'border-green-500/50 bg-green-900/10' :
+                          pickedByB ? 'border-blue-500/50 bg-blue-900/10' :
+                          'border-white/10 bg-white/5'
+                        }`}>
+                          <p className="text-[#f5a623] text-[10px] font-bold uppercase tracking-widest">Pool {i + 1}</p>
+                          <p className="text-white font-bold text-xs mt-0.5">{pl.title}</p>
+                          <p className="text-slate-500 text-[10px] mt-1">{pl.questions.length} questions</p>
+                          {pickedByA && <p className="text-green-400 text-[10px] font-bold mt-1">Picked by {state.teamA}</p>}
+                          {pickedByB && <p className="text-blue-400 text-[10px] font-bold mt-1">Picked by {state.teamB}</p>}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
