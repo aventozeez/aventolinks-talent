@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { wsSubscribe } from '@/lib/ws-sync'
+import RoundInstructionsInline from '@/components/round-instructions-inline'
+import { ROUND_INFO } from '@/lib/round-info'
 
 // Uses the shared sync lib so both LAN (local WS relay) and public URL
 // (Supabase Realtime broadcast) transports work.
@@ -108,20 +110,11 @@ export default function AVAudienceView() {
 
   if (s.phase === 'idle') {
     return (
-      <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center gap-6 text-white">
-        <div className="text-6xl">📺</div>
-        <h1 className="text-4xl font-black tracking-tight">Audio Visual Round</h1>
-        <p className="text-gray-400">Watch the video, then each team picks a pool and answers</p>
-        <div className="flex gap-6 mt-4">
-          <div className="text-center">
-            <p className="text-2xl font-black text-green-400">{s.teamA}</p>
-          </div>
-          <div className="text-gray-600 text-3xl font-thin self-center">vs</div>
-          <div className="text-center">
-            <p className="text-2xl font-black text-blue-400">{s.teamB}</p>
-          </div>
-        </div>
-        <p className="text-slate-500 text-xs mt-2">{s.pools?.length ?? 0} pools of {s.pools?.[0]?.questions.length ?? 0}</p>
+      <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center gap-6 text-white p-6">
+        <RoundInstructionsInline
+          info={ROUND_INFO.audio_visual}
+          footerHint={`${s.teamA} vs ${s.teamB} · waiting for the video to start…`}
+        />
       </div>
     )
   }

@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { wsSubscribe } from '@/lib/ws-sync'
 import AVAudienceView from '@/components/av-audience-view'
+import RoundInstructionsInline from '@/components/round-instructions-inline'
+import { ROUND_INFO } from '@/lib/round-info'
 
 const CHANNEL = 'mc:state'
 const MC_TIME_MS = 60_000
@@ -776,14 +778,13 @@ export default function MCAudiencePage() {
   const pickingTeam = s?.phase === 'pick_A' ? s.teamA : s?.phase === 'pick_B' ? s.teamB : s?.phase === 'pick_C' ? s.teamC : null
   const takenIds = s ? [s.chosenA, s.chosenB, s.chosenC].filter(Boolean) as string[] : []
 
-  // Waiting
+  // Waiting — show the full instructions so the quiz master can walk the room through them
   if (!s || s.phase === 'setup') return (
-    <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center">
-      <div className="text-center space-y-3">
-        <div className="text-6xl">🔮</div>
-        <p className="text-white text-3xl font-black">Mystery Chain</p>
-        <p className="text-slate-500 text-lg">Waiting for the round to begin…</p>
-      </div>
+    <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center p-6">
+      <RoundInstructionsInline
+        info={ROUND_INFO.mystery_chain}
+        footerHint="Waiting for the host to reveal the opening story…"
+      />
     </div>
   )
 

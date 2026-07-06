@@ -7,6 +7,8 @@ import {
   getMatchState, subscribeToMatch,
   RF_Q_COUNT, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS, MC_TIME_MS, MC_PUZZLE_COUNT,
 } from '@/lib/fsc-live'
+import RoundInstructionsInline from '@/components/round-instructions-inline'
+import { ROUND_INFO } from '@/lib/round-info'
 
 export default function AudiencePage() {
   const [state, setState] = useState<FSCState | null>(null)
@@ -187,11 +189,10 @@ export default function AudiencePage() {
           <div className="w-full space-y-6">
 
             {s?.rf_phase === 'idle' && (
-              <div className="text-center space-y-4">
-                <p className="text-7xl">⚡</p>
-                <h2 className="text-4xl font-black text-white">Rapid Fire Round</h2>
-                <p className="text-slate-400 text-xl">Each team answers 10 questions in 60 seconds</p>
-              </div>
+              <RoundInstructionsInline
+                info={ROUND_INFO.rapid_fire}
+                footerHint="Waiting for the host to start Team A's 60 seconds…"
+              />
             )}
 
             {(s?.rf_phase === 'a_playing' || s?.rf_phase === 'b_playing') && (
@@ -301,7 +302,13 @@ export default function AudiencePage() {
               </div>
             </div>
 
-            {s?.bz_phase === 'idle' && (
+            {s?.bz_phase === 'idle' && s.bz_q_index === 0 && s.bz_score_a === 0 && s.bz_score_b === 0 && (
+              <RoundInstructionsInline
+                info={ROUND_INFO.buzzer}
+                footerHint="Waiting for the first question…"
+              />
+            )}
+            {s?.bz_phase === 'idle' && !(s.bz_q_index === 0 && s.bz_score_a === 0 && s.bz_score_b === 0) && (
               <div className="text-center py-8">
                 <p className="text-5xl animate-bounce">🔔</p>
                 <p className="text-white font-bold text-xl mt-3">Next question incoming…</p>
@@ -421,7 +428,13 @@ export default function AudiencePage() {
               </div>
             )}
 
-            {s?.is_phase === 'idle' && (
+            {s?.is_phase === 'idle' && s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0 && (
+              <RoundInstructionsInline
+                info={ROUND_INFO.innovation_sprint}
+                footerHint="Waiting for the host to reveal the first problem…"
+              />
+            )}
+            {s?.is_phase === 'idle' && !(s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0) && (
               <div className="text-center">
                 <p className="text-slate-400 text-lg">Waiting for timer to start…</p>
                 <p className="text-slate-500 text-sm mt-1">Teams will arrange the solution steps</p>
