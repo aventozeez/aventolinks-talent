@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { wsBroadcast } from '@/lib/ws-sync'
 import { supabase } from '@/lib/supabase'
 import PointAdjuster from '@/components/point-adjuster'
+import AdminRoundIntro from '@/components/round-instructions-admin'
+import { ROUND_INFO } from '@/lib/round-info'
 
 type RegisteredTeam = { id: string; name: string; school: string }
 
@@ -508,6 +510,8 @@ export default function MCAdminPage() {
         {/* ─── SETUP ───────────────────────────────────────────────────────── */}
         {s.phase === 'setup' && (
           <div className="space-y-2">
+
+            <AdminRoundIntro info={ROUND_INFO.mystery_chain} defaultOpen={false} />
 
             {/* Team names + mysteries in one row for compactness */}
             <div className="grid grid-cols-2 gap-2">

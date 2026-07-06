@@ -29,6 +29,8 @@ import {
 import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 import PointAdjuster from '@/components/point-adjuster'
+import AdminRoundIntro from '@/components/round-instructions-admin'
+import { ROUND_INFO } from '@/lib/round-info'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Tab = 'schools' | 'bracket' | 'mystery' | 'teams' | 'questions' | 'pools' | 'matches' | 'live' | 'grand-final' | 'tie-breaker' | 'simulator'
@@ -2289,12 +2291,15 @@ export default function AdminPage() {
 
               <ScoreBar label="Rapid Fire Scores" />
 
-              {/* idle → start A */}
+              {/* idle → show instructions + start A */}
               {s.rf_phase === 'idle' && (
-                <button onClick={startRFTeamA}
-                  className="w-full flex items-center justify-center gap-2 py-5 bg-green-600 hover:bg-green-500 text-white font-black rounded-2xl text-base transition-colors disabled:opacity-50">
-                  <Timer size={20} /> Start {s.team_a_name}&apos;s Turn (60s)
-                </button>
+                <>
+                  <AdminRoundIntro info={ROUND_INFO.rapid_fire} />
+                  <button onClick={startRFTeamA}
+                    className="w-full flex items-center justify-center gap-2 py-5 bg-green-600 hover:bg-green-500 text-white font-black rounded-2xl text-base transition-colors disabled:opacity-50">
+                    <Timer size={20} /> Start {s.team_a_name}&apos;s Turn (60s)
+                  </button>
+                </>
               )}
 
               {/* A playing */}
@@ -2436,12 +2441,17 @@ export default function AdminPage() {
 
               <ScoreBar label="Buzzer Scores" />
 
-              {/* idle → show question */}
+              {/* idle → show question (first idle also shows instructions) */}
               {s.bz_phase === 'idle' && (
-                <button onClick={showBZQuestion}
-                  className="w-full flex items-center justify-center gap-2 py-5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl text-base transition-colors disabled:opacity-50">
-                  <Bell size={20} /> Show Question {s.bz_q_index + 1}
-                </button>
+                <>
+                  {s.bz_q_index === 0 && s.bz_score_a === 0 && s.bz_score_b === 0 && (
+                    <AdminRoundIntro info={ROUND_INFO.buzzer} />
+                  )}
+                  <button onClick={showBZQuestion}
+                    className="w-full flex items-center justify-center gap-2 py-5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl text-base transition-colors disabled:opacity-50">
+                    <Bell size={20} /> Show Question {s.bz_q_index + 1}
+                  </button>
+                </>
               )}
 
               {/* Question display */}
@@ -2602,12 +2612,17 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* idle → start timer */}
+              {/* idle → start timer (first idle also shows instructions) */}
               {s.is_phase === 'idle' && (
-                <button onClick={startISTimer}
-                  className="w-full flex items-center justify-center gap-2 py-5 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
-                  <Timer size={20} /> Start Timer (60s)
-                </button>
+                <>
+                  {s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0 && (
+                    <AdminRoundIntro info={ROUND_INFO.innovation_sprint} />
+                  )}
+                  <button onClick={startISTimer}
+                    className="w-full flex items-center justify-center gap-2 py-5 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
+                    <Timer size={20} /> Start Timer (60s)
+                  </button>
+                </>
               )}
 
               {/* working → timer running */}

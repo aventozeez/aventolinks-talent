@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 import PointAdjuster from '@/components/point-adjuster'
+import AdminRoundIntro from '@/components/round-instructions-admin'
+import { ROUND_INFO } from '@/lib/round-info'
 
 // Uses the shared sync lib so both LAN (local WS relay) and public URL
 // (Supabase Realtime broadcast) transports work.
@@ -327,6 +329,10 @@ export default function AVAdmin() {
             <p className="text-yellow-400 font-bold text-sm">⏳ Waiting for Mystery Chain to finish</p>
             <p className="text-gray-400 text-xs mt-1">This page is configured from the Mystery Chain admin. Teams and questions will appear automatically when the host advances the top 2.</p>
           </div>
+        )}
+
+        {fromMC && state.phase === 'idle' && (
+          <AdminRoundIntro info={ROUND_INFO.audio_visual} />
         )}
 
         {fromMC && state.phase === 'idle' && (
