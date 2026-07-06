@@ -108,7 +108,10 @@ export default function AVAdmin() {
     if (!hydrated.current && incoming._from_mc) {
       hydrated.current = true
       skipBroadcast.current = true
-      setState(incoming)
+      // Merge with defaults so any field older MC broadcasts omit
+      // (e.g. tie-breaker fields added later) falls back safely and
+      // doesn't crash renders that read them unconditionally.
+      setState({ ...DEFAULT_STATE, ...incoming })
     }
   })
 
