@@ -22,7 +22,9 @@ type AVState = {
     | 'pick_pool_a' | 'qa_a'
     | 'break'
     | 'pick_pool_b' | 'qa_b'
-    | 'done' | 'declare_first_runnerup' | 'declare_winner'
+    | 'done'
+    | 'tie_break'
+    | 'declare_first_runnerup' | 'declare_winner'
   videoUrl: string
   videoPlay: boolean
   teamA: string
@@ -39,6 +41,12 @@ type AVState = {
   scoreB: number
   correctA: number
   correctB: number
+  // Tie-breaker
+  tieQuestions?: AVQuestion[]
+  tieCurrentIdx?: number
+  tieBuzzedBy?: 'A' | 'B' | null
+  tieTriedThisQ?: ('A' | 'B')[]
+  tieWinner?: 'A' | 'B' | null
 }
 
 export default function AVAudienceView() {
@@ -229,12 +237,77 @@ export default function AVAudienceView() {
     )
   }
 
+  // ── Tie-breaker (buzzer sudden-death) ──
+  if (s.phase === 'tie_break') {
+    const q = (s.tieQuestions ?? [])[s.tieCurrentIdx ?? 0]
+    const buzzed = s.tieBuzzedBy ?? null
+    const buzzedName = buzzed === 'A' ? s.teamA : buzzed === 'B' ? s.teamB : ''
+    const buzzedColour = buzzed === 'A' ? '#22c55e' : '#3b82f6'
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#1a0a2a] via-[#2a0a1f] to-[#0a0a1f] text-white flex flex-col items-center justify-center gap-6 px-6">
+        <p className="text-pink-300 text-sm font-bold uppercase tracking-[0.4em] animate-pulse">Tie-Breaker · Buzzer Round</p>
+        {/* Team scores + tied badge */}
+        <div className="flex items-center gap-6">
+          <div className="text-center">
+            <p className="text-green-400 text-2xl font-black">{s.teamA}</p>
+            <p className="text-white text-4xl font-black">{s.scoreA}</p>
+          </div>
+          <div className="text-6xl">🔔</div>
+          <div className="text-center">
+            <p className="text-blue-400 text-2xl font-black">{s.teamB}</p>
+            <p className="text-white text-4xl font-black">{s.scoreB}</p>
+          </div>
+        </div>
+        <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest">Question {(s.tieCurrentIdx ?? 0) + 1} of {(s.tieQuestions?.length ?? 0)}</p>
+        {q && (
+          <div className="w-full max-w-3xl rounded-3xl p-8 md:p-10 text-center border-2"
+            style={{
+              background: buzzed
+                ? `linear-gradient(135deg, ${buzzedColour}22 0%, ${buzzedColour}11 100%)`
+                : 'rgba(255,255,255,0.04)',
+              borderColor: buzzed ? buzzedColour : 'rgba(255,255,255,0.15)',
+              transition: 'all 0.35s ease',
+            }}>
+            <p className="text-2xl md:text-3xl font-black leading-snug">{q.text}</p>
+          </div>
+        )}
+        {/* Buzz feedback */}
+        {buzzed && (
+          <div className="rounded-2xl px-6 py-3 border-2 animate-pulse"
+            style={{ borderColor: buzzedColour, background: `${buzzedColour}20` }}>
+            <p className="text-white font-black text-xl md:text-2xl">
+              🔔 <span style={{ color: buzzedColour }}>{buzzedName}</span> buzzed in!
+            </p>
+          </div>
+        )}
+        {!buzzed && (
+          <p className="text-slate-500 text-sm italic">First team to buzz gets to answer…</p>
+        )}
+        {/* Tried indicators */}
+        {(s.tieTriedThisQ?.length ?? 0) > 0 && !buzzed && (
+          <p className="text-slate-500 text-xs italic">
+            Already tried this one: {(s.tieTriedThisQ ?? []).map(t => t === 'A' ? s.teamA : s.teamB).join(' and ')}
+          </p>
+        )}
+      </div>
+    )
+  }
+
   // ── Dedicated First Runner Up declaration ──
   if (s.phase === 'declare_first_runnerup') {
-    // First Runner Up = lower cumulative score of the two AV finalists
-    const runnerUp = s.scoreA < s.scoreB
-      ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
-      : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+    // If the tie-break decided it, that overrides raw scores; otherwise the
+    // first runner-up is the lower cumulative score.
+    let runnerUp: { name: string; prior: number; av: number; total: number }
+    if (s.tieWinner) {
+      const runnerLetter: 'A' | 'B' = s.tieWinner === 'A' ? 'B' : 'A'
+      runnerUp = runnerLetter === 'A'
+        ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
+        : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+    } else {
+      runnerUp = s.scoreA < s.scoreB
+        ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
+        : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+    }
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#2a1a0a] to-[#0a0a1a] text-white flex flex-col items-center justify-center gap-8 px-6">
         <p className="text-yellow-300 text-sm font-bold uppercase tracking-[0.4em]">Oyo State Scholars Challenge 2026</p>
@@ -261,10 +334,16 @@ export default function AVAudienceView() {
 
   // ── Dedicated Winner declaration ──
   if (s.phase === 'declare_winner') {
-    // Winner = higher cumulative score of the two AV finalists
-    const winner = s.scoreA >= s.scoreB
-      ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
-      : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+    let winner: { name: string; prior: number; av: number; total: number }
+    if (s.tieWinner) {
+      winner = s.tieWinner === 'A'
+        ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
+        : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+    } else {
+      winner = s.scoreA >= s.scoreB
+        ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
+        : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+    }
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#1a0f00] text-white flex flex-col items-center justify-center gap-8 px-6 overflow-hidden relative">
         {/* Confetti-like decoration */}

@@ -28,7 +28,9 @@ type AVState = {
     | 'pick_pool_a' | 'qa_a'
     | 'break'
     | 'pick_pool_b' | 'qa_b'
-    | 'done' | 'declare_first_runnerup' | 'declare_winner'
+    | 'done'
+    | 'tie_break'                       // buzzer-style sudden-death round when scores are tied
+    | 'declare_first_runnerup' | 'declare_winner'
   videoUrl: string
   videoPlay: boolean
   teamA: string
@@ -45,6 +47,12 @@ type AVState = {
   scoreB: number
   correctA: number
   correctB: number
+  // ── Tie-breaker (buzzer round) ──
+  tieQuestions: AVQuestion[]         // usually the unpicked pool
+  tieCurrentIdx: number              // index of the question currently on screen
+  tieBuzzedBy: 'A' | 'B' | null      // team currently answering, null while waiting for a buzz
+  tieTriedThisQ: ('A' | 'B')[]       // which teams have already tried the current question
+  tieWinner: 'A' | 'B' | null        // set when a team answers correctly
 }
 
 const DEFAULT_STATE: AVState = {
@@ -61,6 +69,11 @@ const DEFAULT_STATE: AVState = {
   timerStart: null,
   scoreA: 0, scoreB: 0,
   correctA: 0, correctB: 0,
+  tieQuestions: [],
+  tieCurrentIdx: 0,
+  tieBuzzedBy: null,
+  tieTriedThisQ: [],
+  tieWinner: null,
 }
 
 function useWs(onIncoming: (s: AVState) => void) {
@@ -207,10 +220,82 @@ export default function AVAdmin() {
     }
   }
 
+  // ── Tie-breaker (buzzer sudden-death) ─────────────────────────────────────
+  // Kicks off from the tied "done" screen. Uses the pool neither team picked
+  // during the main round if there is one; falls back to pool 1 otherwise.
+  function startTieBreak() {
+    const unpicked = state.pools.find(p => p.id !== state.chosenPoolA && p.id !== state.chosenPoolB)
+    const source = unpicked ?? state.pools[0]
+    const questions = (source?.questions ?? []).map(q => ({ ...q, revealed: false, answeredBy: null as 'A' | 'B' | null }))
+    update({
+      phase: 'tie_break',
+      tieQuestions: questions,
+      tieCurrentIdx: 0,
+      tieBuzzedBy: null,
+      tieTriedThisQ: [],
+      tieWinner: null,
+    })
+  }
+
+  // A team buzzes in to answer the current tie-break question
+  function tieBuzz(team: 'A' | 'B') {
+    if (state.phase !== 'tie_break') return
+    if (state.tieBuzzedBy) return                   // already answering
+    if (state.tieTriedThisQ.includes(team)) return  // already had a go on this one
+    update({ tieBuzzedBy: team })
+  }
+
+  // Buzzed team answered correctly → they win the tie-break
+  function tieCorrect() {
+    if (!state.tieBuzzedBy) return
+    // Give the winner a symbolic +1 so downstream ranking treats them as ahead.
+    const winner: 'A' | 'B' = state.tieBuzzedBy
+    const scoreBump: Partial<AVState> = winner === 'A' ? { scoreA: state.scoreA + 1 } : { scoreB: state.scoreB + 1 }
+    update({
+      ...scoreBump,
+      tieWinner: winner,
+      tieBuzzedBy: null,
+      phase: 'done',      // back to results — admin can now declare First Runner Up
+    })
+  }
+
+  // Buzzed team was wrong. Give the other team a chance if they haven't tried;
+  // otherwise the question is dead, move on to the next.
+  function tieWrong() {
+    if (!state.tieBuzzedBy) return
+    const buzzed = state.tieBuzzedBy
+    const alreadyTried = [...state.tieTriedThisQ, buzzed] as ('A' | 'B')[]
+    const otherTeam: 'A' | 'B' = buzzed === 'A' ? 'B' : 'A'
+    if (!alreadyTried.includes(otherTeam)) {
+      // Other team still gets a chance on this question
+      update({ tieBuzzedBy: null, tieTriedThisQ: alreadyTried })
+    } else {
+      // Both teams failed on this one — move to the next question
+      tieNextQuestion(alreadyTried)
+    }
+  }
+
+  // No one buzzed in / neither team knows it — skip to next question
+  function tieSkip() {
+    tieNextQuestion(state.tieTriedThisQ)
+  }
+
+  function tieNextQuestion(_prevTried: ('A' | 'B')[]) {
+    const nextIdx = state.tieCurrentIdx + 1
+    if (nextIdx >= state.tieQuestions.length) {
+      // Ran out of questions — recycle from top (extremely rare, only ~10 qs)
+      update({ tieCurrentIdx: 0, tieBuzzedBy: null, tieTriedThisQ: [] })
+    } else {
+      update({ tieCurrentIdx: nextIdx, tieBuzzedBy: null, tieTriedThisQ: [] })
+    }
+  }
+
   const avScoreA = state.scoreA - state.mcScoreA
   const avScoreB = state.scoreB - state.mcScoreB
   const fromMC = hydrated.current || state._from_mc
   const timerPct = timer / (ROUND_MS / 1000)
+  const isTied = state.scoreA === state.scoreB
+  const tieQ = state.tieQuestions[state.tieCurrentIdx]
 
   return (
     <div className="h-screen bg-[#0a0c14] text-white p-3 overflow-hidden">
@@ -370,9 +455,22 @@ export default function AVAdmin() {
                   </div>
                   {/* Ceremony reveal buttons */}
                   <div className="flex flex-col gap-2 mt-2">
+                    {state.phase === 'done' && isTied && !state.tieWinner && (
+                      <button onClick={startTieBreak}
+                        className="w-full py-2 bg-pink-600/30 hover:bg-pink-600/50 border border-pink-500/50 text-pink-300 rounded-xl font-bold text-sm animate-pulse">
+                        🔔 Start Tie-Breaker (buzzer round)
+                      </button>
+                    )}
+                    {state.phase === 'done' && state.tieWinner && (
+                      <p className="text-xs text-pink-300 font-bold italic pt-1">
+                        Tie-breaker won by {state.tieWinner === 'A' ? state.teamA : state.teamB}
+                      </p>
+                    )}
                     {state.phase === 'done' && (
                       <button onClick={() => update({ phase: 'declare_first_runnerup' })}
-                        className="w-full py-2 bg-[#f5a623]/20 hover:bg-[#f5a623]/30 border border-[#f5a623]/50 text-[#f5a623] rounded-xl font-bold text-sm">
+                        disabled={isTied && !state.tieWinner}
+                        title={isTied && !state.tieWinner ? 'Break the tie first' : undefined}
+                        className="w-full py-2 bg-[#f5a623]/20 hover:bg-[#f5a623]/30 border border-[#f5a623]/50 text-[#f5a623] rounded-xl font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                         🥈 Declare First Runner Up
                       </button>
                     )}
@@ -392,6 +490,60 @@ export default function AVAdmin() {
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* ── Tie-breaker admin controls ── */}
+              {state.phase === 'tie_break' && (
+                <div className="space-y-2">
+                  <div className="text-center py-2 bg-pink-900/30 rounded-xl border border-pink-500/50">
+                    <p className="text-pink-300 text-[10px] font-bold uppercase tracking-widest">Tie-Breaker · Buzzer Round</p>
+                    <p className="text-white text-sm font-bold mt-0.5">Question {state.tieCurrentIdx + 1} of {state.tieQuestions.length}</p>
+                  </div>
+
+                  {/* Buzz-in buttons — waiting for a team to buzz */}
+                  {!state.tieBuzzedBy && tieQ && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => tieBuzz('A')}
+                          disabled={state.tieTriedThisQ.includes('A')}
+                          className="py-3 bg-green-600 hover:bg-green-500 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl font-black text-sm text-white">
+                          🔔 {state.teamA} Buzzes
+                        </button>
+                        <button onClick={() => tieBuzz('B')}
+                          disabled={state.tieTriedThisQ.includes('B')}
+                          className="py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl font-black text-sm text-white">
+                          🔔 {state.teamB} Buzzes
+                        </button>
+                      </div>
+                      <button onClick={tieSkip}
+                        className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-400 rounded-lg text-xs">
+                        ↷ No one knows — Next question
+                      </button>
+                    </>
+                  )}
+
+                  {/* Team is answering */}
+                  {state.tieBuzzedBy && tieQ && (
+                    <div className="space-y-2">
+                      <p className="text-center text-xs text-slate-400">
+                        <span className={state.tieBuzzedBy === 'A' ? 'text-green-400 font-bold' : 'text-blue-400 font-bold'}>
+                          {state.tieBuzzedBy === 'A' ? state.teamA : state.teamB}
+                        </span>
+                        {' '}is answering
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={tieCorrect}
+                          className="py-3 bg-green-600 hover:bg-green-500 rounded-xl font-black text-sm text-white">
+                          ✓ Correct · WINNER
+                        </button>
+                        <button onClick={tieWrong}
+                          className="py-3 bg-red-700 hover:bg-red-600 rounded-xl font-black text-sm text-white">
+                          ✗ Wrong
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -466,6 +618,25 @@ export default function AVAdmin() {
                 )}
               </div>
             </>)}
+
+            {/* Tie-breaker current question + answer (admin view) */}
+            {state.phase === 'tie_break' && tieQ && (
+              <div className="bg-[#111827] rounded-2xl p-5 space-y-3 border border-pink-500/30">
+                <p className="text-pink-300 text-[10px] font-bold uppercase tracking-widest text-center">
+                  Tie-breaker · Question {state.tieCurrentIdx + 1}
+                </p>
+                <p className="text-xl font-bold leading-snug text-center">{tieQ.text}</p>
+                <div className="rounded-xl p-3 bg-green-500/15 border border-green-500/40 text-center">
+                  <p className="text-green-400 text-[10px] font-bold uppercase tracking-widest">Answer</p>
+                  <p className="text-green-300 text-2xl font-black tracking-[0.15em]">{tieQ.answer}</p>
+                </div>
+                {state.tieTriedThisQ.length > 0 && !state.tieBuzzedBy && (
+                  <p className="text-xs text-slate-500 text-center italic">
+                    {state.tieTriedThisQ.map(t => t === 'A' ? state.teamA : state.teamB).join(' and ')} already tried this one.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Queue preview */}
             {(isQaA || isQaB) && (
