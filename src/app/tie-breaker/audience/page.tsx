@@ -6,6 +6,7 @@ const CHANNEL = 'tie:state'
 const ROUND_MS = 30_000
 
 type TBQuestion = { id: string; text: string; answer: string }
+type TBPool = { id: string; title: string; questions: TBQuestion[] }
 type TBPhase = 'setup' | 'a_playing' | 'break' | 'b_playing' | 'done'
 
 type TBState = {
@@ -14,7 +15,8 @@ type TBState = {
   teamB: string
   priorA: number
   priorB: number
-  questions: TBQuestion[]
+  pools: TBPool[]
+  chosenPoolId: string | null
   queueA: TBQuestion[]
   queueB: TBQuestion[]
   scoreA: number
@@ -118,6 +120,7 @@ export default function TieBreakerAudience() {
   const playingName = isPlayingA ? s.teamA : s.teamB
   const activeQueue = isPlayingA ? s.queueA : s.queueB
   const currentQ = activeQueue[0] ?? s.currentQ
+  const chosenPool = s.pools?.find(p => p.id === s.chosenPoolId) ?? null
   const timeLeft = s.timerStart ? Math.max(0, ROUND_MS - (now - s.timerStart)) : ROUND_MS
   const timePct = timeLeft / ROUND_MS
   const timeColour = timePct > 0.4 ? '#22c55e' : timePct > 0.2 ? '#f59e0b' : '#ef4444'
@@ -148,6 +151,11 @@ export default function TieBreakerAudience() {
         <p className="font-black text-sm tracking-widest uppercase" style={{ color: teamColour }}>
           {playingName} — 30-second Rapid Fire
         </p>
+        {chosenPool && (
+          <p className="text-xs mt-1" style={{ color: teamColour, opacity: 0.85 }}>
+            Pool: {chosenPool.title}
+          </p>
+        )}
       </div>
 
       {/* Circular timer + question */}

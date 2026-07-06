@@ -11,6 +11,7 @@ const PTS_CORRECT = 1
 type RegisteredTeam = { id: string; name: string; school: string }
 
 type TBQuestion = { id: string; text: string; answer: string }
+type TBPool = { id: string; title: string; questions: TBQuestion[] }
 
 type TBPhase = 'setup' | 'a_playing' | 'break' | 'b_playing' | 'done'
 
@@ -18,22 +19,25 @@ type TBState = {
   phase: TBPhase
   teamA: string
   teamB: string
-  priorA: number   // score coming in from prior rounds (informational)
+  priorA: number
   priorB: number
-  questions: TBQuestion[]        // full source pool (immutable during play)
-  queueA: TBQuestion[]           // team A's active play queue
+  pools: TBPool[]                // multiple pools, host picks one per round
+  chosenPoolId: string | null    // pool currently in play (locked at round start)
+  queueA: TBQuestion[]
   queueB: TBQuestion[]
-  scoreA: number                 // tie-breaker score for team A
+  scoreA: number
   scoreB: number
   correctA: number
   correctB: number
   timerStart: number | null
-  currentQ: TBQuestion | null    // question currently on screen for the audience
-  showAnswer: boolean            // audience never shows answer; admin can toggle for their own view
+  currentQ: TBQuestion | null
+  showAnswer: boolean
 }
 
-// 20 pre-loaded general-knowledge fallback questions.
-const DEFAULT_QUESTIONS: Omit<TBQuestion, 'id'>[] = [
+// ── Default pools ─────────────────────────────────────────────────────────
+// 3 themed pools of 20 questions. Admin can edit anything before starting.
+
+const POOL_1: Omit<TBQuestion, 'id'>[] = [
   { text: 'What is the capital of Nigeria?', answer: 'Abuja' },
   { text: 'How many states are there in Nigeria?', answer: '36' },
   { text: 'Who is credited with inventing the light bulb?', answer: 'Thomas Edison' },
@@ -56,23 +60,82 @@ const DEFAULT_QUESTIONS: Omit<TBQuestion, 'id'>[] = [
   { text: 'What is the boiling point of water in Celsius?', answer: '100' },
 ]
 
-const makeQ = (q: Omit<TBQuestion, 'id'>): TBQuestion => ({ ...q, id: crypto.randomUUID() })
+const POOL_2: Omit<TBQuestion, 'id'>[] = [
+  { text: 'Who was the first President of Nigeria?', answer: 'Nnamdi Azikiwe' },
+  { text: 'What is the currency of Nigeria?', answer: 'Naira' },
+  { text: 'Which is the longest river in Nigeria?', answer: 'Niger' },
+  { text: 'Who wrote "Things Fall Apart"?', answer: 'Chinua Achebe' },
+  { text: 'What is the capital of Kenya?', answer: 'Nairobi' },
+  { text: 'Which country has the largest population in Africa?', answer: 'Nigeria' },
+  { text: 'Which African country was formerly called Rhodesia?', answer: 'Zimbabwe' },
+  { text: "Who was Africa's first female president?", answer: 'Ellen Johnson Sirleaf' },
+  { text: "What is the title of Nigeria's national anthem?", answer: 'Arise, O Compatriots' },
+  { text: 'In what year did Nigeria become a republic?', answer: '1963' },
+  { text: 'What is the largest desert in Africa?', answer: 'Sahara' },
+  { text: 'Which African country is completely surrounded by South Africa?', answer: 'Lesotho' },
+  { text: 'What is the capital of Ghana?', answer: 'Accra' },
+  { text: 'Which country is home to the Great Pyramids?', answer: 'Egypt' },
+  { text: 'What is the second most populous country in Africa?', answer: 'Ethiopia' },
+  { text: 'Which West African country is home to the ancient city of Timbuktu?', answer: 'Mali' },
+  { text: 'What is the highest mountain in Africa?', answer: 'Mount Kilimanjaro' },
+  { text: 'Which colour appears in the centre of the Nigerian flag?', answer: 'White' },
+  { text: "What is Nigeria's oil-producing region commonly called?", answer: 'Niger Delta' },
+  { text: 'Which body of water lies between Nigeria and Cameroon?', answer: 'Gulf of Guinea' },
+]
 
-const DEFAULT_STATE: TBState = {
+const POOL_3: Omit<TBQuestion, 'id'>[] = [
+  { text: 'What is the chemical formula for water?', answer: 'H2O' },
+  { text: 'What is the chemical symbol for iron?', answer: 'Fe' },
+  { text: 'What is 15 x 12?', answer: '180' },
+  { text: 'What is the square root of 144?', answer: '12' },
+  { text: 'What is the value of π to 2 decimal places?', answer: '3.14' },
+  { text: 'Who invented the telephone?', answer: 'Alexander Graham Bell' },
+  { text: 'What year did World War II end?', answer: '1945' },
+  { text: 'Who formulated the law of gravity?', answer: 'Isaac Newton' },
+  { text: 'What is the largest bone in the human body?', answer: 'Femur' },
+  { text: 'What is the powerhouse of the cell?', answer: 'Mitochondria' },
+  { text: 'Which planet is closest to the Sun?', answer: 'Mercury' },
+  { text: 'How many teeth does an adult human normally have?', answer: '32' },
+  { text: 'What gas do plants absorb from the atmosphere for photosynthesis?', answer: 'Carbon dioxide' },
+  { text: 'What is the chemical formula for salt?', answer: 'NaCl' },
+  { text: 'Who developed the theory of relativity?', answer: 'Albert Einstein' },
+  { text: 'What is 2 to the power of 10?', answer: '1024' },
+  { text: 'What year did humans first land on the moon?', answer: '1969' },
+  { text: 'What is the study of earthquakes called?', answer: 'Seismology' },
+  { text: 'What is the freezing point of water in Fahrenheit?', answer: '32' },
+  { text: 'Who was the first female Prime Minister of the United Kingdom?', answer: 'Margaret Thatcher' },
+]
+
+const makeQ = (q: Omit<TBQuestion, 'id'>): TBQuestion => ({ ...q, id: crypto.randomUUID() })
+const makePool = (title: string, arr: Omit<TBQuestion, 'id'>[]): TBPool => ({
+  id: crypto.randomUUID(),
+  title,
+  questions: arr.map(makeQ),
+})
+
+const DEFAULT_POOLS = () => [
+  makePool('General Knowledge', POOL_1),
+  makePool('Nigerian & African', POOL_2),
+  makePool('Science, Math & History', POOL_3),
+]
+
+const DEFAULT_STATE = (): TBState => ({
   phase: 'setup',
   teamA: '', teamB: '',
   priorA: 0, priorB: 0,
-  questions: DEFAULT_QUESTIONS.map(makeQ),
+  pools: DEFAULT_POOLS(),
+  chosenPoolId: null,
   queueA: [], queueB: [],
   scoreA: 0, scoreB: 0,
   correctA: 0, correctB: 0,
   timerStart: null,
   currentQ: null,
   showAnswer: false,
-}
+})
 
 export default function TieBreakerAdmin() {
-  const [s, setS] = useState<TBState>(DEFAULT_STATE)
+  const [s, setS] = useState<TBState>(DEFAULT_STATE())
+  const [poolTab, setPoolTab] = useState<number>(0)  // index of pool currently open for editing
   const [teams, setTeams] = useState<RegisteredTeam[]>([])
   const [editingQ, setEditingQ] = useState<string | null>(null)
   const [newQ, setNewQ] = useState({ text: '', answer: '' })
@@ -96,7 +159,16 @@ export default function TieBreakerAdmin() {
       if (hydrated.current) return
       hydrated.current = true
       skipNextBroadcast.current = true         // skip the setS-triggered broadcast
-      setS(payload as TBState)
+      // Migrate a pre-refactor payload that has no `pools` field. Rather than
+      // crash, we backfill with the default 3 pools so the setup screen still
+      // works — the admin can pick or edit from there.
+      const raw = payload as Partial<TBState>
+      const migrated: TBState = {
+        ...DEFAULT_STATE(),
+        ...raw,
+        pools: (raw.pools && raw.pools.length > 0) ? raw.pools : DEFAULT_POOLS(),
+      }
+      setS(migrated)
     })
     // If nothing arrives from the DB after 800ms, assume there's no prior
     // state and unlock our broadcast so the first user action publishes.
@@ -158,12 +230,21 @@ export default function TieBreakerAdmin() {
   const isPlayingA = s.phase === 'a_playing'
   const isPlayingB = s.phase === 'b_playing'
   const activeQueue: TBQuestion[] = isPlayingA ? s.queueA : isPlayingB ? s.queueB : []
+  // Guard everywhere against missing pools — a DB row from before the refactor
+  // won't have this field, so we normalise defensively.
+  const safePools = s.pools ?? []
+  const chosenPool = safePools.find(p => p.id === s.chosenPoolId) ?? null
 
-  function startTeamA() {
-    if (!s.teamA.trim() || !s.teamB.trim() || s.questions.length === 0) return
-    const queue = [...s.questions]
+  function startTeamA(poolId?: string) {
+    // If the host clicked a specific pool button, use that; otherwise fall
+    // back to the currently chosen pool (or the first pool as a last resort).
+    const targetId = poolId ?? s.chosenPoolId ?? s.pools[0]?.id
+    const pool = safePools.find(p => p.id === targetId)
+    if (!s.teamA.trim() || !s.teamB.trim() || !pool || pool.questions.length === 0) return
+    const queue = pool.questions.map(q => ({ ...q }))
     update({
       phase: 'a_playing',
+      chosenPoolId: pool.id,
       queueA: queue,
       scoreA: 0,
       correctA: 0,
@@ -174,8 +255,9 @@ export default function TieBreakerAdmin() {
   }
 
   function startTeamB() {
-    if (s.questions.length === 0) return
-    const queue = [...s.questions]
+    const pool = safePools.find(p => p.id === s.chosenPoolId)
+    if (!pool || pool.questions.length === 0) return
+    const queue = pool.questions.map(q => ({ ...q }))
     update({
       phase: 'b_playing',
       queueB: queue,
@@ -233,23 +315,46 @@ export default function TieBreakerAdmin() {
     })
   }
 
-  const reset = () => update(DEFAULT_STATE)
+  const reset = () => update(DEFAULT_STATE())
 
-  // Question editing
+  // Pool editing — always targets the pool currently open in the tabs.
+  const updatePoolTitle = (val: string) => {
+    setS(p => ({
+      ...p,
+      pools: p.pools.map((pl, i) => i === poolTab ? { ...pl, title: val } : pl),
+    }))
+  }
   const updateQ = (id: string, field: 'text' | 'answer', val: string) => {
-    setS(p => ({ ...p, questions: p.questions.map(q => q.id === id ? { ...q, [field]: val } : q) }))
+    setS(p => ({
+      ...p,
+      pools: p.pools.map((pl, i) =>
+        i === poolTab ? { ...pl, questions: pl.questions.map(q => q.id === id ? { ...q, [field]: val } : q) } : pl
+      ),
+    }))
   }
   const deleteQ = (id: string) => {
-    setS(p => ({ ...p, questions: p.questions.filter(q => q.id !== id) }))
+    setS(p => ({
+      ...p,
+      pools: p.pools.map((pl, i) =>
+        i === poolTab ? { ...pl, questions: pl.questions.filter(q => q.id !== id) } : pl
+      ),
+    }))
   }
   const addQ = () => {
     if (!newQ.text.trim()) return
     setS(p => ({
       ...p,
-      questions: [...p.questions, makeQ({ text: newQ.text.trim(), answer: newQ.answer.trim() })],
+      pools: p.pools.map((pl, i) =>
+        i === poolTab
+          ? { ...pl, questions: [...pl.questions, makeQ({ text: newQ.text.trim(), answer: newQ.answer.trim() })] }
+          : pl
+      ),
     }))
     setNewQ({ text: '', answer: '' })
   }
+  const currentEditingPool = s.pools[poolTab]
+  const currentEditingQs = currentEditingPool?.questions ?? []
+  const poolReady = (i: number) => (s.pools[i]?.questions.length ?? 0) > 0 && (s.pools[i]?.questions ?? []).every(q => q.answer.trim())
 
   // ── Derived render values ───────────────────────────────────────────────
   const timePct = timeLeft / ROUND_MS
@@ -347,14 +452,63 @@ export default function TieBreakerAdmin() {
               </div>
             </div>
 
-            {/* Questions */}
-            <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <h2 className="text-white font-bold text-sm">Question Pool ({s.questions.length})</h2>
-                <p className="text-[10px] text-slate-500">{DEFAULT_POOL_SIZE} pre-loaded — edit, add, or delete</p>
+            {/* Pool selector — which pool will the round use? */}
+            <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-3 space-y-2">
+              <p className="text-white font-bold text-sm">Pool for this round</p>
+              <div className="grid grid-cols-1 gap-1.5">
+                {safePools.map(pl => {
+                  const active = s.chosenPoolId === pl.id
+                  return (
+                    <button key={pl.id} onClick={() => update({ chosenPoolId: pl.id })}
+                      className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors border ${
+                        active ? 'bg-pink-500/20 border-pink-500' : 'bg-slate-800/60 border-slate-700 hover:border-slate-500'
+                      }`}>
+                      <span className={`h-3 w-3 rounded-full border ${
+                        active ? 'bg-pink-400 border-pink-300' : 'border-slate-500'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-bold truncate">{pl.title || '(untitled pool)'}</p>
+                        <p className="text-slate-500 text-[10px]">{pl.questions.length} questions</p>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
+            </div>
+
+            {/* Pool editor — 3 tabs, one per pool */}
+            <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-2">
+              <h2 className="text-white font-bold text-sm">Edit Pools</h2>
+              <div className="flex gap-2 border-b border-slate-700 pb-1 flex-wrap">
+                {safePools.map((pl, i) => (
+                  <button key={pl.id} onClick={() => { setPoolTab(i); setEditingQ(null) }}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-t-lg transition-colors ${
+                      poolTab === i
+                        ? 'bg-purple-700/40 text-white border border-purple-500/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}>
+                    Pool {i + 1} ({pl.questions.length})
+                    {poolReady(i) && <span className="text-green-400 ml-1">✓</span>}
+                  </button>
+                ))}
+              </div>
+
+              {/* Pool title */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">Pool title</label>
+                <input value={currentEditingPool?.title ?? ''} onChange={e => updatePoolTitle(e.target.value)}
+                  placeholder="e.g. General Knowledge"
+                  className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-sm" />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-gray-400 font-semibold">
+                  Pool {poolTab + 1} questions ({currentEditingQs.length}) — fill in ALL answers
+                </label>
+              </div>
+
               <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-                {s.questions.map((q, i) => (
+                {currentEditingQs.map((q, i) => (
                   <div key={q.id} className="bg-slate-800/60 rounded-lg p-2 flex items-start gap-2">
                     <span className="text-[10px] text-slate-500 font-bold w-5 shrink-0 mt-1">{i + 1}</span>
                     <div className="flex-1 space-y-1">
@@ -394,15 +548,15 @@ export default function TieBreakerAdmin() {
                   className="w-full bg-slate-700 border border-green-500/30 rounded px-2 py-1 text-green-300 text-xs" />
                 <button onClick={addQ} disabled={!newQ.text.trim()}
                   className="text-[10px] bg-purple-600/40 hover:bg-purple-600/70 disabled:opacity-40 text-purple-300 px-2 py-1 rounded font-semibold">
-                  + Add
+                  + Add to Pool {poolTab + 1}
                 </button>
               </div>
             </div>
 
-            <button onClick={startTeamA}
-              disabled={!s.teamA.trim() || !s.teamB.trim() || s.questions.length === 0}
+            <button onClick={() => startTeamA()}
+              disabled={!s.teamA.trim() || !s.teamB.trim() || !s.chosenPoolId || (chosenPool?.questions.length ?? 0) === 0}
               className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-3 rounded-xl text-base">
-              ▶ Start Rapid Fire — {s.teamA || 'Team A'} first (30s)
+              ▶ Start Rapid Fire — {s.teamA || 'Team A'} first (30s){chosenPool ? ` · ${chosenPool.title}` : ''}
             </button>
           </div>
         )}
@@ -480,7 +634,7 @@ export default function TieBreakerAdmin() {
               <p className="text-green-300 text-[10px] font-bold uppercase tracking-widest">Half-Time</p>
               <p className="text-white text-xl font-black">{s.teamA} scored</p>
               <p className="text-green-400 text-4xl font-black">{s.scoreA}</p>
-              <p className="text-slate-500 text-xs">out of {s.questions.length} questions in the pool ({s.correctA} correct)</p>
+              <p className="text-slate-500 text-xs">out of {chosenPool?.questions.length ?? 0} questions in the pool ({s.correctA} correct)</p>
             </div>
             <button onClick={startTeamB}
               className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-xl text-base">
