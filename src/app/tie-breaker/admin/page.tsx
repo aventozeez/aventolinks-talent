@@ -21,8 +21,9 @@ type TBState = {
   teamB: string
   priorA: number
   priorB: number
-  pools: TBPool[]                // multiple pools, host picks one per round
-  chosenPoolId: string | null    // pool currently in play (locked at round start)
+  pools: TBPool[]                // multiple pools; the host picks a DIFFERENT one per team
+  chosenPoolA: string | null     // pool team A played (locked when their round starts)
+  chosenPoolB: string | null     // pool team B played (locked when their round starts)
   queueA: TBQuestion[]
   queueB: TBQuestion[]
   scoreA: number
@@ -131,7 +132,8 @@ const DEFAULT_STATE = (): TBState => ({
   teamA: '', teamB: '',
   priorA: 0, priorB: 0,
   pools: DEFAULT_POOLS(),
-  chosenPoolId: null,
+  chosenPoolA: null,
+  chosenPoolB: null,
   queueA: [], queueB: [],
   scoreA: 0, scoreB: 0,
   correctA: 0, correctB: 0,
@@ -240,18 +242,18 @@ export default function TieBreakerAdmin() {
   // Guard everywhere against missing pools — a DB row from before the refactor
   // won't have this field, so we normalise defensively.
   const safePools = s.pools ?? []
-  const chosenPool = safePools.find(p => p.id === s.chosenPoolId) ?? null
+  const chosenPoolA = safePools.find(p => p.id === s.chosenPoolA) ?? null
+  const chosenPoolB = safePools.find(p => p.id === s.chosenPoolB) ?? null
+  // Which pool is the currently-playing team on? Used for headers + break/done screens.
+  const activePool = isPlayingA ? chosenPoolA : isPlayingB ? chosenPoolB : null
 
-  function startTeamA(poolId?: string) {
-    // If the host clicked a specific pool button, use that; otherwise fall
-    // back to the currently chosen pool (or the first pool as a last resort).
-    const targetId = poolId ?? s.chosenPoolId ?? s.pools[0]?.id
-    const pool = safePools.find(p => p.id === targetId)
+  function startTeamA(poolId: string) {
+    const pool = safePools.find(p => p.id === poolId)
     if (!s.teamA.trim() || !s.teamB.trim() || !pool || pool.questions.length === 0) return
     const queue = pool.questions.map(q => ({ ...q }))
     update({
       phase: 'a_playing',
-      chosenPoolId: pool.id,
+      chosenPoolA: pool.id,
       queueA: queue,
       scoreA: 0,
       correctA: 0,
@@ -261,12 +263,14 @@ export default function TieBreakerAdmin() {
     })
   }
 
-  function startTeamB() {
-    const pool = safePools.find(p => p.id === s.chosenPoolId)
+  function startTeamB(poolId: string) {
+    const pool = safePools.find(p => p.id === poolId)
     if (!pool || pool.questions.length === 0) return
+    if (pool.id === s.chosenPoolA) return   // must be a different pool
     const queue = pool.questions.map(q => ({ ...q }))
     update({
       phase: 'b_playing',
+      chosenPoolB: pool.id,
       queueB: queue,
       scoreB: 0,
       correctB: 0,
@@ -316,6 +320,7 @@ export default function TieBreakerAdmin() {
   function playAnotherRound() {
     update({
       phase: 'setup',
+      chosenPoolA: null, chosenPoolB: null,
       queueA: [], queueB: [],
       scoreA: 0, scoreB: 0, correctA: 0, correctB: 0,
       timerStart: null, currentQ: null, showAnswer: false,
@@ -459,30 +464,6 @@ export default function TieBreakerAdmin() {
               </div>
             </div>
 
-            {/* Pool selector — which pool will the round use? */}
-            <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-3 space-y-2">
-              <p className="text-white font-bold text-sm">Pool for this round</p>
-              <div className="grid grid-cols-1 gap-1.5">
-                {safePools.map(pl => {
-                  const active = s.chosenPoolId === pl.id
-                  return (
-                    <button key={pl.id} onClick={() => update({ chosenPoolId: pl.id })}
-                      className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors border ${
-                        active ? 'bg-pink-500/20 border-pink-500' : 'bg-slate-800/60 border-slate-700 hover:border-slate-500'
-                      }`}>
-                      <span className={`h-3 w-3 rounded-full border ${
-                        active ? 'bg-pink-400 border-pink-300' : 'border-slate-500'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-bold truncate">{pl.title || '(untitled pool)'}</p>
-                        <p className="text-slate-500 text-[10px]">{pl.questions.length} questions</p>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
             {/* Pool editor — one tab per pool, "+ New Pool" adds another */}
             <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
@@ -516,8 +497,12 @@ export default function TieBreakerAdmin() {
                           if (!window.confirm(`Delete Pool ${i + 1}? This can't be undone.`)) return
                           setS(p => {
                             const newPools = (p.pools ?? []).filter((_, idx) => idx !== i)
-                            const newChosen = p.chosenPoolId === pl.id ? null : p.chosenPoolId
-                            return { ...p, pools: newPools, chosenPoolId: newChosen }
+                            return {
+                              ...p,
+                              pools: newPools,
+                              chosenPoolA: p.chosenPoolA === pl.id ? null : p.chosenPoolA,
+                              chosenPoolB: p.chosenPoolB === pl.id ? null : p.chosenPoolB,
+                            }
                           })
                           setPoolTab(t => Math.max(0, t >= i ? t - 1 : t))
                           setEditingQ(null)
@@ -591,11 +576,29 @@ export default function TieBreakerAdmin() {
               </div>
             </div>
 
-            <button onClick={() => startTeamA()}
-              disabled={!s.teamA.trim() || !s.teamB.trim() || !s.chosenPoolId || (chosenPool?.questions.length ?? 0) === 0}
-              className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-3 rounded-xl text-base">
-              ▶ Start Rapid Fire — {s.teamA || 'Team A'} first (30s){chosenPool ? ` · ${chosenPool.title}` : ''}
-            </button>
+            {/* Start Team A — one button per pool. Each team plays a DIFFERENT pool. */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-white font-bold text-sm">
+                  Pick {s.teamA || 'Team A'}&apos;s pool to start (30s)
+                </p>
+                <p className="text-slate-500 text-[10px]">Each team gets a different pool</p>
+              </div>
+              <div className="grid grid-cols-1 gap-1.5">
+                {safePools.map((pl, i) => (
+                  <button key={pl.id} onClick={() => startTeamA(pl.id)}
+                    disabled={!s.teamA.trim() || !s.teamB.trim() || pl.questions.length === 0}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors border bg-green-900/30 border-green-500/40 hover:bg-green-800/40 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <span className="text-green-400 text-xs font-black">▶</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-bold truncate">Pool {i + 1} · {pl.title}</p>
+                      <p className="text-slate-400 text-[10px]">{pl.questions.length} questions</p>
+                    </div>
+                    {poolReady(i) && <span className="text-green-400 text-xs">✓</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -609,7 +612,9 @@ export default function TieBreakerAdmin() {
                   <p className={`text-[10px] font-bold uppercase tracking-widest ${isPlayingA ? 'text-green-300' : 'text-blue-300'}`}>
                     {isPlayingA ? s.teamA : s.teamB} · Rapid Fire
                   </p>
-                  <p className="text-white text-sm font-bold">{activeQueue.length} left in queue</p>
+                  <p className="text-white text-sm font-bold">
+                    {activeQueue.length} left {activePool ? `· ${activePool.title}` : ''}
+                  </p>
                 </div>
                 <p className={`text-4xl font-black tabular-nums ${
                   timePct > 0.4 ? 'text-green-400' : timePct > 0.2 ? 'text-yellow-400' : 'text-red-400'
@@ -672,12 +677,42 @@ export default function TieBreakerAdmin() {
               <p className="text-green-300 text-[10px] font-bold uppercase tracking-widest">Half-Time</p>
               <p className="text-white text-xl font-black">{s.teamA} scored</p>
               <p className="text-green-400 text-4xl font-black">{s.scoreA}</p>
-              <p className="text-slate-500 text-xs">out of {chosenPool?.questions.length ?? 0} questions in the pool ({s.correctA} correct)</p>
+              <p className="text-slate-500 text-xs">
+                out of {chosenPoolA?.questions.length ?? 0} questions in <b className="text-slate-300">{chosenPoolA?.title ?? 'the pool'}</b> ({s.correctA} correct)
+              </p>
             </div>
-            <button onClick={startTeamB}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-xl text-base">
-              ▶ Start {s.teamB} (30s)
-            </button>
+
+            {/* Pool picker for Team B — Team A's pool is dimmed out */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-white font-bold text-sm">
+                  Pick {s.teamB || 'Team B'}&apos;s pool to start (30s)
+                </p>
+                <p className="text-slate-500 text-[10px]">Different pool from {s.teamA}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-1.5">
+                {safePools.map((pl, i) => {
+                  const takenByA = pl.id === s.chosenPoolA
+                  return (
+                    <button key={pl.id} onClick={() => startTeamB(pl.id)}
+                      disabled={takenByA || pl.questions.length === 0}
+                      className={`flex items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors border ${
+                        takenByA
+                          ? 'bg-slate-800/40 border-slate-700 opacity-40 cursor-not-allowed'
+                          : 'bg-blue-900/30 border-blue-500/40 hover:bg-blue-800/40'
+                      }`}>
+                      <span className={`text-xs font-black ${takenByA ? 'text-slate-500' : 'text-blue-400'}`}>▶</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-bold truncate">Pool {i + 1} · {pl.title}</p>
+                        <p className="text-slate-400 text-[10px]">
+                          {pl.questions.length} questions{takenByA ? ` · already played by ${s.teamA}` : ''}
+                        </p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         )}
 

@@ -16,7 +16,8 @@ type TBState = {
   priorA: number
   priorB: number
   pools: TBPool[]
-  chosenPoolId: string | null
+  chosenPoolA: string | null
+  chosenPoolB: string | null
   queueA: TBQuestion[]
   queueB: TBQuestion[]
   scoreA: number
@@ -120,7 +121,8 @@ export default function TieBreakerAudience() {
   const playingName = isPlayingA ? s.teamA : s.teamB
   const activeQueue = isPlayingA ? s.queueA : s.queueB
   const currentQ = activeQueue[0] ?? s.currentQ
-  const chosenPool = s.pools?.find(p => p.id === s.chosenPoolId) ?? null
+  const chosenPoolId = isPlayingA ? s.chosenPoolA : s.chosenPoolB
+  const chosenPool = s.pools?.find(p => p.id === chosenPoolId) ?? null
   const timeLeft = s.timerStart ? Math.max(0, ROUND_MS - (now - s.timerStart)) : ROUND_MS
   const timePct = timeLeft / ROUND_MS
   const timeColour = timePct > 0.4 ? '#22c55e' : timePct > 0.2 ? '#f59e0b' : '#ef4444'
