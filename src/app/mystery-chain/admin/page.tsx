@@ -1226,6 +1226,12 @@ export default function MCAdminPage() {
                       teamB: winners[1].name,
                       mcScoreA: winners[0].total,
                       mcScoreB: winners[1].total,
+                      // Per-round breakdown of the prior total, so AV's
+                      // compare_total screen can show RF/BZ/IS/MC chips.
+                      rfA: winners[0].rf, rfB: winners[1].rf,
+                      bzA: winners[0].bz, bzB: winners[1].bz,
+                      isA: winners[0].is, isB: winners[1].is,
+                      mcOnlyA: winners[0].mc, mcOnlyB: winners[1].mc,
                       pools,
                       chosenPoolA: null,
                       chosenPoolB: null,

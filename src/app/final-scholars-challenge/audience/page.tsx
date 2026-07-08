@@ -9,6 +9,7 @@ import {
 } from '@/lib/fsc-live'
 import RoundInstructionsInline from '@/components/round-instructions-inline'
 import { ROUND_INFO } from '@/lib/round-info'
+import WelcomeScreen from '@/components/welcome-screen'
 
 export default function AudiencePage() {
   const [state, setState] = useState<FSCState | null>(null)
@@ -89,6 +90,11 @@ export default function AudiencePage() {
     if (round === 'innovation_sprint' && s.is_phase === 'idle' && s.is_score_a === 0 && s.is_score_b === 0 && s.is_problem_index === 0) return ROUND_INFO.innovation_sprint
     return null
   })()
+
+  // No match loaded yet → branded Welcome splash.
+  if (round === 'idle') {
+    return <WelcomeScreen subtitle="The next match will begin as soon as the host launches it." />
+  }
 
   if (showIntroFor) {
     return (
@@ -192,11 +198,9 @@ export default function AudiencePage() {
         <span className="text-xs font-black text-[#f5a623] uppercase tracking-[0.3em]">
           Final Scholars Challenge — Live
         </span>
-        {round !== 'idle' && (
-          <span className="text-xs font-bold text-slate-400 bg-white/5 px-3 py-1 rounded-full border border-white/10">
-            {ROUND_LABELS[round]}
-          </span>
-        )}
+        <span className="text-xs font-bold text-slate-400 bg-white/5 px-3 py-1 rounded-full border border-white/10">
+          {ROUND_LABELS[round]}
+        </span>
       </div>
 
       {/* Score board */}
@@ -236,14 +240,8 @@ export default function AudiencePage() {
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-5xl mx-auto w-full">
 
-        {/* ── Idle ── */}
-        {round === 'idle' && (
-          <div className="text-center space-y-5">
-            <div className="text-9xl">🎓</div>
-            <h1 className="text-5xl font-black text-white tracking-tight">Final Scholars Challenge</h1>
-            <p className="text-slate-400 text-xl">Waiting for the match to begin…</p>
-          </div>
-        )}
+        {/* ── Idle (no match in progress) ── */}
+        {/* Handled by the top-level welcome early-return below — nothing here. */}
 
         {/* ── Finished ── */}
         {round === 'finished' && (

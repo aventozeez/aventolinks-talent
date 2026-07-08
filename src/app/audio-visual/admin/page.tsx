@@ -29,8 +29,12 @@ type AVState = {
   _from_mc?: boolean
   phase: 'idle' | 'watching'
     | 'pick_pool_a' | 'qa_a'
-    | 'break'
+    | 'score_a'                         // dedicated Team A AV score reveal
+    | 'break'                           // legacy — auto-migrated to score_a
     | 'pick_pool_b' | 'qa_b'
+    | 'score_b'                         // dedicated Team B AV score reveal
+    | 'compare_av'                      // AV-round head-to-head
+    | 'compare_total'                   // cumulative with per-round breakdown
     | 'done'
     | 'tie_break'                       // buzzer-style sudden-death round when scores are tied
     | 'declare_first_runnerup' | 'declare_winner'
@@ -38,8 +42,15 @@ type AVState = {
   videoPlay: boolean
   teamA: string
   teamB: string
+  // Prior total carried in from MC (semi + MC). Keeps working exactly as before.
   mcScoreA: number
   mcScoreB: number
+  // Per-round breakdown of the prior total. Filled by the MC handoff broadcast.
+  // Optional so older payloads still hydrate cleanly.
+  rfA?: number; rfB?: number
+  bzA?: number; bzB?: number
+  isA?: number; isB?: number
+  mcOnlyA?: number; mcOnlyB?: number
   pools: AVPool[]              // 3 pools of 10 questions each
   chosenPoolA: string | null   // pool id picked by team A
   chosenPoolB: string | null   // pool id picked by team B
@@ -133,7 +144,7 @@ export default function AVAdmin() {
         if (remaining === 0) {
           setState(prev => ({
             ...prev,
-            phase: prev.phase === 'qa_a' ? 'break' : 'done',
+            phase: prev.phase === 'qa_a' ? 'score_a' : 'score_b',
             timerStart: null,
           }))
         }
@@ -153,6 +164,22 @@ export default function AVAdmin() {
   // After the video, teams pick their pools before answering
   function goPickPoolA()    { update({ phase: 'pick_pool_a', videoPlay: false }) }
   function goPickPoolB()    { update({ phase: 'pick_pool_b', videoPlay: false }) }
+  // Ceremony flow: score_a → pick_pool_b → qa_b → score_b → compare_av → compare_total → done
+  function goCompareAV()     { update({ phase: 'compare_av', timerStart: null }) }
+  function goCompareTotal()  { update({ phase: 'compare_total' }) }
+  function goToDone()        { update({ phase: 'done' }) }
+  // Reset the entire match: clears both mc:state and av:state so audience
+  // projectors on either channel show the Welcome page, then routes the
+  // admin to the Mystery Chain setup for the next match.
+  function resetMatch() {
+    if (!confirm('Reset the entire match? This clears both Mystery Chain and Audio Visual state and starts a fresh Welcome screen.')) return
+    // Broadcast fresh MC state so its audience projector shows Welcome
+    wsBroadcast('mc:state', { phase: 'setup', teamA: '', teamB: '', teamC: '' })
+    // Reset AV locally (this component's own broadcast will publish it)
+    setState({ ...DEFAULT_STATE })
+    // Navigate to MC setup
+    setTimeout(() => { window.location.href = '/mystery-chain/admin' }, 200)
+  }
 
   // Team A locks in a pool → 60s Q&A begins
   function pickPoolA(poolId: string) {
@@ -412,15 +439,15 @@ export default function AVAdmin() {
                 </div>
               )}
               {state.phase === 'qa_a' && (
-                <button onClick={() => update({ phase: 'break', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
-                  End {state.teamA} → Break
+                <button onClick={() => update({ phase: 'score_a', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
+                  End {state.teamA} → Score
                 </button>
               )}
-              {state.phase === 'break' && (<>
-                <div className="text-center py-3 bg-[#0d1117] rounded-xl border border-gray-700">
-                  <p className="text-gray-400 text-xs mb-1">{state.teamA} finished</p>
-                  <p className="text-green-400 font-black text-2xl">{state.scoreA} pts</p>
-                  <p className="text-gray-600 text-xs">MC {state.mcScoreA} + AV {avScoreA} ({state.correctA} correct)</p>
+              {(state.phase === 'score_a' || state.phase === 'break') && (<>
+                <div className="text-center py-4 bg-gradient-to-br from-green-500/15 to-[#0d1117] rounded-xl border-2 border-green-500/40">
+                  <p className="text-green-300 text-[10px] font-black uppercase tracking-widest">{state.teamA} — AV Score</p>
+                  <p className="text-white font-black text-5xl mt-1">{avScoreA}</p>
+                  <p className="text-gray-500 text-xs mt-1">{state.correctA} correct in 60 seconds</p>
                 </div>
                 <button onClick={goPickPoolB} className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold">
                   🎯 {state.teamB} — Pick Pool
@@ -444,10 +471,57 @@ export default function AVAdmin() {
                 </div>
               )}
               {state.phase === 'qa_b' && (
-                <button onClick={() => update({ phase: 'done', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
-                  End {state.teamB} → Results
+                <button onClick={() => update({ phase: 'score_b', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
+                  End {state.teamB} → Score
                 </button>
               )}
+              {state.phase === 'score_b' && (<>
+                <div className="text-center py-4 bg-gradient-to-br from-blue-500/15 to-[#0d1117] rounded-xl border-2 border-blue-500/40">
+                  <p className="text-blue-300 text-[10px] font-black uppercase tracking-widest">{state.teamB} — AV Score</p>
+                  <p className="text-white font-black text-5xl mt-1">{avScoreB}</p>
+                  <p className="text-gray-500 text-xs mt-1">{state.correctB} correct in 60 seconds</p>
+                </div>
+                <button onClick={goCompareAV} className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-black rounded-xl font-black">
+                  Compare AV Round →
+                </button>
+              </>)}
+              {state.phase === 'compare_av' && (<>
+                <div className="text-center py-3 bg-[#0d1117] rounded-xl border border-yellow-500/40 space-y-2">
+                  <p className="text-yellow-300 text-[10px] font-black uppercase tracking-widest">AV Round · Head-to-Head</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className={`rounded-lg p-2 ${avScoreA >= avScoreB ? 'bg-green-500/20 border border-green-500/40' : 'bg-white/5 border border-white/10'}`}>
+                      <p className="text-green-400 text-[10px] font-bold uppercase tracking-widest truncate">{state.teamA}</p>
+                      <p className="text-white text-2xl font-black">{avScoreA}</p>
+                    </div>
+                    <div className={`rounded-lg p-2 ${avScoreB >= avScoreA ? 'bg-blue-500/20 border border-blue-500/40' : 'bg-white/5 border border-white/10'}`}>
+                      <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest truncate">{state.teamB}</p>
+                      <p className="text-white text-2xl font-black">{avScoreB}</p>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={goCompareTotal} className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-black rounded-xl font-black">
+                  Show Cumulative Breakdown →
+                </button>
+              </>)}
+              {state.phase === 'compare_total' && (<>
+                <div className="text-center py-3 bg-[#0d1117] rounded-xl border border-yellow-500/40 space-y-2">
+                  <p className="text-yellow-300 text-[10px] font-black uppercase tracking-widest">Cumulative · All Rounds</p>
+                  {([['A', state.teamA, state.scoreA, state.rfA, state.bzA, state.isA, state.mcOnlyA, avScoreA, '#22c55e'],
+                     ['B', state.teamB, state.scoreB, state.rfB, state.bzB, state.isB, state.mcOnlyB, avScoreB, '#3b82f6']] as const)
+                    .map(([k, name, total, rf, bz, is, mc, av, colour]) => (
+                    <div key={k} className="rounded-lg bg-white/5 border border-white/10 p-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold uppercase tracking-widest truncate" style={{ color: colour }}>{name}</p>
+                        <p className="text-white text-lg font-black">{total}</p>
+                      </div>
+                      <p className="text-[9px] text-slate-500 mt-1 truncate">RF {rf ?? 0} · BZ {bz ?? 0} · IS {is ?? 0} · MC {mc ?? 0} · AV {av}</p>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={goToDone} className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-black rounded-xl font-black">
+                  Show Grand Final Results →
+                </button>
+              </>)}
               {(state.phase === 'done' || state.phase === 'declare_first_runnerup' || state.phase === 'declare_winner') && (
                 <div className="text-center py-3 space-y-2">
                   <p className="text-lg font-black text-yellow-400">🏆 Grand Final Complete!</p>
@@ -503,7 +577,13 @@ export default function AVAdmin() {
                       </button>
                     )}
                     {state.phase === 'declare_winner' && (
-                      <p className="text-xs text-yellow-400 font-bold italic pt-1">Winner declared. See audience screen.</p>
+                      <>
+                        <p className="text-xs text-yellow-400 font-bold italic pt-1 text-center">Winner declared. See audience screen.</p>
+                        <button onClick={resetMatch}
+                          className="w-full mt-2 py-3 bg-gradient-to-r from-[#006B3F] to-[#00854E] hover:brightness-110 border border-[#FFD700]/60 text-white rounded-xl font-black text-sm shadow-lg shadow-[#006B3F]/40">
+                          ↺ Reset — Start Another Match
+                        </button>
+                      </>
                     )}
                     {state.phase !== 'done' && (
                       <button onClick={() => update({ phase: 'done' })}

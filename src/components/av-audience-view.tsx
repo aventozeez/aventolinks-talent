@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { wsSubscribe } from '@/lib/ws-sync'
 import RoundInstructionsInline from '@/components/round-instructions-inline'
 import { ROUND_INFO } from '@/lib/round-info'
+import WelcomeScreen from '@/components/welcome-screen'
 
 // Uses the shared sync lib so both LAN (local WS relay) and public URL
 // (Supabase Realtime broadcast) transports work.
@@ -20,10 +21,15 @@ type AVQuestion = {
 type AVPool = { id: string; title: string; questions: AVQuestion[] }
 
 type AVState = {
+  _from_mc?: boolean
   phase: 'idle' | 'watching'
     | 'pick_pool_a' | 'qa_a'
+    | 'score_a'
     | 'break'
     | 'pick_pool_b' | 'qa_b'
+    | 'score_b'
+    | 'compare_av'
+    | 'compare_total'
     | 'done'
     | 'tie_break'
     | 'declare_first_runnerup' | 'declare_winner'
@@ -33,6 +39,11 @@ type AVState = {
   teamB: string
   mcScoreA: number
   mcScoreB: number
+  // Per-round breakdown of the prior total (optional — older payloads may omit).
+  rfA?: number; rfB?: number
+  bzA?: number; bzB?: number
+  isA?: number; isB?: number
+  mcOnlyA?: number; mcOnlyB?: number
   pools: AVPool[]
   chosenPoolA: string | null
   chosenPoolB: string | null
@@ -109,6 +120,8 @@ export default function AVAudienceView() {
   const currentCorrect = s.phase === 'qa_a' ? s.correctA : s.correctB
 
   if (s.phase === 'idle') {
+    // No match has been handed off from MC yet — show the Welcome splash.
+    if (!s._from_mc) return <WelcomeScreen subtitle="The Grand Final Audio Visual Round begins once the finalists are advanced." />
     return (
       <div className={`min-h-screen w-full text-white flex items-center justify-center px-6 py-12 bg-gradient-to-br ${ROUND_INFO.audio_visual.gradient}`}>
         <RoundInstructionsInline
@@ -187,17 +200,110 @@ export default function AVAudienceView() {
     )
   }
 
-  if (s.phase === 'break') {
+  // AV round score reveals (per team). scoreA/B carry MC prior + AV, so subtract
+  // to show the actual AV-round contribution.
+  const avA = s.scoreA - s.mcScoreA
+  const avB = s.scoreB - s.mcScoreB
+
+  if (s.phase === 'score_a' || s.phase === 'break') {
+    const poolTitle = s.pools?.find(p => p.id === s.chosenPoolA)?.title
     return (
-      <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center gap-8 text-white px-6">
-        <div className="text-5xl">☕</div>
-        <h2 className="text-3xl font-black text-center">Half-Time</h2>
-        <div className="bg-green-900/30 border border-green-500/30 rounded-2xl p-6 text-center w-full max-w-sm">
-          <p className="text-gray-400 text-sm mb-1">{s.teamA}</p>
-          <p className="text-5xl font-black text-green-400">{s.scoreA}</p>
-          <p className="text-xs text-gray-500 mt-1">{s.correctA}/{poolA?.questions.length ?? 0} correct in AV</p>
+      <div className="min-h-screen bg-gradient-to-br from-green-950 via-[#06080f] to-green-950 flex flex-col items-center justify-center gap-6 text-white px-6 text-center">
+        <p className="text-green-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">{s.teamA} — AV Round Score</p>
+        <div className="bg-green-500/15 border-4 border-green-500/60 rounded-3xl px-16 py-10 shadow-[0_20px_60px_-10px_rgba(34,197,94,0.4)]">
+          <p className="text-white text-[10rem] md:text-[12rem] font-black leading-none">{avA}</p>
+          <p className="text-green-300 text-lg md:text-xl mt-2 font-bold">points</p>
         </div>
-        <p className="text-yellow-300 font-bold animate-pulse">⏳ {s.teamB} is up next…</p>
+        <p className="text-slate-400 text-base md:text-lg">
+          {s.correctA} correct in 60 seconds{poolTitle ? ` · ${poolTitle}` : ''}
+        </p>
+        <p className="text-yellow-300 font-bold text-xl md:text-2xl animate-pulse mt-4">⏳ {s.teamB} is up next…</p>
+      </div>
+    )
+  }
+
+  if (s.phase === 'score_b') {
+    const poolTitle = s.pools?.find(p => p.id === s.chosenPoolB)?.title
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-950 via-[#06080f] to-blue-950 flex flex-col items-center justify-center gap-6 text-white px-6 text-center">
+        <p className="text-blue-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">{s.teamB} — AV Round Score</p>
+        <div className="bg-blue-500/15 border-4 border-blue-500/60 rounded-3xl px-16 py-10 shadow-[0_20px_60px_-10px_rgba(59,130,246,0.4)]">
+          <p className="text-white text-[10rem] md:text-[12rem] font-black leading-none">{avB}</p>
+          <p className="text-blue-300 text-lg md:text-xl mt-2 font-bold">points</p>
+        </div>
+        <p className="text-slate-400 text-base md:text-lg">
+          {s.correctB} correct in 60 seconds{poolTitle ? ` · ${poolTitle}` : ''}
+        </p>
+        <p className="text-yellow-300 font-bold text-xl md:text-2xl animate-pulse mt-4">📊 Comparing scores…</p>
+      </div>
+    )
+  }
+
+  if (s.phase === 'compare_av') {
+    const aWins = avA > avB
+    const bWins = avB > avA
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#001a2a] via-[#00253d] to-[#001a2a] text-white flex flex-col items-center justify-center gap-8 px-6 py-12">
+        <p className="text-[#f5a623] text-sm md:text-base font-black uppercase tracking-[0.4em]">AV Round · Head-to-Head</p>
+        <div className="text-8xl md:text-9xl">📺</div>
+        <div className="grid grid-cols-2 gap-6 md:gap-8 w-full max-w-4xl">
+          <div className={`rounded-3xl p-8 text-center border-4 ${aWins ? 'bg-green-500/25 border-green-400 shadow-[0_20px_60px_-15px_rgba(34,197,94,0.5)]' : 'bg-white/5 border-white/10'}`}>
+            {aWins && <div className="text-4xl mb-2">🏆</div>}
+            <p className="text-green-300 text-sm md:text-base font-black uppercase tracking-widest truncate">{s.teamA}</p>
+            <p className="text-white text-7xl md:text-8xl font-black mt-2">{avA}</p>
+            <p className="text-green-400 text-sm md:text-base mt-2">{s.correctA} correct</p>
+          </div>
+          <div className={`rounded-3xl p-8 text-center border-4 ${bWins ? 'bg-blue-500/25 border-blue-400 shadow-[0_20px_60px_-15px_rgba(59,130,246,0.5)]' : 'bg-white/5 border-white/10'}`}>
+            {bWins && <div className="text-4xl mb-2">🏆</div>}
+            <p className="text-blue-300 text-sm md:text-base font-black uppercase tracking-widest truncate">{s.teamB}</p>
+            <p className="text-white text-7xl md:text-8xl font-black mt-2">{avB}</p>
+            <p className="text-blue-400 text-sm md:text-base mt-2">{s.correctB} correct</p>
+          </div>
+        </div>
+        <p className="text-yellow-300 font-black text-2xl md:text-3xl">
+          {aWins ? `${s.teamA} leads the AV round` : bWins ? `${s.teamB} leads the AV round` : `🤝 Level at ${avA}`}
+        </p>
+      </div>
+    )
+  }
+
+  if (s.phase === 'compare_total') {
+    const teams = ([
+      { key: 'A', name: s.teamA, rf: s.rfA ?? 0, bz: s.bzA ?? 0, is: s.isA ?? 0, mc: s.mcOnlyA ?? 0, av: avA, total: s.scoreA, colour: '#22c55e' },
+      { key: 'B', name: s.teamB, rf: s.rfB ?? 0, bz: s.bzB ?? 0, is: s.isB ?? 0, mc: s.mcOnlyB ?? 0, av: avB, total: s.scoreB, colour: '#3b82f6' },
+    ] as const).slice().sort((a, b) => b.total - a.total)
+    const anyBreakdown = teams.some(t => (t.rf + t.bz + t.is + t.mc) > 0)
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#0a0a1f] text-white flex flex-col items-center justify-center gap-8 px-6 py-12">
+        <div className="text-center space-y-2">
+          <p className="text-[#f5a623] text-xs md:text-sm font-black uppercase tracking-[0.4em]">Grand Final · All Rounds</p>
+          <h2 className="text-4xl md:text-6xl font-black text-white leading-tight">Cumulative Scores</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-6 md:gap-8 w-full max-w-5xl">
+          {teams.map((t, i) => (
+            <div key={t.key}
+              className={`rounded-3xl p-6 md:p-8 text-center border-4 ${i === 0 ? 'shadow-[0_20px_60px_-15px_rgba(245,166,35,0.5)]' : ''}`}
+              style={{
+                borderColor: `${t.colour}${i === 0 ? 'ff' : '55'}`,
+                background: i === 0 ? `${t.colour}25` : `${t.colour}10`,
+              }}>
+              {i === 0 && <div className="text-4xl md:text-5xl mb-2">🏆</div>}
+              <p className="text-sm md:text-base font-black uppercase tracking-widest truncate" style={{ color: t.colour }}>{t.name}</p>
+              <p className="text-white text-7xl md:text-8xl font-black mt-2 md:mt-3 tabular-nums leading-none">{t.total}</p>
+              {anyBreakdown ? (
+                <div className="grid grid-cols-5 gap-1.5 mt-4">
+                  <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-1.5"><p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.rf}</p></div>
+                  <div className="rounded-lg bg-blue-500/15 border border-blue-500/40 py-1.5"><p className="text-blue-300 text-[9px] font-black uppercase tracking-widest">BZ</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.bz}</p></div>
+                  <div className="rounded-lg bg-cyan-500/15 border border-cyan-500/40 py-1.5"><p className="text-cyan-300 text-[9px] font-black uppercase tracking-widest">IS</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.is}</p></div>
+                  <div className="rounded-lg bg-purple-500/15 border border-purple-500/40 py-1.5"><p className="text-purple-300 text-[9px] font-black uppercase tracking-widest">MC</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.mc}</p></div>
+                  <div className="rounded-lg bg-white/10 border border-white/30 py-1.5"><p className="text-white/80 text-[9px] font-black uppercase tracking-widest">AV</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.av}</p></div>
+                </div>
+              ) : (
+                <p className="text-slate-400 text-sm md:text-base mt-2">Prior {t.mc} + AV {t.av}</p>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

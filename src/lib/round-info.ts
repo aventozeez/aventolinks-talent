@@ -148,11 +148,11 @@ export const ROUND_INFO: Record<RoundInfo['key'], RoundInfo> = {
     emoji: '📺',
     eyebrow: 'Grand Final · Two-Team Showdown',
     title: 'Audio Visual Round',
-    tagline: 'Watch the video. Pick a themed pool. Race to answer before time runs out.',
+    tagline: 'Watch the video clip. Pick a themed pool. Race to answer before time runs out.',
     gradient: 'from-[#001a2a] via-[#00253d] to-[#0a0a1f]',
     accent: '#3b82f6',
     rules: [
-      'Both finalists watch a 2-minute video together — everything they need is inside it.',
+      'Both finalists watch a short video clip together — everything they need is inside it.',
       'After the video, Team A chooses one of three themed pools. Team B will pick from the remaining two.',
       'Team A then has 60 seconds to answer as many questions from their pool as they can.',
       'Team B then picks their pool (different from Team A) and gets their own 60-second window.',

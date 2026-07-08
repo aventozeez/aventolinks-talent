@@ -5,6 +5,7 @@ import { wsSubscribe } from '@/lib/ws-sync'
 import AVAudienceView from '@/components/av-audience-view'
 import RoundInstructionsInline from '@/components/round-instructions-inline'
 import { ROUND_INFO } from '@/lib/round-info'
+import WelcomeScreen from '@/components/welcome-screen'
 
 const CHANNEL = 'mc:state'
 const MC_TIME_MS = 60_000
@@ -789,14 +790,11 @@ export default function MCAudiencePage() {
   const pickingTeam = s?.phase === 'pick_A' ? s.teamA : s?.phase === 'pick_B' ? s.teamB : s?.phase === 'pick_C' ? s.teamC : null
   const takenIds = s ? [s.chosenA, s.chosenB, s.chosenC].filter(Boolean) as string[] : []
 
-  // Waiting — dedicated full-screen instructions before the round begins
+  // Before any match starts (fresh state or post-reset) show the branded
+  // Welcome splash. Only once the host advances beyond setup do we surface
+  // the Mystery Chain instructions.
   if (!s || s.phase === 'setup') return (
-    <div className={`min-h-screen w-full text-white flex items-center justify-center px-6 py-12 bg-gradient-to-br ${ROUND_INFO.mystery_chain.gradient}`}>
-      <RoundInstructionsInline
-        info={ROUND_INFO.mystery_chain}
-        footerHint="Waiting for the host to reveal the opening story…"
-      />
-    </div>
+    <WelcomeScreen subtitle="Team names and semi-final scores are being entered. Sit tight — the mystery begins soon." />
   )
 
   // Intro
