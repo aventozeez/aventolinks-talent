@@ -333,7 +333,7 @@ export default function AdminPage() {
           autoEndedRFRef.current = true
           // Score is already current from live updates — just flip the phase
           const isA = s.rf_phase === 'a_playing'
-          applyStateRef.current?.({ ...s, rf_phase: isA ? 'break' : 'done' })
+          applyStateRef.current?.({ ...s, rf_phase: isA ? 'score_a' : 'score_b' })
         }
       } else if ((s.bz_phase === 'buzzed_a' || s.bz_phase === 'buzzed_b' || s.bz_phase === 'second_chance') && s.bz_buzz_start) {
         setTimerMs(Math.max(0, BZ_TIME_MS - (Date.now() - s.bz_buzz_start)))
@@ -834,13 +834,28 @@ export default function AdminPage() {
   }
 
   // ── RF Actions ─────────────────────────────────────────────────────────────
+  // idle → announce_a → a_playing → score_a → announce_b → b_playing → score_b → compare
+  const announceRFTeamA = () => {
+    const s = fscRef.current; if (!s) return
+    applyState({ ...s, rf_phase: 'announce_a' })
+  }
   const startRFTeamA = () => {
     const s = fscRef.current; if (!s) return
+    autoEndedRFRef.current = false
     applyState({ ...s, rf_phase: 'a_playing', rf_q_index: 0, rf_timer_start: Date.now(), rf_correct_a: 0 })
+  }
+  const announceRFTeamB = () => {
+    const s = fscRef.current; if (!s) return
+    applyState({ ...s, rf_phase: 'announce_b' })
   }
   const startRFTeamB = () => {
     const s = fscRef.current; if (!s) return
+    autoEndedRFRef.current = false
     applyState({ ...s, rf_phase: 'b_playing', rf_q_index: 0, rf_timer_start: Date.now(), rf_correct_b: 0 })
+  }
+  const showRFCompare = () => {
+    const s = fscRef.current; if (!s) return
+    applyState({ ...s, rf_phase: 'compare' })
   }
   const rfAction = (result: 'correct' | 'wrong' | 'skip') => {
     const s = fscRef.current; if (!s) return
@@ -865,7 +880,7 @@ export default function AdminPage() {
       rf_score_b: !isA ? Math.min(newCorrectB, RF_Q_COUNT) * RF_CORRECT_PTS : s.rf_score_b,
     }
     if (done) {
-      applyState({ ...newState, rf_phase: isA ? 'break' : 'done' })
+      applyState({ ...newState, rf_phase: isA ? 'score_a' : 'score_b' })
     } else {
       applyState(newState)
     }
@@ -874,7 +889,7 @@ export default function AdminPage() {
     const s = fscRef.current; if (!s) return
     // Score is already current from live updates — just flip the phase
     const isA = s.rf_phase === 'a_playing'
-    applyState({ ...s, rf_phase: isA ? 'break' : 'done' })
+    applyState({ ...s, rf_phase: isA ? 'score_a' : 'score_b' })
   }
   const proceedToBuzzer = () => {
     const s = fscRef.current; if (!s) return
@@ -2296,24 +2311,41 @@ export default function AdminPage() {
                 <span className="text-sm font-black text-[#f5a623]">Rapid Fire Round</span>
                 <span className="ml-auto text-xs text-slate-400">
                   {s.rf_phase === 'idle' && 'Ready to start'}
+                  {s.rf_phase === 'announce_a' && `Announcing ${s.team_a_name}`}
                   {s.rf_phase === 'a_playing' && `${s.team_a_name} playing`}
-                  {s.rf_phase === 'break' && 'Break'}
+                  {s.rf_phase === 'score_a' && `${s.team_a_name} score`}
+                  {s.rf_phase === 'announce_b' && `Announcing ${s.team_b_name}`}
                   {s.rf_phase === 'b_playing' && `${s.team_b_name} playing`}
+                  {s.rf_phase === 'score_b' && `${s.team_b_name} score`}
+                  {s.rf_phase === 'compare' && 'Head-to-Head'}
                   {s.rf_phase === 'done' && 'Complete'}
                 </span>
               </div>
 
               <ScoreBar label="Rapid Fire Scores" />
 
-              {/* idle → show instructions + start A */}
+              {/* idle → show instructions + move to announce A */}
               {s.rf_phase === 'idle' && (
                 <>
                   <AdminRoundIntro info={ROUND_INFO.rapid_fire} />
-                  <button onClick={startRFTeamA}
+                  <button onClick={announceRFTeamA}
                     className="w-full flex items-center justify-center gap-2 py-5 bg-green-600 hover:bg-green-500 text-white font-black rounded-2xl text-base transition-colors disabled:opacity-50">
-                    <Timer size={20} /> Start {s.team_a_name}&apos;s Turn (60s)
+                    <ArrowRight size={20} /> Announce {s.team_a_name}
                   </button>
                 </>
+              )}
+
+              {/* Announce Team A — projector shows "Up Next · TEAM A" */}
+              {s.rf_phase === 'announce_a' && (
+                <div className="bg-gradient-to-br from-green-500/10 to-[#0a1628] border border-green-500/40 rounded-2xl p-5 space-y-4 text-center">
+                  <p className="text-green-300 text-[10px] font-bold uppercase tracking-[0.3em]">Up Next on the Projector</p>
+                  <p className="text-white text-2xl font-black">{s.team_a_name}</p>
+                  <p className="text-slate-400 text-xs">60-second Rapid Fire · 10 questions</p>
+                  <button onClick={startRFTeamA}
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-green-600 hover:bg-green-500 text-white font-black rounded-xl text-base transition-colors">
+                    <Timer size={20} /> Start {s.team_a_name}&apos;s 60 seconds
+                  </button>
+                </div>
               )}
 
               {/* A playing */}
@@ -2358,17 +2390,30 @@ export default function AdminPage() {
                 </button>
               </>}
 
-              {/* Break between A and B */}
-              {s.rf_phase === 'break' && (
+              {/* Score reveal — Team A */}
+              {s.rf_phase === 'score_a' && (
                 <div className="space-y-3">
-                  <div className="bg-[#0a1628] border border-green-500/30 rounded-2xl p-5 text-center">
-                    <p className="text-4xl font-black text-green-400">{s.rf_correct_a} / {RF_Q_COUNT}</p>
-                    <p className="text-sm text-green-400 font-semibold mt-1">{s.team_a_name} — {s.rf_score_a} pts</p>
-                    <p className="text-xs text-slate-500 mt-2">Team A&apos;s turn complete</p>
+                  <div className="bg-gradient-to-br from-green-500/15 to-[#0a1628] border-2 border-green-500/50 rounded-2xl p-5 text-center space-y-2">
+                    <p className="text-green-300 text-[10px] font-bold uppercase tracking-[0.3em]">{s.team_a_name} — Rapid Fire Score</p>
+                    <p className="text-white text-6xl font-black">{s.rf_score_a}</p>
+                    <p className="text-slate-400 text-xs">{s.rf_correct_a} correct in 60 seconds</p>
                   </div>
+                  <button onClick={announceRFTeamB}
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-xl text-base transition-colors">
+                    <ArrowRight size={16} /> Announce {s.team_b_name}
+                  </button>
+                </div>
+              )}
+
+              {/* Announce Team B */}
+              {s.rf_phase === 'announce_b' && (
+                <div className="bg-gradient-to-br from-purple-500/10 to-[#0a1628] border border-purple-500/40 rounded-2xl p-5 space-y-4 text-center">
+                  <p className="text-purple-300 text-[10px] font-bold uppercase tracking-[0.3em]">Up Next on the Projector</p>
+                  <p className="text-white text-2xl font-black">{s.team_b_name}</p>
+                  <p className="text-slate-400 text-xs">60-second Rapid Fire · 10 questions</p>
                   <button onClick={startRFTeamB}
-                    className="w-full flex items-center justify-center gap-2 py-5 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-2xl text-base transition-colors disabled:opacity-50">
-                    <Timer size={20} /> Start {s.team_b_name}&apos;s Turn (60s)
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-xl text-base transition-colors">
+                    <Timer size={20} /> Start {s.team_b_name}&apos;s 60 seconds
                   </button>
                 </div>
               )}
@@ -2415,7 +2460,65 @@ export default function AdminPage() {
                 </button>
               </>}
 
-              {/* RF Done */}
+              {/* Score reveal — Team B */}
+              {s.rf_phase === 'score_b' && (
+                <div className="space-y-3">
+                  <div className="bg-gradient-to-br from-purple-500/15 to-[#0a1628] border-2 border-purple-500/50 rounded-2xl p-5 text-center space-y-2">
+                    <p className="text-purple-300 text-[10px] font-bold uppercase tracking-[0.3em]">{s.team_b_name} — Rapid Fire Score</p>
+                    <p className="text-white text-6xl font-black">{s.rf_score_b}</p>
+                    <p className="text-slate-400 text-xs">{s.rf_correct_b} correct in 60 seconds</p>
+                  </div>
+                  <button onClick={showRFCompare}
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-base hover:bg-[#e0941a] transition-colors">
+                    <ArrowRight size={16} /> Show Head-to-Head
+                  </button>
+                </div>
+              )}
+
+              {/* Compare — RF head-to-head */}
+              {s.rf_phase === 'compare' && (() => {
+                const aWins = s.rf_score_a > s.rf_score_b
+                const bWins = s.rf_score_b > s.rf_score_a
+                return (
+                  <div className="space-y-3">
+                    <div className="bg-gradient-to-br from-[#f5a623]/15 to-[#0a1628] border-2 border-[#f5a623]/50 rounded-2xl p-4 space-y-3">
+                      <p className="text-[10px] font-bold text-[#f5a623] uppercase tracking-widest text-center">Rapid Fire · Head-to-Head</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className={`rounded-xl p-3 text-center border ${aWins ? 'bg-green-500/20 border-green-500' : 'bg-white/5 border-white/10'}`}>
+                          {aWins && <p className="text-green-300 text-2xl leading-none mb-0.5">🏆</p>}
+                          <p className="text-green-300 text-[10px] font-bold uppercase tracking-widest truncate">{s.team_a_name}</p>
+                          <p className="text-white text-3xl font-black">{s.rf_score_a}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{s.rf_correct_a} correct</p>
+                        </div>
+                        <div className={`rounded-xl p-3 text-center border ${bWins ? 'bg-purple-500/20 border-purple-500' : 'bg-white/5 border-white/10'}`}>
+                          {bWins && <p className="text-purple-300 text-2xl leading-none mb-0.5">🏆</p>}
+                          <p className="text-purple-300 text-[10px] font-bold uppercase tracking-widest truncate">{s.team_b_name}</p>
+                          <p className="text-white text-3xl font-black">{s.rf_score_b}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{s.rf_correct_b} correct</p>
+                        </div>
+                      </div>
+                      <p className="text-white text-sm font-black text-center">
+                        {aWins ? `${s.team_a_name} leads after Rapid Fire`
+                          : bWins ? `${s.team_b_name} leads after Rapid Fire`
+                          : `🤝 Level at ${s.rf_score_a}`}
+                      </p>
+                    </div>
+                    <PointAdjuster
+                      teams={[
+                        { label: s.team_a_name, score: s.rf_score_a, colour: '#22c55e', onAdjust: d => applyState({ ...s, rf_score_a: Math.max(0, s.rf_score_a + d) }) },
+                        { label: s.team_b_name, score: s.rf_score_b, colour: '#a855f7', onAdjust: d => applyState({ ...s, rf_score_b: Math.max(0, s.rf_score_b + d) }) },
+                      ]}
+                      note="Adjust before moving on."
+                    />
+                    <button onClick={() => applyState({ ...s, rf_phase: 'done' })}
+                      className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-base hover:bg-[#e0941a] transition-colors">
+                      <ArrowRight size={16} /> Continue to Buzzer
+                    </button>
+                  </div>
+                )
+              })()}
+
+              {/* RF Done — buzzer handoff */}
               {s.rf_phase === 'done' && (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">

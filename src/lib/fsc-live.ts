@@ -22,7 +22,16 @@ export const IS_BONUS_PTS   = 20      // bonus if ALL steps correct
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type FSCRound  = 'idle' | 'rapid_fire' | 'buzzer' | 'innovation_sprint' | 'mystery_chain' | 'audio_visual' | 'finished'
-export type RFPhase   = 'idle' | 'a_playing' | 'break' | 'b_playing' | 'done'
+export type RFPhase   =
+  | 'idle'
+  | 'announce_a'
+  | 'a_playing'
+  | 'score_a'
+  | 'announce_b'
+  | 'b_playing'
+  | 'score_b'
+  | 'compare'
+  | 'done'
 export type BZPhase   = 'idle' | 'showing' | 'buzzed_a' | 'buzzed_b' | 'second_chance' | 'revealed' | 'done'
 export type ISPhase   = 'idle' | 'working' | 'collecting' | 'solution' | 'revealed' | 'compare' | 'done'
 export type BZResult  = null | 'correct_a' | 'correct_b' | 'penalty_a' | 'penalty_b' | 'bonus_a' | 'bonus_b' | 'skip'

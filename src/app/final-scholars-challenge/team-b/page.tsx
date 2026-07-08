@@ -263,7 +263,7 @@ export default function TeamBPage() {
               </>
             )}
 
-            {s?.rf_phase === 'break' && (
+            {(s?.rf_phase === 'score_a' || s?.rf_phase === 'announce_b') && (
               <div className="space-y-3">
                 <div className="bg-[#0a1628] border border-green-500/30 rounded-2xl p-5 text-center">
                   <p className="text-xs font-bold text-green-400">{theirName} — Done!</p>

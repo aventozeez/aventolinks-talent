@@ -101,6 +101,89 @@ export default function AudiencePage() {
     )
   }
 
+  // Dedicated full-screen RF ceremony pages: announce / score / compare
+  if (round === 'rapid_fire' && s) {
+    if (s.rf_phase === 'announce_a') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-green-950 via-[#0a1628] to-green-950 flex flex-col items-center justify-center gap-8 text-white px-6 text-center">
+          <p className="text-green-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">Up Next</p>
+          <div className="text-9xl">🎤</div>
+          <h1 className="text-6xl md:text-8xl font-black text-green-300 leading-tight">{nameA}</h1>
+          <p className="text-white text-2xl md:text-3xl font-bold">is up first</p>
+          <p className="text-slate-300 text-lg md:text-xl">60-second Rapid Fire · 10 questions</p>
+          <p className="text-slate-500 text-sm italic animate-pulse">Waiting for the host to start the timer…</p>
+        </div>
+      )
+    }
+    if (s.rf_phase === 'score_a') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-green-950 via-[#0a1628] to-green-950 flex flex-col items-center justify-center gap-6 text-white px-6 text-center">
+          <p className="text-green-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">{nameA} — Rapid Fire Score</p>
+          <div className="bg-green-500/15 border-4 border-green-500/60 rounded-3xl px-16 py-10 shadow-[0_20px_60px_-10px_rgba(34,197,94,0.4)]">
+            <p className="text-white text-[10rem] md:text-[12rem] font-black leading-none">{s.rf_score_a}</p>
+            <p className="text-green-300 text-lg md:text-xl mt-2 font-bold">points</p>
+          </div>
+          <p className="text-slate-400 text-base md:text-lg">{s.rf_correct_a} correct in 60 seconds</p>
+          <p className="text-yellow-300 font-bold text-xl md:text-2xl animate-pulse mt-4">⏳ {nameB} is up next…</p>
+        </div>
+      )
+    }
+    if (s.rf_phase === 'announce_b') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-purple-950 via-[#0a1628] to-purple-950 flex flex-col items-center justify-center gap-8 text-white px-6 text-center">
+          <p className="text-purple-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">Up Next</p>
+          <div className="text-9xl">🎤</div>
+          <h1 className="text-6xl md:text-8xl font-black text-purple-300 leading-tight">{nameB}</h1>
+          <p className="text-white text-2xl md:text-3xl font-bold">is up next</p>
+          <p className="text-slate-300 text-lg md:text-xl">60-second Rapid Fire · 10 questions</p>
+          <p className="text-slate-500 text-sm italic animate-pulse">Waiting for the host to start the timer…</p>
+        </div>
+      )
+    }
+    if (s.rf_phase === 'score_b') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-purple-950 via-[#0a1628] to-purple-950 flex flex-col items-center justify-center gap-6 text-white px-6 text-center">
+          <p className="text-purple-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">{nameB} — Rapid Fire Score</p>
+          <div className="bg-purple-500/15 border-4 border-purple-500/60 rounded-3xl px-16 py-10 shadow-[0_20px_60px_-10px_rgba(168,85,247,0.4)]">
+            <p className="text-white text-[10rem] md:text-[12rem] font-black leading-none">{s.rf_score_b}</p>
+            <p className="text-purple-300 text-lg md:text-xl mt-2 font-bold">points</p>
+          </div>
+          <p className="text-slate-400 text-base md:text-lg">{s.rf_correct_b} correct in 60 seconds</p>
+          <p className="text-yellow-300 font-bold text-xl md:text-2xl animate-pulse mt-4">📊 Comparing scores…</p>
+        </div>
+      )
+    }
+    if (s.rf_phase === 'compare') {
+      const aWins = s.rf_score_a > s.rf_score_b
+      const bWins = s.rf_score_b > s.rf_score_a
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#1a0f00] text-white flex flex-col items-center justify-center gap-8 px-6 py-12">
+          <p className="text-[#f5a623] text-sm md:text-base font-black uppercase tracking-[0.4em]">Rapid Fire · Head-to-Head</p>
+          <div className="text-8xl md:text-9xl">{aWins || bWins ? '⚡' : '🤝'}</div>
+          <div className="grid grid-cols-2 gap-6 w-full max-w-3xl">
+            <div className={`rounded-3xl p-8 text-center border-4 ${aWins ? 'bg-green-500/25 border-green-400 shadow-[0_20px_60px_-15px_rgba(34,197,94,0.5)]' : 'bg-white/5 border-white/10'}`}>
+              {aWins && <div className="text-4xl mb-2">🏆</div>}
+              <p className="text-green-300 text-sm md:text-base font-black uppercase tracking-widest truncate">{nameA}</p>
+              <p className="text-white text-7xl md:text-8xl font-black mt-2">{s.rf_score_a}</p>
+              <p className="text-green-400 text-sm md:text-base mt-2">{s.rf_correct_a} correct</p>
+            </div>
+            <div className={`rounded-3xl p-8 text-center border-4 ${bWins ? 'bg-purple-500/25 border-purple-400 shadow-[0_20px_60px_-15px_rgba(168,85,247,0.5)]' : 'bg-white/5 border-white/10'}`}>
+              {bWins && <div className="text-4xl mb-2">🏆</div>}
+              <p className="text-purple-300 text-sm md:text-base font-black uppercase tracking-widest truncate">{nameB}</p>
+              <p className="text-white text-7xl md:text-8xl font-black mt-2">{s.rf_score_b}</p>
+              <p className="text-purple-400 text-sm md:text-base mt-2">{s.rf_correct_b} correct</p>
+            </div>
+          </div>
+          <p className="text-yellow-300 font-black text-2xl md:text-3xl">
+            {aWins ? `${nameA} leads after Rapid Fire`
+              : bWins ? `${nameB} leads after Rapid Fire`
+              : `🤝 Level at ${s.rf_score_a}`}
+          </p>
+        </div>
+      )
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#060f1f] text-white flex flex-col select-none">
 
@@ -267,17 +350,6 @@ export default function AudiencePage() {
                   </div>
                 </div>
               </>
-            )}
-
-            {s?.rf_phase === 'break' && (
-              <div className="text-center space-y-5">
-                <div className="bg-green-950/40 border border-green-500/40 rounded-3xl p-8 inline-block min-w-[240px]">
-                  <p className="text-base font-black text-green-400">{nameA}</p>
-                  <p className="text-6xl font-black text-green-400 mt-1">{s.rf_score_a}</p>
-                  <p className="text-sm text-green-700 mt-2">{s.rf_correct_a} correct</p>
-                </div>
-                <p className="text-xl font-bold text-slate-400">{nameB} is next…</p>
-              </div>
             )}
 
             {s?.rf_phase === 'done' && (
