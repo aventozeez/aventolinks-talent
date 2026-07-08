@@ -13,7 +13,16 @@ type RegisteredTeam = { id: string; name: string; school: string }
 type TBQuestion = { id: string; text: string; answer: string }
 type TBPool = { id: string; title: string; questions: TBQuestion[] }
 
-type TBPhase = 'setup' | 'a_playing' | 'break' | 'b_playing' | 'done'
+type TBPhase =
+  | 'setup'
+  | 'intro'
+  | 'announce_a'
+  | 'a_playing'
+  | 'score_a'
+  | 'announce_b'
+  | 'b_playing'
+  | 'score_b'
+  | 'compare'
 
 type TBState = {
   phase: TBPhase
@@ -172,9 +181,16 @@ export default function TieBreakerAdmin() {
       // crash, we backfill with the default 3 pools so the setup screen still
       // works — the admin can pick or edit from there.
       const raw = payload as Partial<TBState>
+      // Legacy phases from the pre-refactor flow — bump them into the new flow.
+      const legacyPhase = raw.phase as string | undefined
+      const migratedPhase: TBPhase =
+        legacyPhase === 'break' ? 'score_a'
+        : legacyPhase === 'done'  ? 'compare'
+        : (legacyPhase as TBPhase | undefined) ?? 'setup'
       const migrated: TBState = {
         ...DEFAULT_STATE(),
         ...raw,
+        phase: migratedPhase,
         pools: (raw.pools && raw.pools.length > 0) ? raw.pools : DEFAULT_POOLS(),
       }
       setS(migrated)
@@ -223,9 +239,9 @@ export default function TieBreakerAdmin() {
       if (left === 0) {
         clearInterval(timerRef.current!)
         if (s.phase === 'a_playing') {
-          update({ phase: 'break', timerStart: null, currentQ: null, showAnswer: false })
+          update({ phase: 'score_a', timerStart: null, currentQ: null, showAnswer: false })
         } else {
-          update({ phase: 'done', timerStart: null, currentQ: null, showAnswer: false })
+          update({ phase: 'score_b', timerStart: null, currentQ: null, showAnswer: false })
         }
       }
     }
@@ -247,13 +263,23 @@ export default function TieBreakerAdmin() {
   // Which pool is the currently-playing team on? Used for headers + break/done screens.
   const activePool = isPlayingA ? chosenPoolA : isPlayingB ? chosenPoolB : null
 
-  function startTeamA(poolId: string) {
-    const pool = safePools.find(p => p.id === poolId)
-    if (!s.teamA.trim() || !s.teamB.trim() || !pool || pool.questions.length === 0) return
-    const queue = pool.questions.map(q => ({ ...q }))
+  // Setup → Intro: pools + names locked in, show instructions on projector.
+  function goToInstructions() {
+    if (!s.teamA.trim() || !s.teamB.trim()) return
+    if (!chosenPoolA || !chosenPoolB) return
+    if (s.chosenPoolA === s.chosenPoolB) return
+    if (chosenPoolA.questions.length === 0 || chosenPoolB.questions.length === 0) return
+    update({ phase: 'intro' })
+  }
+  function goToAnnounceA() { update({ phase: 'announce_a' }) }
+  function goToAnnounceB() { update({ phase: 'announce_b' }) }
+  function goToCompare()   { update({ phase: 'compare' }) }
+
+  function startTeamA() {
+    if (!chosenPoolA || chosenPoolA.questions.length === 0) return
+    const queue = chosenPoolA.questions.map(q => ({ ...q }))
     update({
       phase: 'a_playing',
-      chosenPoolA: pool.id,
       queueA: queue,
       scoreA: 0,
       correctA: 0,
@@ -263,14 +289,11 @@ export default function TieBreakerAdmin() {
     })
   }
 
-  function startTeamB(poolId: string) {
-    const pool = safePools.find(p => p.id === poolId)
-    if (!pool || pool.questions.length === 0) return
-    if (pool.id === s.chosenPoolA) return   // must be a different pool
-    const queue = pool.questions.map(q => ({ ...q }))
+  function startTeamB() {
+    if (!chosenPoolB || chosenPoolB.questions.length === 0) return
+    const queue = chosenPoolB.questions.map(q => ({ ...q }))
     update({
       phase: 'b_playing',
-      chosenPoolB: pool.id,
       queueB: queue,
       scoreB: 0,
       correctB: 0,
@@ -312,8 +335,8 @@ export default function TieBreakerAdmin() {
   }
 
   function endRoundEarly() {
-    if (isPlayingA) update({ phase: 'break', timerStart: null, currentQ: null, showAnswer: false })
-    else if (isPlayingB) update({ phase: 'done', timerStart: null, currentQ: null, showAnswer: false })
+    if (isPlayingA) update({ phase: 'score_a', timerStart: null, currentQ: null, showAnswer: false })
+    else if (isPlayingB) update({ phase: 'score_b', timerStart: null, currentQ: null, showAnswer: false })
   }
 
   // Runs another rapid-fire — same teams, questions cycled from the start.
@@ -576,29 +599,146 @@ export default function TieBreakerAdmin() {
               </div>
             </div>
 
-            {/* Start Team A — one button per pool. Each team plays a DIFFERENT pool. */}
-            <div className="space-y-2">
+            {/* Pool selection — one pool per team, must be different */}
+            <div className="bg-[#0d1f3c] border border-pink-500/30 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-white font-bold text-sm">
-                  Pick {s.teamA || 'Team A'}&apos;s pool to start (30s)
-                </p>
-                <p className="text-slate-500 text-[10px]">Each team gets a different pool</p>
+                <h2 className="text-white font-bold text-sm">Assign a Pool to Each Team</h2>
+                <p className="text-slate-500 text-[10px]">Must be different pools</p>
               </div>
-              <div className="grid grid-cols-1 gap-1.5">
-                {safePools.map((pl, i) => (
-                  <button key={pl.id} onClick={() => startTeamA(pl.id)}
-                    disabled={!s.teamA.trim() || !s.teamB.trim() || pl.questions.length === 0}
-                    className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors border bg-green-900/30 border-green-500/40 hover:bg-green-800/40 disabled:opacity-40 disabled:cursor-not-allowed">
-                    <span className="text-green-400 text-xs font-black">▶</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-bold truncate">Pool {i + 1} · {pl.title}</p>
-                      <p className="text-slate-400 text-[10px]">{pl.questions.length} questions</p>
+              <div className="grid grid-cols-2 gap-3">
+                {(['A', 'B'] as const).map(letter => {
+                  const key = `chosenPool${letter}` as const
+                  const otherKey = letter === 'A' ? 'chosenPoolB' : 'chosenPoolA'
+                  const teamName = s[`team${letter}` as const] || `Team ${letter}`
+                  const colour = letter === 'A' ? 'green' : 'blue'
+                  return (
+                    <div key={letter} className="space-y-1.5">
+                      <label className={`text-[10px] text-${colour}-400 font-bold uppercase tracking-widest`}>
+                        Pool for {teamName}
+                      </label>
+                      <select
+                        value={s[key] ?? ''}
+                        onChange={e => update({ [key]: e.target.value || null } as Partial<TBState>)}
+                        className={`w-full bg-slate-800 border border-${colour}-500/40 rounded-lg px-2 py-2 text-white text-sm`}>
+                        <option value="">— select a pool —</option>
+                        {safePools.map((pl, i) => {
+                          const takenByOther = pl.id === s[otherKey]
+                          return (
+                            <option key={pl.id} value={pl.id} disabled={takenByOther || pl.questions.length === 0}>
+                              Pool {i + 1} · {pl.title} ({pl.questions.length}q){takenByOther ? ' — taken' : ''}{pl.questions.length === 0 ? ' — empty' : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
                     </div>
-                    {poolReady(i) && <span className="text-green-400 text-xs">✓</span>}
-                  </button>
-                ))}
+                  )
+                })}
               </div>
+              <button
+                onClick={goToInstructions}
+                disabled={!s.teamA.trim() || !s.teamB.trim() || !chosenPoolA || !chosenPoolB || s.chosenPoolA === s.chosenPoolB || chosenPoolA.questions.length === 0 || chosenPoolB.questions.length === 0}
+                className="w-full bg-pink-600 hover:bg-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-3 rounded-xl text-sm">
+                📋 Show Instructions on Screen
+              </button>
+              <p className="text-slate-500 text-[10px] text-center">
+                Read the rules to the room, then advance to announce {s.teamA || 'Team A'}.
+              </p>
             </div>
+          </div>
+        )}
+
+        {/* Intro — instructions live on the projector; admin reads then continues */}
+        {s.phase === 'intro' && (
+          <div className="bg-gradient-to-br from-pink-500/10 to-[#0a1628] border border-pink-500/40 rounded-2xl p-5 space-y-4 text-center">
+            <p className="text-pink-300 text-[10px] font-bold uppercase tracking-[0.3em]">Instructions on Projector</p>
+            <p className="text-white text-lg font-black leading-snug">
+              Read the tie-breaker rules to {s.teamA} and {s.teamB}, then advance when they&apos;re ready.
+            </p>
+            <p className="text-slate-400 text-xs">
+              Pool for <b className="text-green-400">{s.teamA}</b>: {chosenPoolA?.title}
+              <span className="mx-2 text-slate-600">·</span>
+              Pool for <b className="text-blue-400">{s.teamB}</b>: {chosenPoolB?.title}
+            </p>
+            <button
+              onClick={goToAnnounceA}
+              className="w-full bg-pink-600 hover:bg-pink-500 text-white font-black py-3 rounded-xl text-sm">
+              ▶ Announce {s.teamA || 'Team A'}
+            </button>
+            <button
+              onClick={() => update({ phase: 'setup' })}
+              className="w-full bg-transparent hover:bg-white/5 text-slate-400 py-1.5 rounded-lg text-[10px]">
+              ← Back to setup
+            </button>
+          </div>
+        )}
+
+        {/* Announce Team A — projector shows big "Team A up next" screen */}
+        {s.phase === 'announce_a' && (
+          <div className="bg-gradient-to-br from-green-500/10 to-[#0a1628] border border-green-500/40 rounded-2xl p-5 space-y-4 text-center">
+            <p className="text-green-300 text-[10px] font-bold uppercase tracking-[0.3em]">Up Next</p>
+            <p className="text-white text-2xl font-black">{s.teamA}</p>
+            <p className="text-slate-400 text-xs">
+              Playing <b className="text-white">{chosenPoolA?.title}</b> · 30 seconds
+            </p>
+            <button
+              onClick={startTeamA}
+              disabled={!chosenPoolA || chosenPoolA.questions.length === 0}
+              className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white font-black py-3 rounded-xl text-sm">
+              ▶ Start {s.teamA}&apos;s 30 seconds
+            </button>
+          </div>
+        )}
+
+        {/* Score reveal — Team A */}
+        {s.phase === 'score_a' && (
+          <div className="space-y-3">
+            <div className="bg-gradient-to-br from-green-500/15 to-[#0a1628] border-2 border-green-500/50 rounded-2xl p-5 text-center space-y-2">
+              <p className="text-green-300 text-[10px] font-bold uppercase tracking-[0.3em]">{s.teamA} — Score</p>
+              <p className="text-white text-6xl font-black">{s.scoreA}</p>
+              <p className="text-slate-400 text-xs">
+                {s.correctA} correct · {chosenPoolA?.title}
+              </p>
+            </div>
+            <button
+              onClick={goToAnnounceB}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-xl text-sm">
+              ▶ Announce {s.teamB || 'Team B'}
+            </button>
+          </div>
+        )}
+
+        {/* Announce Team B */}
+        {s.phase === 'announce_b' && (
+          <div className="bg-gradient-to-br from-blue-500/10 to-[#0a1628] border border-blue-500/40 rounded-2xl p-5 space-y-4 text-center">
+            <p className="text-blue-300 text-[10px] font-bold uppercase tracking-[0.3em]">Up Next</p>
+            <p className="text-white text-2xl font-black">{s.teamB}</p>
+            <p className="text-slate-400 text-xs">
+              Playing <b className="text-white">{chosenPoolB?.title}</b> · 30 seconds
+            </p>
+            <button
+              onClick={startTeamB}
+              disabled={!chosenPoolB || chosenPoolB.questions.length === 0}
+              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-black py-3 rounded-xl text-sm">
+              ▶ Start {s.teamB}&apos;s 30 seconds
+            </button>
+          </div>
+        )}
+
+        {/* Score reveal — Team B */}
+        {s.phase === 'score_b' && (
+          <div className="space-y-3">
+            <div className="bg-gradient-to-br from-blue-500/15 to-[#0a1628] border-2 border-blue-500/50 rounded-2xl p-5 text-center space-y-2">
+              <p className="text-blue-300 text-[10px] font-bold uppercase tracking-[0.3em]">{s.teamB} — Score</p>
+              <p className="text-white text-6xl font-black">{s.scoreB}</p>
+              <p className="text-slate-400 text-xs">
+                {s.correctB} correct · {chosenPoolB?.title}
+              </p>
+            </div>
+            <button
+              onClick={goToCompare}
+              className="w-full bg-pink-600 hover:bg-pink-500 text-white font-black py-3 rounded-xl text-sm">
+              ▶ Show Final Comparison
+            </button>
           </div>
         )}
 
@@ -670,70 +810,43 @@ export default function TieBreakerAdmin() {
           </div>
         )}
 
-        {/* Break — team A done, team B up next */}
-        {s.phase === 'break' && (
+        {/* Compare — final side-by-side + advance / out */}
+        {s.phase === 'compare' && (
           <div className="space-y-3">
-            <div className="bg-[#0d1f3c] border border-green-500/40 rounded-xl p-4 text-center space-y-2">
-              <p className="text-green-300 text-[10px] font-bold uppercase tracking-widest">Half-Time</p>
-              <p className="text-white text-xl font-black">{s.teamA} scored</p>
-              <p className="text-green-400 text-4xl font-black">{s.scoreA}</p>
-              <p className="text-slate-500 text-xs">
-                out of {chosenPoolA?.questions.length ?? 0} questions in <b className="text-slate-300">{chosenPoolA?.title ?? 'the pool'}</b> ({s.correctA} correct)
-              </p>
-            </div>
-
-            {/* Pool picker for Team B — Team A's pool is dimmed out */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-white font-bold text-sm">
-                  Pick {s.teamB || 'Team B'}&apos;s pool to start (30s)
-                </p>
-                <p className="text-slate-500 text-[10px]">Different pool from {s.teamA}</p>
-              </div>
-              <div className="grid grid-cols-1 gap-1.5">
-                {safePools.map((pl, i) => {
-                  const takenByA = pl.id === s.chosenPoolA
+            <div className="bg-gradient-to-br from-yellow-500/15 to-orange-500/15 border-2 border-yellow-500/60 rounded-2xl p-4 text-center space-y-3">
+              <p className="text-yellow-300 text-[10px] font-bold uppercase tracking-[0.3em]">Tie-Breaker Result</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(['A', 'B'] as const).map(letter => {
+                  const isA = letter === 'A'
+                  const name = isA ? s.teamA : s.teamB
+                  const score = isA ? s.scoreA : s.scoreB
+                  const other = isA ? s.scoreB : s.scoreA
+                  const advances = score > other
+                  const out = score < other
+                  const colour = isA ? 'green' : 'blue'
                   return (
-                    <button key={pl.id} onClick={() => startTeamB(pl.id)}
-                      disabled={takenByA || pl.questions.length === 0}
-                      className={`flex items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors border ${
-                        takenByA
-                          ? 'bg-slate-800/40 border-slate-700 opacity-40 cursor-not-allowed'
-                          : 'bg-blue-900/30 border-blue-500/40 hover:bg-blue-800/40'
+                    <div key={letter}
+                      className={`rounded-xl p-3 border ${
+                        advances ? 'bg-yellow-500/20 border-yellow-500'
+                        : out ? 'bg-red-950/40 border-red-500/40 opacity-70'
+                        : 'bg-white/5 border-white/10'
                       }`}>
-                      <span className={`text-xs font-black ${takenByA ? 'text-slate-500' : 'text-blue-400'}`}>▶</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-bold truncate">Pool {i + 1} · {pl.title}</p>
-                        <p className="text-slate-400 text-[10px]">
-                          {pl.questions.length} questions{takenByA ? ` · already played by ${s.teamA}` : ''}
-                        </p>
-                      </div>
-                    </button>
+                      {advances && <p className="text-yellow-300 text-2xl leading-none mb-0.5">🏆</p>}
+                      {out && <p className="text-red-400 text-xs font-black uppercase tracking-widest">Out</p>}
+                      <p className={`text-${colour}-300 text-[10px] font-bold uppercase tracking-widest truncate`}>{name}</p>
+                      <p className="text-white text-3xl font-black">{score}</p>
+                      <p className={`text-[10px] mt-0.5 font-bold uppercase ${advances ? 'text-yellow-300' : out ? 'text-red-300' : 'text-slate-500'}`}>
+                        {advances ? 'Advances' : out ? 'Eliminated' : 'Tied'}
+                      </p>
+                    </div>
                   )
                 })}
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Done — final results */}
-        {s.phase === 'done' && (
-          <div className="space-y-3">
-            <div className="bg-gradient-to-br from-yellow-500/15 to-orange-500/15 border-2 border-yellow-500/60 rounded-2xl p-4 text-center space-y-3">
-              <p className="text-yellow-300 text-[10px] font-bold uppercase tracking-[0.3em]">Tie-Breaker Complete</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div className={`rounded-xl p-3 border ${s.scoreA > s.scoreB ? 'bg-yellow-500/20 border-yellow-500' : 'bg-white/5 border-white/10'}`}>
-                  {s.scoreA > s.scoreB && <p className="text-yellow-300 text-2xl">🏆</p>}
-                  <p className="text-slate-300 text-xs font-bold">{s.teamA}</p>
-                  <p className="text-white text-3xl font-black">{s.scoreA}</p>
-                </div>
-                <div className={`rounded-xl p-3 border ${s.scoreB > s.scoreA ? 'bg-yellow-500/20 border-yellow-500' : 'bg-white/5 border-white/10'}`}>
-                  {s.scoreB > s.scoreA && <p className="text-yellow-300 text-2xl">🏆</p>}
-                  <p className="text-slate-300 text-xs font-bold">{s.teamB}</p>
-                  <p className="text-white text-3xl font-black">{s.scoreB}</p>
-                </div>
-              </div>
-              <p className="text-white text-lg font-black pt-2">{winnerText}</p>
+              <p className="text-white text-lg font-black pt-2">
+                {s.scoreA === s.scoreB
+                  ? '🤝 Still tied — run another round on fresh pools'
+                  : `${s.scoreA > s.scoreB ? s.teamA : s.teamB} advances`}
+              </p>
             </div>
             {s.scoreA === s.scoreB ? (
               <button onClick={playAnotherRound}

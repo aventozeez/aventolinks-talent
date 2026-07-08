@@ -5,7 +5,7 @@ export type ScoringLine = {
 }
 
 export type RoundInfo = {
-  key: 'rapid_fire' | 'buzzer' | 'innovation_sprint' | 'mystery_chain' | 'audio_visual'
+  key: 'rapid_fire' | 'buzzer' | 'innovation_sprint' | 'mystery_chain' | 'audio_visual' | 'tie_breaker'
   emoji: string
   eyebrow: string
   title: string
@@ -116,6 +116,31 @@ export const ROUND_INFO: Record<RoundInfo['key'], RoundInfo> = {
     ],
     hostHref: '/mystery-chain/admin',
     footerNote: 'Wrong answers don\'t cost points, but they leave that fragment of the story locked.',
+  },
+
+  tie_breaker: {
+    key: 'tie_breaker',
+    emoji: '🔔',
+    eyebrow: 'Tie Breaker · Sudden Death',
+    title: 'Tie Breaker',
+    tagline: 'Thirty seconds each. Different pool per team. Highest score walks on.',
+    gradient: 'from-[#1a0a1f] via-[#2a0a15] to-[#0a0a1f]',
+    accent: '#ec4899',
+    rules: [
+      'The host has already picked a different pool for each team — 20 questions per pool.',
+      'The team going first has 30 seconds to answer as many questions from their pool as they can.',
+      'The quiz master reads each question aloud; the team calls out the answer.',
+      'Correct answers score points. Wrong or skipped questions are put to the back of the queue — no penalty.',
+      'When the 30 seconds ends the team\'s turn is over. The second team then plays their own pool.',
+    ],
+    scoring: [
+      { label: 'Correct answer',   value: '+1', tone: 'green' },
+      { label: 'Wrong / skipped',  value: '0',  tone: 'slate' },
+      { label: 'Time per team',    value: '30 s', tone: 'amber' },
+      { label: 'Questions in pool', value: '20', tone: 'blue' },
+    ],
+    hostHref: '/tie-breaker/admin',
+    footerNote: 'The team with the higher score advances. If it\'s still a tie, we run it again on fresh pools.',
   },
 
   audio_visual: {

@@ -1,13 +1,24 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { wsSubscribe } from '@/lib/ws-sync'
+import RoundInstructionsInline from '@/components/round-instructions-inline'
+import { ROUND_INFO } from '@/lib/round-info'
 
 const CHANNEL = 'tie:state'
 const ROUND_MS = 30_000
 
 type TBQuestion = { id: string; text: string; answer: string }
 type TBPool = { id: string; title: string; questions: TBQuestion[] }
-type TBPhase = 'setup' | 'a_playing' | 'break' | 'b_playing' | 'done'
+type TBPhase =
+  | 'setup'
+  | 'intro'
+  | 'announce_a'
+  | 'a_playing'
+  | 'score_a'
+  | 'announce_b'
+  | 'b_playing'
+  | 'score_b'
+  | 'compare'
 
 type TBState = {
   phase: TBPhase
@@ -47,70 +58,144 @@ export default function TieBreakerAudience() {
     return () => clearInterval(iv)
   }, [])
 
-  // ── Not yet started ────────────────────────────────────────────────────
+  // ── Setup — host is still picking pools, no room-facing action yet ─────
   if (!s || s.phase === 'setup') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#1a0a2a] via-[#2a0a1f] to-[#0a0a1f] flex flex-col items-center justify-center gap-6 text-white px-6">
         <div className="text-8xl animate-pulse">🔔</div>
         <h1 className="text-5xl font-black">Tie Breaker</h1>
         <p className="text-slate-400 text-lg">Rapid fire · 30 seconds per team</p>
-        {s?.teamA && s?.teamB && (
-          <div className="flex gap-6 mt-4">
-            <div className="text-center">
-              <p className="text-green-400 text-2xl font-black">{s.teamA}</p>
-              {s.priorA > 0 && <p className="text-slate-500 text-sm mt-1">Prior: {s.priorA}</p>}
-            </div>
-            <div className="self-center text-6xl">⚡</div>
-            <div className="text-center">
-              <p className="text-blue-400 text-2xl font-black">{s.teamB}</p>
-              {s.priorB > 0 && <p className="text-slate-500 text-sm mt-1">Prior: {s.priorB}</p>}
-            </div>
-          </div>
-        )}
-        <p className="text-slate-500 text-sm italic">Waiting for the host to start…</p>
+        <p className="text-slate-500 text-sm italic">Host is preparing the round…</p>
       </div>
     )
   }
 
-  // ── Break — team A finished ────────────────────────────────────────────
-  if (s.phase === 'break') {
+  // ── Intro — dedicated full-screen instructions page ────────────────────
+  if (s.phase === 'intro') {
     return (
-      <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center gap-8 text-white px-6">
-        <div className="text-6xl">☕</div>
-        <h2 className="text-3xl font-black text-center">Half-Time</h2>
-        <div className="bg-green-900/30 border border-green-500/40 rounded-2xl p-8 text-center w-full max-w-sm">
-          <p className="text-green-300 text-sm mb-1">{s.teamA}</p>
-          <p className="text-6xl font-black text-green-400">{s.scoreA}</p>
-          <p className="text-xs text-gray-500 mt-2">{s.correctA} correct in 30 seconds</p>
-        </div>
-        <p className="text-yellow-300 font-bold animate-pulse">⏳ {s.teamB} is up next…</p>
+      <div className={`min-h-screen w-full text-white flex items-center justify-center px-6 py-12 bg-gradient-to-br ${ROUND_INFO.tie_breaker.gradient}`}>
+        <RoundInstructionsInline
+          info={ROUND_INFO.tie_breaker}
+          footerHint={`${s.teamA} vs ${s.teamB} · waiting for the host to start…`}
+        />
       </div>
     )
   }
 
-  // ── Done — final results ────────────────────────────────────────────────
-  if (s.phase === 'done') {
+  // ── Announce Team A ────────────────────────────────────────────────────
+  if (s.phase === 'announce_a') {
+    const poolTitle = s.pools?.find(p => p.id === s.chosenPoolA)?.title
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-950 via-[#0a1628] to-green-950 flex flex-col items-center justify-center gap-8 text-white px-6 text-center">
+        <p className="text-green-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">Up Next</p>
+        <div className="text-9xl">🎤</div>
+        <h1 className="text-6xl md:text-8xl font-black text-green-300 leading-tight">{s.teamA}</h1>
+        <p className="text-white text-2xl md:text-3xl font-bold">is up first</p>
+        {poolTitle && (
+          <p className="text-slate-300 text-lg md:text-xl">
+            Playing <span className="font-black text-white">{poolTitle}</span> · 30 seconds
+          </p>
+        )}
+        <p className="text-slate-500 text-sm italic animate-pulse">Waiting for the host to start the timer…</p>
+      </div>
+    )
+  }
+
+  // ── Score reveal — Team A ──────────────────────────────────────────────
+  if (s.phase === 'score_a') {
+    const poolTitle = s.pools?.find(p => p.id === s.chosenPoolA)?.title
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-950 via-[#0a1628] to-green-950 flex flex-col items-center justify-center gap-6 text-white px-6 text-center">
+        <p className="text-green-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">{s.teamA} — Score</p>
+        <div className="bg-green-500/15 border-4 border-green-500/60 rounded-3xl px-16 py-10 shadow-[0_20px_60px_-10px_rgba(34,197,94,0.4)]">
+          <p className="text-white text-[10rem] md:text-[12rem] font-black leading-none">{s.scoreA}</p>
+          <p className="text-green-300 text-lg md:text-xl mt-2 font-bold">points</p>
+        </div>
+        <p className="text-slate-400 text-base md:text-lg">
+          {s.correctA} correct in 30 seconds{poolTitle ? ` · ${poolTitle}` : ''}
+        </p>
+        <p className="text-yellow-300 font-bold text-xl md:text-2xl animate-pulse mt-4">⏳ {s.teamB} is up next…</p>
+      </div>
+    )
+  }
+
+  // ── Announce Team B ────────────────────────────────────────────────────
+  if (s.phase === 'announce_b') {
+    const poolTitle = s.pools?.find(p => p.id === s.chosenPoolB)?.title
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-950 via-[#0a1628] to-blue-950 flex flex-col items-center justify-center gap-8 text-white px-6 text-center">
+        <p className="text-blue-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">Up Next</p>
+        <div className="text-9xl">🎤</div>
+        <h1 className="text-6xl md:text-8xl font-black text-blue-300 leading-tight">{s.teamB}</h1>
+        <p className="text-white text-2xl md:text-3xl font-bold">is up next</p>
+        {poolTitle && (
+          <p className="text-slate-300 text-lg md:text-xl">
+            Playing <span className="font-black text-white">{poolTitle}</span> · 30 seconds
+          </p>
+        )}
+        <p className="text-slate-500 text-sm italic animate-pulse">Waiting for the host to start the timer…</p>
+      </div>
+    )
+  }
+
+  // ── Score reveal — Team B ──────────────────────────────────────────────
+  if (s.phase === 'score_b') {
+    const poolTitle = s.pools?.find(p => p.id === s.chosenPoolB)?.title
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-950 via-[#0a1628] to-blue-950 flex flex-col items-center justify-center gap-6 text-white px-6 text-center">
+        <p className="text-blue-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">{s.teamB} — Score</p>
+        <div className="bg-blue-500/15 border-4 border-blue-500/60 rounded-3xl px-16 py-10 shadow-[0_20px_60px_-10px_rgba(59,130,246,0.4)]">
+          <p className="text-white text-[10rem] md:text-[12rem] font-black leading-none">{s.scoreB}</p>
+          <p className="text-blue-300 text-lg md:text-xl mt-2 font-bold">points</p>
+        </div>
+        <p className="text-slate-400 text-base md:text-lg">
+          {s.correctB} correct in 30 seconds{poolTitle ? ` · ${poolTitle}` : ''}
+        </p>
+        <p className="text-yellow-300 font-bold text-xl md:text-2xl animate-pulse mt-4">📊 Comparing results…</p>
+      </div>
+    )
+  }
+
+  // ── Compare — final head-to-head with advance / out ────────────────────
+  if (s.phase === 'compare') {
     const aWins = s.scoreA > s.scoreB
     const bWins = s.scoreB > s.scoreA
     const tie = s.scoreA === s.scoreB
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#1a0f00] text-white flex flex-col items-center justify-center gap-8 px-6 overflow-hidden relative">
-        <p className="text-yellow-400 text-sm font-bold uppercase tracking-[0.4em] z-10">Tie-Breaker Result</p>
-        <div className="text-8xl z-10">{tie ? '🤝' : '🏆'}</div>
-        <div className="grid grid-cols-2 gap-6 w-full max-w-lg z-10">
-          <div className={`rounded-3xl p-6 text-center border-4 ${aWins ? 'bg-green-500/30 border-green-400' : 'bg-white/5 border-white/10'}`}>
-            {aWins && <div className="text-3xl mb-1">🏆</div>}
-            <p className="text-green-400 text-sm font-bold">{s.teamA}</p>
-            <p className="text-6xl font-black text-green-300 mt-1">{s.scoreA}</p>
+      <div className="min-h-screen bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#1a0f00] text-white flex flex-col items-center justify-center gap-8 px-6 overflow-hidden relative py-12">
+        <p className="text-yellow-400 text-sm md:text-base font-black uppercase tracking-[0.4em] z-10">Tie-Breaker Result</p>
+        <div className="text-8xl md:text-9xl z-10">{tie ? '🤝' : '🏆'}</div>
+        <div className="grid grid-cols-2 gap-6 w-full max-w-3xl z-10">
+          <div className={`rounded-3xl p-8 text-center border-4 ${
+            aWins ? 'bg-green-500/25 border-green-400 shadow-[0_20px_60px_-15px_rgba(34,197,94,0.5)]'
+            : bWins ? 'bg-red-950/40 border-red-500/50 opacity-70'
+            : 'bg-white/5 border-white/10'
+          }`}>
+            {aWins && <div className="text-4xl mb-2">🏆</div>}
+            {bWins && <p className="text-red-400 text-xs md:text-sm font-black uppercase tracking-widest mb-2">Eliminated</p>}
+            <p className="text-green-300 text-sm md:text-base font-black uppercase tracking-widest">{s.teamA}</p>
+            <p className="text-white text-7xl md:text-8xl font-black mt-2">{s.scoreA}</p>
+            <p className={`text-sm md:text-base mt-3 font-black uppercase tracking-widest ${aWins ? 'text-yellow-300' : bWins ? 'text-red-300' : 'text-slate-500'}`}>
+              {aWins ? 'Advances' : bWins ? 'Out' : 'Tied'}
+            </p>
           </div>
-          <div className={`rounded-3xl p-6 text-center border-4 ${bWins ? 'bg-blue-500/30 border-blue-400' : 'bg-white/5 border-white/10'}`}>
-            {bWins && <div className="text-3xl mb-1">🏆</div>}
-            <p className="text-blue-400 text-sm font-bold">{s.teamB}</p>
-            <p className="text-6xl font-black text-blue-300 mt-1">{s.scoreB}</p>
+          <div className={`rounded-3xl p-8 text-center border-4 ${
+            bWins ? 'bg-blue-500/25 border-blue-400 shadow-[0_20px_60px_-15px_rgba(59,130,246,0.5)]'
+            : aWins ? 'bg-red-950/40 border-red-500/50 opacity-70'
+            : 'bg-white/5 border-white/10'
+          }`}>
+            {bWins && <div className="text-4xl mb-2">🏆</div>}
+            {aWins && <p className="text-red-400 text-xs md:text-sm font-black uppercase tracking-widest mb-2">Eliminated</p>}
+            <p className="text-blue-300 text-sm md:text-base font-black uppercase tracking-widest">{s.teamB}</p>
+            <p className="text-white text-7xl md:text-8xl font-black mt-2">{s.scoreB}</p>
+            <p className={`text-sm md:text-base mt-3 font-black uppercase tracking-widest ${bWins ? 'text-yellow-300' : aWins ? 'text-red-300' : 'text-slate-500'}`}>
+              {bWins ? 'Advances' : aWins ? 'Out' : 'Tied'}
+            </p>
           </div>
         </div>
-        {tie && <p className="text-yellow-400 font-black text-2xl z-10">It&apos;s still a tie!</p>}
-        {!tie && <p className="text-yellow-300 font-bold text-xl z-10">{aWins ? s.teamA : s.teamB} wins the tie-breaker</p>}
+        {tie
+          ? <p className="text-yellow-400 font-black text-2xl md:text-3xl z-10">It&apos;s still a tie!</p>
+          : <p className="text-yellow-300 font-black text-2xl md:text-3xl z-10">{aWins ? s.teamA : s.teamB} advances</p>}
       </div>
     )
   }

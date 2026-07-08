@@ -33,12 +33,12 @@ export default function RoundInstructions({
 }: RoundInstructionsProps) {
   return (
     <div className={`relative min-h-screen bg-gradient-to-br ${gradient} text-white overflow-hidden`}>
-      {/* Ambient glow */}
+      {/* Ambient glow — kept subtle so bright accents (pink, cyan) don't wash out the page */}
       <div
-        className="pointer-events-none absolute -top-40 -right-40 w-[560px] h-[560px] rounded-full blur-3xl opacity-30"
+        className="pointer-events-none absolute -top-40 -right-40 w-[420px] h-[420px] rounded-full blur-3xl opacity-15"
         style={{ background: accent }} />
       <div
-        className="pointer-events-none absolute -bottom-40 -left-40 w-[560px] h-[560px] rounded-full blur-3xl opacity-20"
+        className="pointer-events-none absolute -bottom-40 -left-40 w-[420px] h-[420px] rounded-full blur-3xl opacity-10"
         style={{ background: accent }} />
 
       <div className="relative max-w-5xl mx-auto px-6 md:px-10 py-10 md:py-14">
