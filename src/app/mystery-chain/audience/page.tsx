@@ -14,6 +14,8 @@ type MCPhase =
   | 'pick_A' | 'story_A' | 'a_playing' | 'summary_A'
   | 'pick_B' | 'story_B' | 'b_playing' | 'summary_B'
   | 'pick_C' | 'story_C' | 'c_playing' | 'summary_C'
+  | 'compare_mc'
+  | 'compare_total'
   | 'done'
   | 'declare_second_runnerup'
 
@@ -30,6 +32,11 @@ type MCAudienceState = {
   packs: PackCard[]
   chosenA: string | null; chosenB: string | null; chosenC: string | null
   chosenSnippetsA?: string[]; chosenSnippetsB?: string[]; chosenSnippetsC?: string[]
+  // Parallel arrays of answer words for each snippet (used to highlight
+  // the unlocked word inside its sentence on the summary screens).
+  chosenSnippetAnswersA?: string[]
+  chosenSnippetAnswersB?: string[]
+  chosenSnippetAnswersC?: string[]
   activePackTitle: string
   activePackEmoji: string
   activeOpeningStory: string
@@ -862,50 +869,52 @@ export default function MCAudiencePage() {
     return <StoryPhase s={s} storyTeam={storyTeam} />
   }
 
-  // Playing phase
+  // Playing phase — full-screen dedicated view so the room's attention is on
+  // the clue and the timer, not a competing scoreboard bar.
   if (s.phase === 'a_playing' || s.phase === 'b_playing' || s.phase === 'c_playing') return (
-    <div className="min-h-screen bg-[#0a0a1a] text-white p-4 flex flex-col gap-4">
-
-      {/* Pack title */}
-      <div className="text-center">
-        <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest">Mystery Chain</p>
-        <h1 className="text-white text-xl font-black">{s.activePackEmoji} {s.activePackTitle}</h1>
+    <div className="min-h-screen w-full bg-[#0a0a1a] text-white flex flex-col">
+      {/* Slim header */}
+      <div className="px-6 py-3 flex items-center justify-between border-b border-white/5 shrink-0">
+        <div className="min-w-0">
+          <p className="text-[#f5a623] text-[10px] md:text-xs font-black uppercase tracking-[0.35em]">Mystery Chain</p>
+          <p className="text-white text-sm md:text-base font-black truncate">{s.activePackEmoji} {s.activePackTitle}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-slate-500 text-[10px] uppercase tracking-widest">Playing</p>
+          <p className="text-white text-sm md:text-base font-black truncate">{playingTeamName}</p>
+        </div>
       </div>
 
-      <Scoreboard s={s} activeKey={activeTeamKey} />
-
-      {/* Timer */}
-      <div className="bg-white/5 rounded-2xl p-4">
-        <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+      {/* Timer bar */}
+      <div className="px-6 py-3 shrink-0">
+        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
           <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pct * 100}%`, background: timerColor }} />
         </div>
-        <p className="text-center font-black text-5xl mt-2" style={{ color: timerColor }}>{fmtTime(timeLeft)}</p>
-        <p className="text-center text-slate-500 text-xs mt-1">{playingTeamName} is playing</p>
+        <p className="text-center font-black text-4xl md:text-5xl mt-2" style={{ color: timerColor }}>{fmtTime(timeLeft)}</p>
       </div>
 
-      {/* Puzzle */}
-      {s.currentPuzzle ? (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 flex flex-col items-center text-center gap-4">
-          {/* Picture clue */}
-          <div className="bg-black/30 rounded-2xl px-10 py-5">
-            <p className="text-8xl">{s.currentPuzzle.picture}</p>
+      {/* Puzzle — fills the remaining viewport height */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-8">
+        {s.currentPuzzle ? (
+          <div className="w-full max-w-4xl mx-auto flex flex-col items-center text-center gap-6 md:gap-8">
+            <div className="bg-black/30 rounded-3xl px-12 py-8 md:px-16 md:py-10">
+              <p className="text-[9rem] md:text-[13rem] leading-none">{s.currentPuzzle.picture}</p>
+            </div>
+            <p className="text-slate-300 text-lg md:text-2xl leading-snug max-w-3xl">
+              <span className="text-slate-500 uppercase tracking-widest text-xs md:text-sm font-black block mb-2">Clue</span>
+              <span className="text-white font-semibold">{s.currentPuzzle.clue}</span>
+            </p>
+            <p className="text-[#f5a623] text-6xl md:text-8xl font-black tracking-[0.35em] leading-none">{s.currentPuzzle.scrambled}</p>
           </div>
-          <p className="text-slate-400 text-sm">
-            Clue: <span className="text-white font-semibold">{s.currentPuzzle.clue}</span>
-          </p>
-          <p className="text-[#f5a623] text-5xl font-black tracking-[0.3em]">{s.currentPuzzle.scrambled}</p>
-          {/* The audience and team screens NEVER show the answer — the
-              scrambled word is the game, not a giveaway. The answer stays
-              on the admin's puzzle card only. */}
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-slate-500">No more puzzles in queue</p>
-        </div>
-      )}
+        ) : (
+          <p className="text-slate-500 text-xl">No more puzzles in queue</p>
+        )}
+      </div>
 
-      {/* Story review is shown only at end-of-round on the summary screen,
-          not during play — that way the puzzle stays the focus. */}
+      {/* Compact score strip pinned at the bottom */}
+      <div className="shrink-0 border-t border-white/5">
+        <Scoreboard s={s} activeKey={activeTeamKey} />
+      </div>
     </div>
   )
 
@@ -918,9 +927,29 @@ export default function MCAudiencePage() {
     const snippets = s.phase === 'summary_A' ? (s.chosenSnippetsA ?? [])
       : s.phase === 'summary_B' ? (s.chosenSnippetsB ?? [])
       : (s.chosenSnippetsC ?? [])
+    const answers = s.phase === 'summary_A' ? (s.chosenSnippetAnswersA ?? [])
+      : s.phase === 'summary_B' ? (s.chosenSnippetAnswersB ?? [])
+      : (s.chosenSnippetAnswersC ?? [])
     const pack = s.packs.find(p => p.id === packId)
     const unlockedSet = new Set(revealed)
     const correctCount = snippets.filter(sn => unlockedSet.has(sn)).length
+    // Splits a sentence around the first case-insensitive whole-word match of
+    // `answer`, so the caller can render the answer in a distinct colour.
+    const splitOnAnswer = (sentence: string, answer: string): { before: string; word: string; after: string } | null => {
+      const trimmed = (answer ?? '').trim()
+      if (!trimmed) return null
+      const esc = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      try {
+        const re = new RegExp(`\\b${esc}\\b`, 'i')
+        const m = sentence.match(re)
+        if (!m || m.index === undefined) return null
+        return {
+          before: sentence.slice(0, m.index),
+          word: sentence.slice(m.index, m.index + m[0].length),
+          after: sentence.slice(m.index + m[0].length),
+        }
+      } catch { return null }
+    }
     return (
       <div className="min-h-screen bg-[#06080f] text-white p-6 flex flex-col gap-4 items-center">
         <p className="text-[#f5a623] text-xs font-bold uppercase tracking-[0.3em]">Round Complete</p>
@@ -933,18 +962,116 @@ export default function MCAudiencePage() {
         <div className="w-full max-w-2xl space-y-1.5 mt-2">
           {snippets.map((sn, i) => {
             const unlocked = unlockedSet.has(sn)
+            const parts = unlocked ? splitOnAnswer(sn, answers[i] ?? '') : null
             return (
               <div key={i} className={`rounded-xl px-4 py-2.5 flex items-start gap-3 border ${
                 unlocked ? 'bg-green-500/15 border-green-500/40' : 'bg-red-500/10 border-red-500/30'
               }`}>
                 <span className={`text-sm font-black w-6 shrink-0 mt-0.5 ${unlocked ? 'text-green-400' : 'text-red-400'}`}>{i + 1}.</span>
-                <p className={`text-sm md:text-base leading-snug ${unlocked ? 'text-green-100' : 'text-red-200/70 line-through'}`}>{sn}</p>
+                <p className={`text-sm md:text-base leading-snug ${unlocked ? 'text-green-100' : 'text-red-200/70 line-through'}`}>
+                  {parts ? (
+                    <>
+                      {parts.before}
+                      <span className="text-[#f5a623] font-black underline decoration-[#f5a623]/60 underline-offset-4">
+                        {parts.word}
+                      </span>
+                      {parts.after}
+                    </>
+                  ) : sn}
+                </p>
                 <span className={`ml-auto text-lg font-bold shrink-0 ${unlocked ? 'text-green-400' : 'text-red-400'}`}>{unlocked ? '✓' : '✗'}</span>
               </div>
             )
           })}
         </div>
         <p className="text-slate-500 text-xs italic mt-4">Waiting for the host to continue…</p>
+      </div>
+    )
+  }
+
+  // ── Compare Mystery-Chain scores only (dedicated page) ──
+  if (s.phase === 'compare_mc') {
+    const teams = [
+      { name: s.teamA, mc: s.scoreA, colour: '#22c55e' },
+      { name: s.teamB, mc: s.scoreB, colour: '#3b82f6' },
+      { name: s.teamC, mc: s.scoreC, colour: '#a855f7' },
+    ].sort((a, b) => b.mc - a.mc)
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-[#0a0a1a] via-[#1a0a2a] to-[#0a0a1a] text-white flex flex-col items-center justify-center gap-10 px-6 py-12">
+        <div className="text-center space-y-2">
+          <p className="text-[#f5a623] text-xs md:text-sm font-black uppercase tracking-[0.4em]">Mystery Chain · Scores</p>
+          <h2 className="text-4xl md:text-6xl font-black text-white leading-tight">Head-to-Head</h2>
+        </div>
+        <div className="grid grid-cols-3 gap-6 md:gap-8 w-full max-w-5xl">
+          {teams.map((t, i) => (
+            <div key={t.name}
+              className={`rounded-3xl p-6 md:p-8 text-center border-4 ${i === 0 ? 'shadow-[0_20px_60px_-15px_rgba(245,166,35,0.5)]' : ''}`}
+              style={{
+                borderColor: `${t.colour}${i === 0 ? 'ff' : '55'}`,
+                background: i === 0 ? `${t.colour}25` : `${t.colour}10`,
+              }}>
+              {i === 0 && <div className="text-4xl md:text-5xl mb-2">🏆</div>}
+              <p className="text-sm md:text-base font-black uppercase tracking-widest truncate" style={{ color: t.colour }}>{t.name}</p>
+              <p className="text-white text-6xl md:text-8xl font-black mt-2 md:mt-3 tabular-nums leading-none">{t.mc}</p>
+              <p className="text-slate-400 text-xs md:text-sm mt-2">Mystery Chain</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-slate-500 text-sm md:text-base italic">Cumulative totals coming next…</p>
+      </div>
+    )
+  }
+
+  // ── Compare cumulative totals (dedicated page) ──
+  if (s.phase === 'compare_total') {
+    const teams = [
+      { name: s.teamA, semi: s.semiA ?? 0, mc: s.scoreA, rf: s.rfA ?? 0, bz: s.bzA ?? 0, is: s.isA ?? 0, colour: '#22c55e' },
+      { name: s.teamB, semi: s.semiB ?? 0, mc: s.scoreB, rf: s.rfB ?? 0, bz: s.bzB ?? 0, is: s.isB ?? 0, colour: '#3b82f6' },
+      { name: s.teamC, semi: s.semiC ?? 0, mc: s.scoreC, rf: s.rfC ?? 0, bz: s.bzC ?? 0, is: s.isC ?? 0, colour: '#a855f7' },
+    ].map(t => ({ ...t, total: t.semi + t.mc })).sort((a, b) => b.total - a.total)
+    const anyBreakdown = teams.some(t => (t.rf + t.bz + t.is) > 0)
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#0a0a1f] text-white flex flex-col items-center justify-center gap-8 px-6 py-12">
+        <div className="text-center space-y-2">
+          <p className="text-[#f5a623] text-xs md:text-sm font-black uppercase tracking-[0.4em]">Cumulative · All Rounds</p>
+          <h2 className="text-4xl md:text-6xl font-black text-white leading-tight">Total Scores</h2>
+        </div>
+        <div className="grid grid-cols-3 gap-6 md:gap-8 w-full max-w-5xl">
+          {teams.map((t, i) => (
+            <div key={t.name}
+              className={`rounded-3xl p-6 md:p-8 text-center border-4 ${i === 0 ? 'shadow-[0_20px_60px_-15px_rgba(245,166,35,0.5)]' : ''}`}
+              style={{
+                borderColor: `${t.colour}${i === 0 ? 'ff' : '55'}`,
+                background: i === 0 ? `${t.colour}25` : `${t.colour}10`,
+              }}>
+              {i === 0 && <div className="text-4xl md:text-5xl mb-2">🏆</div>}
+              <p className="text-sm md:text-base font-black uppercase tracking-widest truncate" style={{ color: t.colour }}>{t.name}</p>
+              <p className="text-white text-6xl md:text-8xl font-black mt-2 md:mt-3 tabular-nums leading-none">{t.total}</p>
+              {anyBreakdown ? (
+                <div className="grid grid-cols-4 gap-1.5 mt-4">
+                  <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-1.5">
+                    <p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p>
+                    <p className="text-white text-sm md:text-base font-black tabular-nums">{t.rf}</p>
+                  </div>
+                  <div className="rounded-lg bg-blue-500/15 border border-blue-500/40 py-1.5">
+                    <p className="text-blue-300 text-[9px] font-black uppercase tracking-widest">BZ</p>
+                    <p className="text-white text-sm md:text-base font-black tabular-nums">{t.bz}</p>
+                  </div>
+                  <div className="rounded-lg bg-cyan-500/15 border border-cyan-500/40 py-1.5">
+                    <p className="text-cyan-300 text-[9px] font-black uppercase tracking-widest">IS</p>
+                    <p className="text-white text-sm md:text-base font-black tabular-nums">{t.is}</p>
+                  </div>
+                  <div className="rounded-lg bg-purple-500/15 border border-purple-500/40 py-1.5">
+                    <p className="text-purple-300 text-[9px] font-black uppercase tracking-widest">MC</p>
+                    <p className="text-white text-sm md:text-base font-black tabular-nums">{t.mc}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-slate-400 text-xs md:text-sm mt-2">Semi {t.semi} + MC {t.mc}</p>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

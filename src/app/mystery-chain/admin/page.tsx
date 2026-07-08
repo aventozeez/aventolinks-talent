@@ -19,6 +19,8 @@ type MCPhase =
   | 'pick_A' | 'story_A' | 'a_playing' | 'summary_A'
   | 'pick_B' | 'story_B' | 'b_playing' | 'summary_B'
   | 'pick_C' | 'story_C' | 'c_playing' | 'summary_C'
+  | 'compare_mc'              // Head-to-head on the Mystery Chain scores only
+  | 'compare_total'           // Head-to-head on the full cumulative totals
   | 'done'                    // Regular rankings screen
   | 'declare_second_runnerup' // Dedicated Second Runner Up declaration
 
@@ -87,6 +89,31 @@ const fmtTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+// Remove the answer word (and simple variants) from a clue sentence so the
+// audience can't just read the answer off the hint. Case-insensitive; falls
+// back to underscore-blanks of matching length.
+function maskAnswerInClue(clue: string, answer: string): string {
+  if (!clue || !answer) return clue
+  const trimmed = answer.trim()
+  if (!trimmed) return clue
+  // Escape regex specials in the answer, then require a word boundary so
+  // shorter answers don't chew up unrelated substrings.
+  const esc = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  try {
+    const re = new RegExp(`\\b${esc}\\b`, 'gi')
+    const blank = '_'.repeat(Math.max(3, trimmed.length))
+    return clue.replace(re, blank)
+  } catch {
+    return clue
+  }
+}
+
+// For summary screens we send [{ snippet, answer }] so the audience can
+// highlight the answer word inside each unlocked sentence.
+function snippetsWithAnswers(pack: MCPack | undefined) {
+  return (pack?.puzzles ?? []).map(p => ({ snippet: p.storySnippet, answer: p.answer }))
+}
+
 function safeForAudience(s: MCState) {
   const isPlaying = ['a_playing','b_playing','c_playing'].includes(s.phase)
   const isStory = ['story_A','story_B','story_C'].includes(s.phase)
@@ -99,6 +126,9 @@ function safeForAudience(s: MCState) {
       : s.chosenC)
     : null
   const activePack = chosenPackId ? s.packs.find(p => p.id === chosenPackId) ?? null : null
+  const packA = s.chosenA ? s.packs.find(p => p.id === s.chosenA) : undefined
+  const packB = s.chosenB ? s.packs.find(p => p.id === s.chosenB) : undefined
+  const packC = s.chosenC ? s.packs.find(p => p.id === s.chosenC) : undefined
   return {
     phase: s.phase,
     teamA: s.teamA, teamB: s.teamB, teamC: s.teamC,
@@ -110,9 +140,14 @@ function safeForAudience(s: MCState) {
     chosenA: s.chosenA, chosenB: s.chosenB, chosenC: s.chosenC,
     // Story snippets of each chosen pack — needed by summary phases so
     // audience/team screens can render the green/red review.
-    chosenSnippetsA: (s.chosenA ? (s.packs.find(p => p.id === s.chosenA)?.puzzles ?? []).map(p => p.storySnippet) : []),
-    chosenSnippetsB: (s.chosenB ? (s.packs.find(p => p.id === s.chosenB)?.puzzles ?? []).map(p => p.storySnippet) : []),
-    chosenSnippetsC: (s.chosenC ? (s.packs.find(p => p.id === s.chosenC)?.puzzles ?? []).map(p => p.storySnippet) : []),
+    chosenSnippetsA: (packA?.puzzles ?? []).map(p => p.storySnippet),
+    chosenSnippetsB: (packB?.puzzles ?? []).map(p => p.storySnippet),
+    chosenSnippetsC: (packC?.puzzles ?? []).map(p => p.storySnippet),
+    // Parallel arrays of the answer word for each snippet — used to highlight
+    // the unlocked word in a distinct colour on the summary screens.
+    chosenSnippetAnswersA: snippetsWithAnswers(packA).map(x => x.answer),
+    chosenSnippetAnswersB: snippetsWithAnswers(packB).map(x => x.answer),
+    chosenSnippetAnswersC: snippetsWithAnswers(packC).map(x => x.answer),
     activePackTitle: activePack?.title ?? '',
     activePackEmoji: activePack?.emoji ?? '',
     activeOpeningStory: activePack?.openingStory ?? '',
@@ -124,7 +159,8 @@ function safeForAudience(s: MCState) {
     revealed: s.revealed,
     currentPuzzle: puzzle ? {
       picture: puzzle.picture,
-      clue: puzzle.clue,
+      // Answer word masked out of the clue so students only get a genuine hint.
+      clue: maskAnswerInClue(puzzle.clue, puzzle.answer),
       scrambled: puzzle.scrambled,
       answer: s.revealed ? puzzle.answer : undefined,
     } : null,
@@ -420,14 +456,19 @@ export default function MCAdminPage() {
     update({ ...cur, phase: next, timerStart: null, revealed: false })
   }
 
-  // From a team's summary → next team's pick, or MC done for team C
+  // From a team's summary → next team's pick, or the MC-only compare screen
+  // after team C. compare_mc → compare_total → done → declare_second_runnerup.
   const continueFromSummary = () => {
     update({
       ...s,
-      phase: s.phase === 'summary_A' ? 'pick_B' : s.phase === 'summary_B' ? 'pick_C' : 'done',
+      phase: s.phase === 'summary_A' ? 'pick_B'
+        : s.phase === 'summary_B' ? 'pick_C'
+        : 'compare_mc',
       timerStart: null, revealed: false,
     })
   }
+  const goToCompareTotal = () => update({ ...s, phase: 'compare_total' })
+  const goToDoneFromCompare = () => update({ ...s, phase: 'done' })
 
   const nextTeam = () => {
     update({
@@ -980,7 +1021,60 @@ export default function MCAdminPage() {
 
               <button onClick={continueFromSummary}
                 className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl">
-                {isLastTeam ? 'Show Final Results →' : `Continue to ${nextTeamName} →`}
+                {isLastTeam ? 'Show Mystery Chain Scores →' : `Continue to ${nextTeamName} →`}
+              </button>
+            </div>
+          )
+        })()}
+
+        {/* ─── COMPARE MC scores only (audience: dedicated page) ─────────── */}
+        {s.phase === 'compare_mc' && (
+          <div className="space-y-3">
+            <div className="bg-[#0d1f3c] border border-purple-500/40 rounded-2xl p-4 space-y-3">
+              <p className="text-purple-300 text-[10px] font-bold uppercase tracking-widest text-center">Mystery Chain · Scores</p>
+              <div className="grid grid-cols-3 gap-2">
+                {([['A', s.teamA, s.scoreA, '#22c55e'], ['B', s.teamB, s.scoreB, '#3b82f6'], ['C', s.teamC, s.scoreC, '#a855f7']] as const).map(([k, name, score, colour]) => (
+                  <div key={k} className="rounded-xl p-3 text-center border border-white/10 bg-white/5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest truncate" style={{ color: colour }}>{name}</p>
+                    <p className="text-white text-3xl font-black mt-1">{score}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button onClick={goToCompareTotal}
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl">
+              Show Cumulative Scores →
+            </button>
+          </div>
+        )}
+
+        {/* ─── COMPARE cumulative totals (audience: dedicated page) ──────── */}
+        {s.phase === 'compare_total' && (() => {
+          const teams = [
+            { key: 'A', name: s.teamA, semi: s.semiA, mc: s.scoreA, rf: s.rfA, bz: s.bzA, is: s.isA, colour: '#22c55e' },
+            { key: 'B', name: s.teamB, semi: s.semiB, mc: s.scoreB, rf: s.rfB, bz: s.bzB, is: s.isB, colour: '#3b82f6' },
+            { key: 'C', name: s.teamC, semi: s.semiC, mc: s.scoreC, rf: s.rfC, bz: s.bzC, is: s.isC, colour: '#a855f7' },
+          ].map(t => ({ ...t, total: t.semi + t.mc })).sort((a, b) => b.total - a.total)
+          return (
+            <div className="space-y-3">
+              <div className="bg-[#0d1f3c] border border-[#f5a623]/40 rounded-2xl p-4 space-y-3">
+                <p className="text-[#f5a623] text-[10px] font-bold uppercase tracking-widest text-center">Cumulative Scores</p>
+                <div className="space-y-2">
+                  {teams.map((t, i) => (
+                    <div key={t.key} className="rounded-xl border border-white/10 bg-white/5 p-2 flex items-center gap-2">
+                      <span className="text-lg">{['🥇','🥈','🥉'][i]}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-widest truncate" style={{ color: t.colour }}>{t.name}</p>
+                        <p className="text-[9px] text-slate-500 truncate">RF {t.rf} · BZ {t.bz} · IS {t.is} · MC {t.mc}</p>
+                      </div>
+                      <span className="text-white text-2xl font-black shrink-0">{t.total}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <button onClick={goToDoneFromCompare}
+                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl">
+                Show Ranking &amp; Declare Second Runner Up →
               </button>
             </div>
           )
