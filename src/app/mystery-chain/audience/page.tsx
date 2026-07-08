@@ -23,6 +23,10 @@ type MCAudienceState = {
   phase: MCPhase
   teamA: string; teamB: string; teamC: string
   semiA?: number; semiB?: number; semiC?: number
+  // Per-round breakdown of the semi total (may be missing on older payloads)
+  rfA?: number; rfB?: number; rfC?: number
+  bzA?: number; bzB?: number; bzC?: number
+  isA?: number; isB?: number; isC?: number
   packs: PackCard[]
   chosenA: string | null; chosenB: string | null; chosenC: string | null
   chosenSnippetsA?: string[]; chosenSnippetsB?: string[]; chosenSnippetsC?: string[]
@@ -948,11 +952,12 @@ export default function MCAudiencePage() {
   // ── Dedicated Second Runner Up declaration ──
   if (s.phase === 'declare_second_runnerup') {
     const teams = [
-      { name: s.teamA, semi: s.semiA ?? 0, mc: s.scoreA },
-      { name: s.teamB, semi: s.semiB ?? 0, mc: s.scoreB },
-      { name: s.teamC, semi: s.semiC ?? 0, mc: s.scoreC },
+      { name: s.teamA, semi: s.semiA ?? 0, mc: s.scoreA, rf: s.rfA ?? 0, bz: s.bzA ?? 0, is: s.isA ?? 0 },
+      { name: s.teamB, semi: s.semiB ?? 0, mc: s.scoreB, rf: s.rfB ?? 0, bz: s.bzB ?? 0, is: s.isB ?? 0 },
+      { name: s.teamC, semi: s.semiC ?? 0, mc: s.scoreC, rf: s.rfC ?? 0, bz: s.bzC ?? 0, is: s.isC ?? 0 },
     ].map(t => ({ ...t, total: t.semi + t.mc })).sort((a, b) => b.total - a.total)
     const secondRunnerUp = teams[2]
+    const hasBreakdown = (secondRunnerUp.rf + secondRunnerUp.bz + secondRunnerUp.is) > 0
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#1a0a2a] to-[#0a0a1a] text-white flex flex-col items-center justify-center gap-8 px-6">
         <p className="text-[#f5a623] text-sm font-bold uppercase tracking-[0.4em]">Oyo State Scholars Challenge 2026</p>
@@ -962,10 +967,44 @@ export default function MCAudiencePage() {
         <p className="text-slate-400 text-lg">is</p>
         <div className="bg-gradient-to-br from-orange-900/40 to-purple-900/40 border-2 border-[#f5a623]/60 rounded-3xl px-16 py-12 shadow-2xl backdrop-blur-sm">
           <p className="text-6xl md:text-7xl font-black text-[#f5a623] leading-tight text-center">{secondRunnerUp.name}</p>
+          {hasBreakdown && (
+            <div className="mt-6 grid grid-cols-4 gap-2 text-center max-w-lg mx-auto">
+              <div className="rounded-xl bg-[#f5a623]/15 border border-[#f5a623]/40 py-2">
+                <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-widest">Rapid Fire</p>
+                <p className="text-white text-xl font-black tabular-nums">{secondRunnerUp.rf}</p>
+              </div>
+              <div className="rounded-xl bg-blue-500/15 border border-blue-500/40 py-2">
+                <p className="text-blue-300 text-[10px] font-black uppercase tracking-widest">Buzzer</p>
+                <p className="text-white text-xl font-black tabular-nums">{secondRunnerUp.bz}</p>
+              </div>
+              <div className="rounded-xl bg-cyan-500/15 border border-cyan-500/40 py-2">
+                <p className="text-cyan-300 text-[10px] font-black uppercase tracking-widest">Sprint</p>
+                <p className="text-white text-xl font-black tabular-nums">{secondRunnerUp.is}</p>
+              </div>
+              <div className="rounded-xl bg-purple-500/15 border border-purple-500/40 py-2">
+                <p className="text-purple-300 text-[10px] font-black uppercase tracking-widest">Mystery</p>
+                <p className="text-white text-xl font-black tabular-nums">{secondRunnerUp.mc}</p>
+              </div>
+            </div>
+          )}
           <p className="text-slate-300 text-base mt-6 text-center">
-            Semi: <span className="font-bold text-white">{secondRunnerUp.semi}</span>
-            <span className="mx-3 text-slate-600">+</span>
-            Mystery Chain: <span className="font-bold text-white">{secondRunnerUp.mc}</span>
+            {hasBreakdown ? (
+              <>
+                RF {secondRunnerUp.rf}
+                <span className="mx-2 text-slate-600">+</span>
+                BZ {secondRunnerUp.bz}
+                <span className="mx-2 text-slate-600">+</span>
+                IS {secondRunnerUp.is}
+                <span className="mx-2 text-slate-600">+</span>
+                MC {secondRunnerUp.mc}
+              </>
+            ) : (
+              <>
+                Semi: <span className="font-bold text-white">{secondRunnerUp.semi}</span>
+                <span className="mx-3 text-slate-600">+</span>
+                Mystery Chain: <span className="font-bold text-white">{secondRunnerUp.mc}</span>
+              </>
+            )}
             <span className="mx-3 text-slate-600">=</span>
             <span className="font-black text-3xl text-white ml-1">{secondRunnerUp.total} pts</span>
           </p>
@@ -982,13 +1021,14 @@ export default function MCAudiencePage() {
     <div className="min-h-screen bg-[#0a0a1a] text-white p-4 flex flex-col gap-6 items-center justify-center">
       <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest">Mysteries Solved — Cumulative Results</p>
 
-      <div className="w-full max-w-sm space-y-3">
+      <div className="w-full max-w-lg space-y-3">
         {[
-          {name:s.teamA,mc:s.scoreA,semi:s.semiA ?? 0,rev:s.revealedA,cid:s.chosenA},
-          {name:s.teamB,mc:s.scoreB,semi:s.semiB ?? 0,rev:s.revealedB,cid:s.chosenB},
-          {name:s.teamC,mc:s.scoreC,semi:s.semiC ?? 0,rev:s.revealedC,cid:s.chosenC},
+          {name:s.teamA,mc:s.scoreA,semi:s.semiA ?? 0,rf:s.rfA ?? 0,bz:s.bzA ?? 0,is:s.isA ?? 0,rev:s.revealedA,cid:s.chosenA},
+          {name:s.teamB,mc:s.scoreB,semi:s.semiB ?? 0,rf:s.rfB ?? 0,bz:s.bzB ?? 0,is:s.isB ?? 0,rev:s.revealedB,cid:s.chosenB},
+          {name:s.teamC,mc:s.scoreC,semi:s.semiC ?? 0,rf:s.rfC ?? 0,bz:s.bzC ?? 0,is:s.isC ?? 0,rev:s.revealedC,cid:s.chosenC},
         ].map(t => ({...t, score: t.mc + t.semi})).sort((a,b) => b.score - a.score).map((t, i) => {
           const pack = s.packs.find(p => p.id === t.cid)
+          const hasBreakdown = (t.rf + t.bz + t.is) > 0
           return (
             <div key={t.name} className={`rounded-xl px-5 py-4 border ${
               i === 0 ? 'bg-yellow-500/20 border-yellow-500/40' :
@@ -996,14 +1036,46 @@ export default function MCAudiencePage() {
               'bg-orange-900/20 border-orange-900/30'
             }`}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <span className="text-2xl">{['🥇','🥈','🥉'][i]}</span>
-                  <div>
-                    <p className="text-white font-bold">{t.name}</p>
-                    <p className="text-slate-400 text-xs">{pack?.emoji} {pack?.title} · Semi {t.semi} + MC {t.mc}</p>
+                  <div className="min-w-0">
+                    <p className="text-white font-bold truncate">{t.name}</p>
+                    <p className="text-slate-400 text-xs">{pack?.emoji} {pack?.title}</p>
                   </div>
                 </div>
-                <span className="text-white text-2xl font-black">{t.score}</span>
+                <span className="text-white text-2xl font-black tabular-nums shrink-0 ml-3">{t.score}</span>
+              </div>
+              {/* Breakdown row */}
+              <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-5 gap-1.5 text-center text-[10px]">
+                {hasBreakdown ? (
+                  <>
+                    <div className="rounded-md bg-[#f5a623]/10 border border-[#f5a623]/30 px-1.5 py-1">
+                      <p className="text-[#f5a623] font-black uppercase tracking-wider text-[9px]">RF</p>
+                      <p className="text-white font-black tabular-nums text-sm">{t.rf}</p>
+                    </div>
+                    <div className="rounded-md bg-blue-500/10 border border-blue-500/30 px-1.5 py-1">
+                      <p className="text-blue-300 font-black uppercase tracking-wider text-[9px]">Buzzer</p>
+                      <p className="text-white font-black tabular-nums text-sm">{t.bz}</p>
+                    </div>
+                    <div className="rounded-md bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-1">
+                      <p className="text-cyan-300 font-black uppercase tracking-wider text-[9px]">IS</p>
+                      <p className="text-white font-black tabular-nums text-sm">{t.is}</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="col-span-3 rounded-md bg-white/5 border border-white/10 px-1.5 py-1">
+                    <p className="text-slate-400 font-black uppercase tracking-wider text-[9px]">Semi</p>
+                    <p className="text-white font-black tabular-nums text-sm">{t.semi}</p>
+                  </div>
+                )}
+                <div className="rounded-md bg-purple-500/10 border border-purple-500/30 px-1.5 py-1">
+                  <p className="text-purple-300 font-black uppercase tracking-wider text-[9px]">MC</p>
+                  <p className="text-white font-black tabular-nums text-sm">{t.mc}</p>
+                </div>
+                <div className="rounded-md bg-yellow-500/15 border border-yellow-500/40 px-1.5 py-1">
+                  <p className="text-yellow-300 font-black uppercase tracking-wider text-[9px]">Total</p>
+                  <p className="text-white font-black tabular-nums text-sm">{t.score}</p>
+                </div>
               </div>
             </div>
           )

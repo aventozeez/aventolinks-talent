@@ -60,7 +60,13 @@ type MCState = {
   teamA: string; teamB: string; teamC: string
   // Semi-final scores carried in from the semi-final round; add to MC score
   // for the cumulative total that decides Second Runner Up + advancement.
+  // semi* is always kept as (rf + bz + is) — kept as its own field so all the
+  // existing sort / total logic keeps working unchanged.
   semiA: number; semiB: number; semiC: number
+  // Breakdown of the semi-final total by round — filled in during setup.
+  rfA: number; rfB: number; rfC: number
+  bzA: number; bzB: number; bzC: number
+  isA: number; isB: number; isC: number
   packs: MCPack[]
   chosenA: string | null; chosenB: string | null; chosenC: string | null
   queueA: MCPuzzle[]; queueB: MCPuzzle[]; queueC: MCPuzzle[]
@@ -97,6 +103,9 @@ function safeForAudience(s: MCState) {
     phase: s.phase,
     teamA: s.teamA, teamB: s.teamB, teamC: s.teamC,
     semiA: s.semiA, semiB: s.semiB, semiC: s.semiC,
+    rfA: s.rfA, rfB: s.rfB, rfC: s.rfC,
+    bzA: s.bzA, bzB: s.bzB, bzC: s.bzC,
+    isA: s.isA, isB: s.isB, isC: s.isC,
     packs: s.packs.map(p => ({ id: p.id, title: p.title, emoji: p.emoji, teaser: p.teaser })),
     chosenA: s.chosenA, chosenB: s.chosenB, chosenC: s.chosenC,
     // Story snippets of each chosen pack — needed by summary phases so
@@ -267,6 +276,9 @@ const defaultState = (): MCState => ({
   phase: 'setup',
   teamA: '', teamB: '', teamC: '',
   semiA: 0, semiB: 0, semiC: 0,
+  rfA: 0, rfB: 0, rfC: 0,
+  bzA: 0, bzB: 0, bzC: 0,
+  isA: 0, isB: 0, isC: 0,
   packs: PACKS,
   chosenA: null, chosenB: null, chosenC: null,
   queueA: [], queueB: [], queueC: [],
@@ -522,45 +534,83 @@ export default function MCAdminPage() {
                     {teamsLoading ? 'loading teams…' : `${registeredTeams.length} registered`}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-[1fr_auto] gap-2 text-[9px] font-bold uppercase tracking-widest text-slate-500 items-center pt-1">
+                  <span>Team</span>
+                  <span className="grid grid-cols-4 gap-1 text-center">
+                    <span className="text-[#f5a623]">RF</span>
+                    <span className="text-blue-400">BZ</span>
+                    <span className="text-cyan-400">IS</span>
+                    <span className="text-white">Semi</span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-1.5">
                   {(['A','B','C'] as const).map((letter) => {
                     const nameKey = `team${letter}` as const
-                    const semiKey = `semi${letter}` as const
+                    const rfKey = `rf${letter}` as const
+                    const bzKey = `bz${letter}` as const
+                    const isKey = `is${letter}` as const
+                    const semi = (s[rfKey] || 0) + (s[bzKey] || 0) + (s[isKey] || 0)
+                    const setBreakdown = (key: typeof rfKey | typeof bzKey | typeof isKey, val: number) => {
+                      setS(p => {
+                        const next = { ...p, [key]: val }
+                        next.semiA = (next.rfA || 0) + (next.bzA || 0) + (next.isA || 0)
+                        next.semiB = (next.rfB || 0) + (next.bzB || 0) + (next.isB || 0)
+                        next.semiC = (next.rfC || 0) + (next.bzC || 0) + (next.isC || 0)
+                        return next
+                      })
+                    }
                     return (
-                      <div key={letter} className="flex gap-1.5 items-center">
-                        <span className="text-[10px] font-bold text-slate-500 w-3 shrink-0">{letter}</span>
-                        {registeredTeams.length > 0 ? (
-                          <select
-                            value={s[nameKey]}
-                            onChange={e => setS(p => ({ ...p, [nameKey]: e.target.value }))}
-                            className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-1.5 py-1.5 text-white text-xs min-w-0"
-                          >
-                            <option value="">— select team —</option>
-                            {registeredTeams.map(t => (
-                              <option key={t.id} value={t.name}>{t.name}{t.school ? ` (${t.school})` : ''}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            value={s[nameKey]}
-                            onChange={e => setS(p => ({ ...p, [nameKey]: e.target.value }))}
-                            placeholder={`Team ${letter}`}
-                            className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs min-w-0"
-                          />
-                        )}
-                        <input
-                          type="number" min="0"
-                          value={s[semiKey] || ''}
-                          onChange={e => setS(p => ({ ...p, [semiKey]: Number(e.target.value) || 0 }))}
-                          placeholder="Semi"
-                          title="Semi-final score (carries into MC total)"
-                          className="w-14 bg-slate-800 border border-slate-600 rounded-lg px-1.5 py-1.5 text-white text-xs text-center"
-                        />
+                      <div key={letter} className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                        <div className="flex gap-1.5 items-center min-w-0">
+                          <span className="text-[10px] font-bold text-slate-500 w-3 shrink-0">{letter}</span>
+                          {registeredTeams.length > 0 ? (
+                            <select
+                              value={s[nameKey]}
+                              onChange={e => setS(p => ({ ...p, [nameKey]: e.target.value }))}
+                              className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded-lg px-1.5 py-1.5 text-white text-xs"
+                            >
+                              <option value="">— select team —</option>
+                              {registeredTeams.map(t => (
+                                <option key={t.id} value={t.name}>{t.name}{t.school ? ` (${t.school})` : ''}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              value={s[nameKey]}
+                              onChange={e => setS(p => ({ ...p, [nameKey]: e.target.value }))}
+                              placeholder={`Team ${letter}`}
+                              className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs"
+                            />
+                          )}
+                        </div>
+                        <div className="grid grid-cols-4 gap-1">
+                          <input type="number" min="0"
+                            value={s[rfKey] || ''}
+                            onChange={e => setBreakdown(rfKey, Number(e.target.value) || 0)}
+                            title="Rapid Fire score"
+                            placeholder="0"
+                            className="w-12 bg-slate-800 border border-[#f5a623]/40 rounded-lg px-1 py-1.5 text-[#f5a623] text-xs text-center font-bold" />
+                          <input type="number" min="0"
+                            value={s[bzKey] || ''}
+                            onChange={e => setBreakdown(bzKey, Number(e.target.value) || 0)}
+                            title="Buzzer score"
+                            placeholder="0"
+                            className="w-12 bg-slate-800 border border-blue-500/40 rounded-lg px-1 py-1.5 text-blue-300 text-xs text-center font-bold" />
+                          <input type="number" min="0"
+                            value={s[isKey] || ''}
+                            onChange={e => setBreakdown(isKey, Number(e.target.value) || 0)}
+                            title="Innovation Sprint score"
+                            placeholder="0"
+                            className="w-12 bg-slate-800 border border-cyan-500/40 rounded-lg px-1 py-1.5 text-cyan-300 text-xs text-center font-bold" />
+                          <div className="w-12 bg-white/10 border border-white/20 rounded-lg px-1 py-1.5 text-white text-xs text-center font-black tabular-nums">
+                            {semi}
+                          </div>
+                        </div>
                       </div>
                     )
                   })}
                 </div>
-                <p className="text-[10px] text-slate-500">Semi-final score carries forward into every round.</p>
+                <p className="text-[10px] text-slate-500">Enter each team&apos;s RF, Buzzer, and Innovation Sprint scores. Semi is auto-summed and carries into every Mystery Chain total.</p>
               </div>
 
               <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-3 space-y-2">
@@ -941,9 +991,9 @@ export default function MCAdminPage() {
           // Sort by CUMULATIVE score (semi-final + Mystery Chain).
           // The lowest cumulative is the Second Runner Up of Oyo State Scholars Challenge 2026.
           const ranked = [
-            { name: s.teamA, semi: s.semiA, mc: s.scoreA, packId: s.chosenA, rev: s.revealedA },
-            { name: s.teamB, semi: s.semiB, mc: s.scoreB, packId: s.chosenB, rev: s.revealedB },
-            { name: s.teamC, semi: s.semiC, mc: s.scoreC, packId: s.chosenC, rev: s.revealedC },
+            { name: s.teamA, semi: s.semiA, mc: s.scoreA, rf: s.rfA, bz: s.bzA, is: s.isA, packId: s.chosenA, rev: s.revealedA },
+            { name: s.teamB, semi: s.semiB, mc: s.scoreB, rf: s.rfB, bz: s.bzB, is: s.isB, packId: s.chosenB, rev: s.revealedB },
+            { name: s.teamC, semi: s.semiC, mc: s.scoreC, rf: s.rfC, bz: s.bzC, is: s.isC, packId: s.chosenC, rev: s.revealedC },
           ].map(t => ({ ...t, total: t.semi + t.mc }))
             .sort((a, b) => b.total - a.total)
 
@@ -992,22 +1042,39 @@ export default function MCAdminPage() {
                   {ranked.map((t, i) => {
                     const pack = s.packs.find(p => p.id === t.packId)
                     const isLast = i === 2
+                    const hasBreakdown = (t.rf + t.bz + t.is) > 0
                     return (
                       <div key={t.name}
-                        className={`rounded-xl p-4 flex items-center justify-between ${
+                        className={`rounded-xl p-4 flex flex-col gap-2 ${
                           isLast ? 'bg-[#f5a623]/10 border border-[#f5a623]/30' : 'bg-white/5'
                         }`}>
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{['🥇','🥈','🥉'][i]}</span>
-                          <div>
-                            <p className="text-white font-bold">{t.name}</p>
-                            <p className="text-slate-500 text-xs">
-                              {pack?.emoji} {pack?.title} · Semi {t.semi} + MC {t.mc}
-                              {isLast && <span className="text-[#f5a623] font-bold ml-1">· Second Runner Up</span>}
-                            </p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-2xl">{['🥇','🥈','🥉'][i]}</span>
+                            <div className="min-w-0">
+                              <p className="text-white font-bold truncate">{t.name}</p>
+                              <p className="text-slate-500 text-xs truncate">
+                                {pack?.emoji} {pack?.title}
+                                {isLast && <span className="text-[#f5a623] font-bold ml-1">· Second Runner Up</span>}
+                              </p>
+                            </div>
                           </div>
+                          <span className="text-white text-2xl font-black shrink-0">{t.total}</span>
                         </div>
-                        <span className="text-white text-2xl font-black">{t.total} pts</span>
+                        {/* Score breakdown chips */}
+                        <div className="grid grid-cols-5 gap-1 text-center">
+                          {hasBreakdown ? (
+                            <>
+                              <div className="rounded-md bg-[#f5a623]/10 border border-[#f5a623]/30 px-1.5 py-1"><p className="text-[#f5a623] text-[8px] font-black uppercase tracking-wider">RF</p><p className="text-white text-xs font-black tabular-nums">{t.rf}</p></div>
+                              <div className="rounded-md bg-blue-500/10 border border-blue-500/30 px-1.5 py-1"><p className="text-blue-300 text-[8px] font-black uppercase tracking-wider">BZ</p><p className="text-white text-xs font-black tabular-nums">{t.bz}</p></div>
+                              <div className="rounded-md bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-1"><p className="text-cyan-300 text-[8px] font-black uppercase tracking-wider">IS</p><p className="text-white text-xs font-black tabular-nums">{t.is}</p></div>
+                            </>
+                          ) : (
+                            <div className="col-span-3 rounded-md bg-white/5 border border-white/10 px-1.5 py-1"><p className="text-slate-400 text-[8px] font-black uppercase tracking-wider">Semi</p><p className="text-white text-xs font-black tabular-nums">{t.semi}</p></div>
+                          )}
+                          <div className="rounded-md bg-purple-500/10 border border-purple-500/30 px-1.5 py-1"><p className="text-purple-300 text-[8px] font-black uppercase tracking-wider">MC</p><p className="text-white text-xs font-black tabular-nums">{t.mc}</p></div>
+                          <div className="rounded-md bg-yellow-500/15 border border-yellow-500/40 px-1.5 py-1"><p className="text-yellow-300 text-[8px] font-black uppercase tracking-wider">Total</p><p className="text-white text-xs font-black tabular-nums">{t.total}</p></div>
+                        </div>
                       </div>
                     )
                   })}
