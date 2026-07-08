@@ -24,7 +24,7 @@ export const IS_BONUS_PTS   = 20      // bonus if ALL steps correct
 export type FSCRound  = 'idle' | 'rapid_fire' | 'buzzer' | 'innovation_sprint' | 'mystery_chain' | 'audio_visual' | 'finished'
 export type RFPhase   = 'idle' | 'a_playing' | 'break' | 'b_playing' | 'done'
 export type BZPhase   = 'idle' | 'showing' | 'buzzed_a' | 'buzzed_b' | 'second_chance' | 'revealed' | 'done'
-export type ISPhase   = 'idle' | 'working' | 'collecting' | 'solution' | 'revealed' | 'done'
+export type ISPhase   = 'idle' | 'working' | 'collecting' | 'solution' | 'revealed' | 'compare' | 'done'
 export type BZResult  = null | 'correct_a' | 'correct_b' | 'penalty_a' | 'penalty_b' | 'bonus_a' | 'bonus_b' | 'skip'
 export type MCPhase   = 'idle' | 'story' | 'a_playing' | 'b_playing' | 'c_playing' | 'done'
 export type AVPhase   = 'idle' | 'a_playing' | 'break' | 'b_playing' | 'done'
@@ -94,6 +94,10 @@ export type FSCState = {
   is_team_b_answer: string[] | null
   is_step_results_a: boolean[] | null
   is_step_results_b: boolean[] | null
+  // Per-problem grades so the final comparison screen can show each problem
+  // side-by-side. Index N holds the score awarded on problem N (0-indexed).
+  is_problem_scores_a: number[]
+  is_problem_scores_b: number[]
 
   // ── Mystery Chain (3-Team Final) ──
   mc_phase: MCPhase
@@ -137,6 +141,7 @@ export const makeDefaultState = (a = 'Team A', b = 'Team B', c?: string): FSCSta
   is_phase: 'idle', is_problem_index: 0, is_problems: [],
   is_timer_start: null, is_team_a_answer: null, is_team_b_answer: null,
   is_step_results_a: null, is_step_results_b: null,
+  is_problem_scores_a: [], is_problem_scores_b: [],
   mc_phase: 'idle', mc_scenario_title: '', mc_opening_story: '',
   mc_puzzles_a: [], mc_puzzles_b: [], mc_puzzles_c: [],
   mc_q_index: 0, mc_timer_start: null,

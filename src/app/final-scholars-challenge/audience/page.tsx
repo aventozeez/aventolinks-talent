@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react'
 import {
   FSCState,
   getMatchState, subscribeToMatch,
-  RF_Q_COUNT, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS, MC_TIME_MS, MC_PUZZLE_COUNT,
+  RF_Q_COUNT, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS, IS_PROB_COUNT, MC_TIME_MS, MC_PUZZLE_COUNT,
 } from '@/lib/fsc-live'
 import RoundInstructionsInline from '@/components/round-instructions-inline'
 import { ROUND_INFO } from '@/lib/round-info'
@@ -514,61 +514,112 @@ export default function AudiencePage() {
               </div>
             )}
 
-            {s?.is_phase === 'revealed' && (
-              <div className="space-y-5">
-                <p className="text-2xl font-black text-white text-center">📊 Results!</p>
+            {s?.is_phase === 'revealed' && (() => {
+              const idx = s.is_problem_index ?? 0
+              const problemScoreA = s.is_problem_scores_a?.[idx] ?? 0
+              const problemScoreB = s.is_problem_scores_b?.[idx] ?? 0
+              return (
+                <div className="space-y-5">
+                  <p className="text-2xl font-black text-white text-center">📊 Problem {idx + 1} — Results</p>
 
-                {/* Per-team step breakdowns side by side */}
-                {(s.is_step_results_a || s.is_step_results_b) && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Team A breakdown */}
-                    {s.is_team_a_answer && s.is_step_results_a && (
-                      <div className="bg-green-950/30 border border-green-500/30 rounded-2xl p-4">
-                        <p className="text-xs font-black text-green-400 mb-3 truncate">{nameA}</p>
-                        {s.is_team_a_answer.map((step, i) => {
-                          const ok = s.is_step_results_a![i]
-                          return (
-                            <div key={i} className="flex items-start gap-1.5 py-1.5 border-b border-white/5 last:border-0">
-                              <span className={`text-xs shrink-0 mt-0.5 font-black ${ok ? 'text-green-400' : 'text-red-400'}`}>{ok ? '✓' : '✗'}</span>
-                              <p className="text-[11px] text-white/80 leading-snug">{step}</p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                    {/* Team B breakdown */}
-                    {s.is_team_b_answer && s.is_step_results_b && (
-                      <div className="bg-purple-950/30 border border-purple-500/30 rounded-2xl p-4">
-                        <p className="text-xs font-black text-purple-400 mb-3 truncate">{nameB}</p>
-                        {s.is_team_b_answer.map((step, i) => {
-                          const ok = s.is_step_results_b![i]
-                          return (
-                            <div key={i} className="flex items-start gap-1.5 py-1.5 border-b border-white/5 last:border-0">
-                              <span className={`text-xs shrink-0 mt-0.5 font-black ${ok ? 'text-green-400' : 'text-red-400'}`}>{ok ? '✓' : '✗'}</span>
-                              <p className="text-[11px] text-white/80 leading-snug">{step}</p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+                  {/* Per-team step breakdowns side by side */}
+                  {(s.is_step_results_a || s.is_step_results_b) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Team A breakdown */}
+                      {s.is_team_a_answer && s.is_step_results_a && (
+                        <div className="bg-green-950/30 border border-green-500/30 rounded-2xl p-4">
+                          <p className="text-xs font-black text-green-400 mb-3 truncate">{nameA}</p>
+                          {s.is_team_a_answer.map((step, i) => {
+                            const ok = s.is_step_results_a![i]
+                            return (
+                              <div key={i} className="flex items-start gap-1.5 py-1.5 border-b border-white/5 last:border-0">
+                                <span className={`text-xs shrink-0 mt-0.5 font-black ${ok ? 'text-green-400' : 'text-red-400'}`}>{ok ? '✓' : '✗'}</span>
+                                <p className="text-[11px] text-white/80 leading-snug">{step}</p>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {/* Team B breakdown */}
+                      {s.is_team_b_answer && s.is_step_results_b && (
+                        <div className="bg-purple-950/30 border border-purple-500/30 rounded-2xl p-4">
+                          <p className="text-xs font-black text-purple-400 mb-3 truncate">{nameB}</p>
+                          {s.is_team_b_answer.map((step, i) => {
+                            const ok = s.is_step_results_b![i]
+                            return (
+                              <div key={i} className="flex items-start gap-1.5 py-1.5 border-b border-white/5 last:border-0">
+                                <span className={`text-xs shrink-0 mt-0.5 font-black ${ok ? 'text-green-400' : 'text-red-400'}`}>{ok ? '✓' : '✗'}</span>
+                                <p className="text-[11px] text-white/80 leading-snug">{step}</p>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                {/* Scores */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-green-950/40 border border-green-500/40 rounded-2xl p-5 text-center">
-                    <p className="text-base font-black text-green-400">{nameA}</p>
-                    <p className="text-4xl font-black text-green-400 mt-1">{s.is_score_a}</p>
-                    <p className="text-xs text-green-700">IS total</p>
-                  </div>
-                  <div className="bg-purple-950/40 border border-purple-500/40 rounded-2xl p-5 text-center">
-                    <p className="text-base font-black text-purple-400">{nameB}</p>
-                    <p className="text-4xl font-black text-purple-400 mt-1">{s.is_score_b}</p>
-                    <p className="text-xs text-purple-700">IS total</p>
+                  {/* Per-problem scores (this problem only) + cumulative note */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-green-950/40 border border-green-500/40 rounded-2xl p-5 text-center">
+                      <p className="text-base font-black text-green-400">{nameA}</p>
+                      <p className="text-5xl font-black text-green-400 mt-1">+{problemScoreA}</p>
+                      <p className="text-xs text-green-700">Problem {idx + 1} · IS total {s.is_score_a}</p>
+                    </div>
+                    <div className="bg-purple-950/40 border border-purple-500/40 rounded-2xl p-5 text-center">
+                      <p className="text-base font-black text-purple-400">{nameB}</p>
+                      <p className="text-5xl font-black text-purple-400 mt-1">+{problemScoreB}</p>
+                      <p className="text-xs text-purple-700">Problem {idx + 1} · IS total {s.is_score_b}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
+
+            {s?.is_phase === 'compare' && (() => {
+              const a = s.is_score_a
+              const b = s.is_score_b
+              const aWins = a > b
+              const bWins = b > a
+              return (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <p className="text-[10px] md:text-xs font-black text-[#f5a623] uppercase tracking-[0.4em]">Innovation Sprint · Final</p>
+                    <h2 className="text-3xl md:text-5xl font-black text-white mt-2">Head-to-Head</h2>
+                  </div>
+
+                  {/* Per-problem table */}
+                  <div className="bg-[#0a1628] border border-white/10 rounded-3xl overflow-hidden max-w-3xl mx-auto w-full">
+                    <div className="grid grid-cols-3 bg-white/5">
+                      <div className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Problem</div>
+                      <div className="px-4 py-3 text-[10px] font-black text-green-400 uppercase tracking-widest text-center truncate">{nameA}</div>
+                      <div className="px-4 py-3 text-[10px] font-black text-purple-400 uppercase tracking-widest text-center truncate">{nameB}</div>
+                    </div>
+                    {Array.from({ length: (s.is_problems?.length ?? IS_PROB_COUNT) }).map((_, i) => {
+                      const pa = s.is_problem_scores_a?.[i] ?? 0
+                      const pb = s.is_problem_scores_b?.[i] ?? 0
+                      return (
+                        <div key={i} className="grid grid-cols-3 border-t border-white/5">
+                          <div className="px-4 py-4 text-sm md:text-base font-bold text-white">Problem {i + 1}</div>
+                          <div className={`px-4 py-4 text-center text-2xl md:text-3xl font-black ${pa >= pb ? 'text-green-300' : 'text-slate-500'}`}>{pa}</div>
+                          <div className={`px-4 py-4 text-center text-2xl md:text-3xl font-black ${pb >= pa ? 'text-purple-300' : 'text-slate-500'}`}>{pb}</div>
+                        </div>
+                      )
+                    })}
+                    <div className="grid grid-cols-3 border-t-2 border-[#f5a623]/40 bg-[#f5a623]/5">
+                      <div className="px-4 py-4 text-sm md:text-base font-black text-[#f5a623] uppercase tracking-widest">Total</div>
+                      <div className={`px-4 py-4 text-center text-4xl md:text-5xl font-black ${aWins ? 'text-green-300' : 'text-white'}`}>{a}</div>
+                      <div className={`px-4 py-4 text-center text-4xl md:text-5xl font-black ${bWins ? 'text-purple-300' : 'text-white'}`}>{b}</div>
+                    </div>
+                  </div>
+
+                  <p className="text-center text-white text-xl md:text-2xl font-black">
+                    {aWins ? `🏆 ${nameA} wins the Innovation Sprint`
+                      : bWins ? `🏆 ${nameB} wins the Innovation Sprint`
+                      : `🤝 It's a tie at ${a}`}
+                  </p>
+                </div>
+              )
+            })()}
 
             {s?.is_phase === 'done' && (
               <div className="text-center space-y-3">

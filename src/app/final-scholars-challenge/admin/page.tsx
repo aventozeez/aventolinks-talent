@@ -983,11 +983,19 @@ export default function AdminPage() {
     // Compute per-step correct/wrong so all screens can show the breakdown
     const stepResultsA = prob.steps.map((step, i) => isAnswers.a ? isAnswers.a[i] === step : false)
     const stepResultsB = prob.steps.map((step, i) => isAnswers.b ? isAnswers.b[i] === step : false)
+    // Overwrite the current problem index in the per-problem arrays so grading
+    // twice on the same problem doesn't double-record.
+    const problemScoresA = [...(s.is_problem_scores_a ?? [])]
+    const problemScoresB = [...(s.is_problem_scores_b ?? [])]
+    problemScoresA[s.is_problem_index] = gradeA
+    problemScoresB[s.is_problem_index] = gradeB
     await applyState({
       ...s,
       is_phase: 'solution',
       is_score_a: s.is_score_a + gradeA,
       is_score_b: s.is_score_b + gradeB,
+      is_problem_scores_a: problemScoresA,
+      is_problem_scores_b: problemScoresB,
       is_team_a_answer: isAnswers.a,
       is_team_b_answer: isAnswers.b,
       is_step_results_a: stepResultsA,
@@ -1002,8 +1010,14 @@ export default function AdminPage() {
     const s = fscRef.current; if (!s) return
     const next = s.is_problem_index + 1
     setIsAnswers(null); setIsGrades(null)
-    if (next >= IS_PROB_COUNT) applyState({ ...s, is_phase: 'done', is_step_results_a: null, is_step_results_b: null })
+    // After the last problem, go to the dedicated side-by-side comparison
+    // screen. After that, admin advances to done.
+    if (next >= IS_PROB_COUNT) applyState({ ...s, is_phase: 'compare', is_step_results_a: null, is_step_results_b: null })
     else applyState({ ...s, is_phase: 'idle', is_problem_index: next, is_step_results_a: null, is_step_results_b: null })
+  }
+  const showISDone = () => {
+    const s = fscRef.current; if (!s) return
+    applyState({ ...s, is_phase: 'done' })
   }
   const finishMatch = async () => {
     if (!confirm('Finish the match and show final scores?')) return
@@ -2699,23 +2713,32 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* revealed */}
+              {/* revealed — per-problem results */}
               {s.is_phase === 'revealed' && (
                 <div className="space-y-3">
                   {currentISP && (s.is_step_results_a || s.is_step_results_b) && (
                     <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-3">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Grading Results</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-[#f5a623] uppercase tracking-widest">Problem {s.is_problem_index + 1} of {IS_PROB_COUNT} — Results</p>
+                        <p className="text-[10px] text-slate-500">Cumulative shown below</p>
+                      </div>
                       {(['a', 'b'] as const).map(team => {
                         const answer = team === 'a' ? (isAnswers?.a ?? s.is_team_a_answer) : (isAnswers?.b ?? s.is_team_b_answer)
                         const stepResults = team === 'a' ? s.is_step_results_a : s.is_step_results_b
                         const name = team === 'a' ? s.team_a_name : s.team_b_name
-                        const score = team === 'a' ? s.is_score_a : s.is_score_b
+                        const problemScore = team === 'a'
+                          ? (s.is_problem_scores_a?.[s.is_problem_index] ?? 0)
+                          : (s.is_problem_scores_b?.[s.is_problem_index] ?? 0)
+                        const total = team === 'a' ? s.is_score_a : s.is_score_b
                         const color = team === 'a' ? 'text-green-400' : 'text-purple-400'
                         return (
                           <div key={team} className={`rounded-xl p-3 border ${team === 'a' ? 'border-green-500/30' : 'border-purple-500/30'}`}>
                             <div className="flex items-center justify-between mb-2">
                               <p className={`text-xs font-bold ${color}`}>{name}</p>
-                              <p className={`text-lg font-black ${color}`}>{score} pts total</p>
+                              <div className="text-right">
+                                <p className={`text-lg font-black ${color}`}>+{problemScore} pts</p>
+                                <p className="text-[10px] text-slate-500">Total so far: {total}</p>
+                              </div>
                             </div>
                             {answer && stepResults && currentISP.steps.map((correctStep, i) => {
                               const teamStep = answer[i] ?? ''
@@ -2739,6 +2762,56 @@ export default function AdminPage() {
                     className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
                     {s.is_problem_index + 1 >= IS_PROB_COUNT ? 'Finish Innovation Sprint' : `Next Problem (${s.is_problem_index + 2}/${IS_PROB_COUNT})`}
+                  </button>
+                </div>
+              )}
+
+              {/* compare — side-by-side of both problems + IS totals */}
+              {s.is_phase === 'compare' && (
+                <div className="space-y-3">
+                  <div className="bg-[#0a1628] border border-[#f5a623]/40 rounded-2xl p-4 space-y-3">
+                    <p className="text-[10px] font-bold text-[#f5a623] uppercase tracking-widest">Innovation Sprint · Final Compare</p>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-lg bg-white/5 border border-white/10 py-2">
+                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Problem</p>
+                      </div>
+                      <div className="rounded-lg bg-green-500/10 border border-green-500/30 py-2">
+                        <p className="text-[9px] text-green-400 font-bold uppercase tracking-widest truncate">{s.team_a_name}</p>
+                      </div>
+                      <div className="rounded-lg bg-purple-500/10 border border-purple-500/30 py-2">
+                        <p className="text-[9px] text-purple-400 font-bold uppercase tracking-widest truncate">{s.team_b_name}</p>
+                      </div>
+                      {Array.from({ length: IS_PROB_COUNT }).map((_, i) => {
+                        const a = s.is_problem_scores_a?.[i] ?? 0
+                        const b = s.is_problem_scores_b?.[i] ?? 0
+                        return (
+                          <div key={i} className="contents">
+                            <div className="rounded-lg bg-white/5 py-2 text-xs font-bold text-white">Problem {i + 1}</div>
+                            <div className={`rounded-lg py-2 text-lg font-black ${a >= b ? 'bg-green-500/15 text-green-300' : 'bg-white/5 text-slate-400'}`}>{a}</div>
+                            <div className={`rounded-lg py-2 text-lg font-black ${b >= a ? 'bg-purple-500/15 text-purple-300' : 'bg-white/5 text-slate-400'}`}>{b}</div>
+                          </div>
+                        )
+                      })}
+                      <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-2 text-xs font-black text-[#f5a623]">Total</div>
+                      <div className={`rounded-lg py-2 text-xl font-black ${s.is_score_a >= s.is_score_b ? 'bg-green-500/25 text-green-300 ring-1 ring-green-400/40' : 'bg-white/5 text-slate-400'}`}>{s.is_score_a}</div>
+                      <div className={`rounded-lg py-2 text-xl font-black ${s.is_score_b >= s.is_score_a ? 'bg-purple-500/25 text-purple-300 ring-1 ring-purple-400/40' : 'bg-white/5 text-slate-400'}`}>{s.is_score_b}</div>
+                    </div>
+                    <p className="text-center text-white text-sm font-black pt-1">
+                      {s.is_score_a > s.is_score_b ? `🏆 ${s.team_a_name} wins the Innovation Sprint`
+                        : s.is_score_b > s.is_score_a ? `🏆 ${s.team_b_name} wins the Innovation Sprint`
+                        : `🤝 Tied at ${s.is_score_a}`}
+                    </p>
+                  </div>
+                  <PointAdjuster
+                    teams={[
+                      { label: s.team_a_name, score: s.is_score_a, colour: '#22c55e', onAdjust: d => applyState({ ...s, is_score_a: Math.max(0, s.is_score_a + d) }) },
+                      { label: s.team_b_name, score: s.is_score_b, colour: '#a855f7', onAdjust: d => applyState({ ...s, is_score_b: Math.max(0, s.is_score_b + d) }) },
+                    ]}
+                    note="Adjust before moving on."
+                  />
+                  <button onClick={showISDone}
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-black rounded-xl text-base hover:bg-[#e0941a] transition-colors">
+                    <ArrowRight size={16} /> Continue to Finish Match
                   </button>
                 </div>
               )}
