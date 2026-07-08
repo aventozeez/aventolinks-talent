@@ -478,27 +478,31 @@ export default function AudiencePage() {
             )}
 
             {s?.is_phase === 'solution' && s.is_problems?.[s.is_problem_index] && (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <p className="text-[10px] md:text-xs font-black text-[#f5a623] uppercase tracking-[0.4em]">The correct solution</p>
-                  <p className="text-2xl md:text-4xl font-black text-white mt-2 max-w-3xl mx-auto leading-tight">
-                    {s.is_problems[s.is_problem_index].statement}
+              <div className="space-y-5">
+                <div className="flex items-center justify-center gap-3">
+                  <span className="h-px flex-1 max-w-[80px] bg-gradient-to-r from-transparent to-green-400/60" />
+                  <p className="inline-flex items-center gap-2 rounded-full border border-green-400/40 bg-green-500/10 px-4 py-1.5 text-[11px] md:text-xs font-black text-green-300 uppercase tracking-[0.35em]">
+                    <span className="text-base leading-none">✓</span> The Correct Solution
                   </p>
+                  <span className="h-px flex-1 max-w-[80px] bg-gradient-to-l from-transparent to-green-400/60" />
                 </div>
-                <ol className="space-y-3 max-w-3xl mx-auto">
+
+                <ol className="space-y-2.5 max-w-3xl mx-auto">
                   {s.is_problems[s.is_problem_index].steps.map((step, i) => (
                     <li
                       key={i}
-                      className="flex items-center gap-4 rounded-2xl border border-[#f5a623]/40 bg-gradient-to-r from-[#f5a623]/15 to-transparent px-5 py-4 shadow-[0_6px_20px_-8px_rgba(245,166,35,0.4)]"
-                      style={{ animationDelay: `${i * 90}ms` }}
+                      className="relative flex items-center gap-4 rounded-2xl border border-green-400/50 bg-gradient-to-r from-green-500/25 via-green-500/10 to-green-500/5 px-5 py-4 shadow-[0_8px_24px_-10px_rgba(34,197,94,0.5)] overflow-hidden"
                     >
-                      <span className="shrink-0 w-11 h-11 rounded-full bg-[#f5a623] text-[#0a1628] text-xl font-black flex items-center justify-center shadow-lg">
+                      <span className="pointer-events-none absolute inset-0 bg-green-400/[0.06]" />
+                      <span className="relative shrink-0 w-11 h-11 rounded-full bg-green-500 text-[#052e13] text-xl font-black flex items-center justify-center shadow-lg ring-2 ring-green-300/50">
                         {i + 1}
                       </span>
-                      <p className="text-base md:text-xl font-semibold text-white/95 leading-snug">{step}</p>
+                      <p className="relative flex-1 text-base md:text-xl font-semibold text-white leading-snug">{step}</p>
+                      <span className="relative shrink-0 text-green-300 text-2xl md:text-3xl font-black leading-none">✓</span>
                     </li>
                   ))}
                 </ol>
+
                 <p className="text-center text-slate-500 text-sm italic">Next: how each team did →</p>
               </div>
             )}
