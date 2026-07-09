@@ -829,10 +829,13 @@ export default function AdminPage() {
     const toQ = (q: typeof regularQs[0]): FSCQuestion => ({
       id: q.id, question: q.question, answer: q.answer ?? '', category: q.category,
     })
-    const rfQsA: FSCQuestion[] = [...rfPoolQsA].sort(() => Math.random() - 0.5).slice(0, RF_Q_COUNT).map(toQ)
-    const rfQsB: FSCQuestion[] = [...rfPoolQsB].sort(() => Math.random() - 0.5).slice(0, RF_Q_COUNT).map(toQ)
-    const bzQs: FSCQuestion[]  = [...bzPoolQs].sort(() => Math.random() - 0.5).slice(0, BZ_Q_COUNT).map(toQ)
-    const isProbs: ISProblem[] = [...isPoolQs].sort(() => Math.random() - 0.5).slice(0, IS_PROB_COUNT).map(q => ({
+    // Play questions in pool order (not shuffled) so the quiz master's paper
+    // master list matches what appears on screen. The 5 solution steps inside
+    // each IS problem are STILL shuffled (that's the puzzle for the teams).
+    const rfQsA: FSCQuestion[] = rfPoolQsA.slice(0, RF_Q_COUNT).map(toQ)
+    const rfQsB: FSCQuestion[] = rfPoolQsB.slice(0, RF_Q_COUNT).map(toQ)
+    const bzQs: FSCQuestion[]  = bzPoolQs.slice(0, BZ_Q_COUNT).map(toQ)
+    const isProbs: ISProblem[] = isPoolQs.slice(0, IS_PROB_COUNT).map(q => ({
       id: q.id,
       statement: q.answer?.trim() ? q.answer : q.question,
       steps: q.steps ?? [],
