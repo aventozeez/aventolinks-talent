@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { wsBroadcast } from '@/lib/ws-sync'
-import { supabase } from '@/lib/supabase'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
 import PointAdjuster from '@/components/point-adjuster'
 import AdminRoundIntro from '@/components/round-instructions-admin'
 import { ROUND_INFO } from '@/lib/round-info'
@@ -353,12 +353,14 @@ export default function MCAdminPage() {
     let cancelled = false
     ;(async () => {
       try {
+        // Use the service-role client (matches how the FSC admin loads teams)
+        // so RLS on fsc_teams doesn't wipe out the list, and drop the status
+        // filter so newly added teams appear even if their status isn't set.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any)
+        const { data } = await (supabaseAdmin as any)
           .from('fsc_teams')
-          .select('id, name, school')
-          .eq('status', 'active')
-          .order('name')
+          .select('*')
+          .order('created_at')
         if (!cancelled && data) setRegisteredTeams(data as RegisteredTeam[])
       } catch { /* offline / DB unreachable — dropdown just stays empty */ }
       finally { if (!cancelled) setTeamsLoading(false) }

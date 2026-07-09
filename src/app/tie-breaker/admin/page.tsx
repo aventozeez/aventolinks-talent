@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
-import { supabase } from '@/lib/supabase'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
 
 const CHANNEL = 'tie:state'
 const ROUND_MS = 30_000                // 30 seconds per team
@@ -256,12 +256,14 @@ export default function TieBreakerAdmin() {
     let cancelled = false
     ;(async () => {
       try {
+        // Use the service-role client (matches how the FSC admin loads teams)
+        // so RLS on fsc_teams doesn't wipe out the list, and drop the status
+        // filter so newly added teams appear even if their status isn't set.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any)
+        const { data } = await (supabaseAdmin as any)
           .from('fsc_teams')
-          .select('id, name, school')
-          .eq('status', 'active')
-          .order('name')
+          .select('*')
+          .order('created_at')
         if (!cancelled && data) setTeams(data as RegisteredTeam[])
       } catch { /* offline — plain text inputs will show */ }
     })()
