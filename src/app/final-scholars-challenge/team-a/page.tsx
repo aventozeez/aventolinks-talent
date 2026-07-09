@@ -169,17 +169,7 @@ export default function TeamAPage() {
               <p className="text-white text-sm md:text-base font-black leading-tight truncate">{myName}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 shrink-0 text-right">
-            <div>
-              <p className={`text-lg md:text-xl font-black ${COLOR.text} leading-none tabular-nums`}>{myTotalScore}</p>
-              <p className={`text-[9px] ${COLOR.text} opacity-60 leading-none mt-0.5`}>You</p>
-            </div>
-            <div className="h-8 w-px bg-white/10" />
-            <div>
-              <p className="text-base font-bold text-slate-400 leading-none tabular-nums">{theirTotalScore}</p>
-              <p className="text-[9px] text-slate-600 leading-none mt-0.5 truncate max-w-[80px]">{theirName}</p>
-            </div>
-          </div>
+          {/* Cumulative score removed — students focus on the current round only. */}
         </div>
 
         {/* Slim timer bar */}
@@ -245,21 +235,11 @@ export default function TeamAPage() {
   return (
     <div className="min-h-screen bg-[#060f1f] text-white flex flex-col select-none">
 
-      {/* Header */}
-      <div className={`${COLOR.bg} border-b ${COLOR.border} px-6 py-5 text-center shrink-0`}>
+      {/* Header — cumulative score intentionally omitted (kept off both team screens
+          so students focus on the current round instead of the running total). */}
+      <div className={`${COLOR.bg} border-b ${COLOR.border} px-6 py-4 text-center shrink-0`}>
         <p className={`text-[11px] font-black ${COLOR.text} uppercase tracking-[0.3em] mb-1`}>Your Team</p>
-        <h1 className="text-3xl md:text-4xl font-black text-white">{myName}</h1>
-        <div className="flex items-center justify-center gap-8 mt-4">
-          <div className="text-center">
-            <p className={`text-5xl font-black ${COLOR.text} leading-none`}>{myTotalScore}</p>
-            <p className={`text-xs ${COLOR.text} opacity-60 font-semibold mt-1`}>Your Points</p>
-          </div>
-          <div className="h-12 w-px bg-white/10" />
-          <div className="text-center">
-            <p className="text-3xl font-bold text-slate-500 leading-none">{theirTotalScore}</p>
-            <p className="text-xs text-slate-600 font-semibold mt-1">{theirName}</p>
-          </div>
-        </div>
+        <h1 className="text-2xl md:text-3xl font-black text-white">{myName}</h1>
       </div>
 
       {/* Main */}
@@ -512,6 +492,22 @@ export default function TeamAPage() {
                 <p className="text-slate-400 text-sm">Arrange the solution steps in the correct order</p>
                 {s.is_problems?.[s.is_problem_index]?.statement && (
                   <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-2xl p-5 text-left mt-4">
+                    <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-wider mb-2">Problem Statement</p>
+                    <p className="text-base text-white font-medium leading-relaxed">{s.is_problems[s.is_problem_index].statement}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {s?.is_phase === 'ready' && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border-4 border-[#f5a623] bg-[#f5a623]/10 p-6 text-center animate-pulse shadow-[0_16px_40px_-12px_rgba(245,166,35,0.5)]">
+                  <p className="text-[#f5a623] text-xs font-black uppercase tracking-[0.4em]">Ready</p>
+                  <p className="text-white text-4xl font-black mt-3 leading-none">GET SET</p>
+                  <p className="text-slate-300 text-sm mt-4">Timer starts on the moderator&apos;s mark.</p>
+                </div>
+                {s.is_problems?.[s.is_problem_index]?.statement && (
+                  <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-2xl p-5 text-left">
                     <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-wider mb-2">Problem Statement</p>
                     <p className="text-base text-white font-medium leading-relaxed">{s.is_problems[s.is_problem_index].statement}</p>
                   </div>
