@@ -276,6 +276,11 @@ export type SavedMatch = {
   final_score_a?: number
   final_score_b?: number
   winner?: string
+  // Per-round breakdown captured when the match finishes (RF + BZ + IS
+  // preliminary matches, and the 3-Team-Final for teams A/B/C).
+  rf_score_a?: number; rf_score_b?: number; rf_score_c?: number
+  bz_score_a?: number; bz_score_b?: number; bz_score_c?: number
+  is_score_a?: number; is_score_b?: number; is_score_c?: number
   // Bracket fields
   stage?: MatchStage
   match_code?: string           // 'M1'..'M8','QF1'..'QF4','SF1','SF2','3TF','GF'

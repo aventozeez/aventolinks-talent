@@ -1045,7 +1045,15 @@ export default function AdminPage() {
     const loserScore = winner === s.team_a_name ? totalB : totalA
 
     let matches = savedMatches.map(m =>
-      m.status === 'live' ? { ...m, status: 'completed' as const, final_score_a: totalA, final_score_b: totalB, winner } : m
+      m.status === 'live' ? {
+        ...m,
+        status: 'completed' as const,
+        final_score_a: totalA, final_score_b: totalB,
+        rf_score_a: s.rf_score_a, rf_score_b: s.rf_score_b,
+        bz_score_a: s.bz_score_a, bz_score_b: s.bz_score_b,
+        is_score_a: s.is_score_a, is_score_b: s.is_score_b,
+        winner,
+      } : m
     )
 
     // Auto-propagate winner to next bracket match
@@ -2186,11 +2194,33 @@ export default function AdminPage() {
                         {match.team_a_name} <span className="text-slate-600">vs</span> {match.team_b_name}
                       </p>
                       {match.status === 'completed' && match.final_score_a !== undefined && (
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-xs font-black text-green-400">{match.team_a_name}: {match.final_score_a}</span>
-                          <span className="text-slate-600 text-xs">—</span>
-                          <span className="text-xs font-black text-purple-400">{match.team_b_name}: {match.final_score_b}</span>
-                          {match.winner && <span className="text-[10px] bg-[#f5a623]/15 text-[#f5a623] px-2 py-0.5 rounded-full font-bold">🏆 {match.winner}</span>}
+                        <div className="mt-1.5 space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-black text-green-400">{match.team_a_name}: {match.final_score_a}</span>
+                            <span className="text-slate-600 text-xs">—</span>
+                            <span className="text-xs font-black text-purple-400">{match.team_b_name}: {match.final_score_b}</span>
+                            {match.winner && <span className="text-[10px] bg-[#f5a623]/15 text-[#f5a623] px-2 py-0.5 rounded-full font-bold">🏆 {match.winner}</span>}
+                          </div>
+                          {/* Per-round breakdown (RF · BZ · IS) when we have it */}
+                          {(match.rf_score_a !== undefined || match.bz_score_a !== undefined || match.is_score_a !== undefined) && (
+                            <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr] gap-1 text-center text-[9px]">
+                              <span></span>
+                              <span className="text-[#f5a623]/70 font-black uppercase tracking-widest">RF</span>
+                              <span className="text-blue-300/70 font-black uppercase tracking-widest">Buzzer</span>
+                              <span className="text-cyan-300/70 font-black uppercase tracking-widest">Sprint</span>
+                              <span className="text-yellow-300/80 font-black uppercase tracking-widest">Total</span>
+                              <span className="text-green-400 text-[10px] font-black text-right truncate">{match.team_a_name}</span>
+                              <span className="rounded-md bg-[#f5a623]/10 border border-[#f5a623]/25 py-0.5 text-white font-black tabular-nums">{match.rf_score_a ?? 0}</span>
+                              <span className="rounded-md bg-blue-500/10 border border-blue-500/25 py-0.5 text-white font-black tabular-nums">{match.bz_score_a ?? 0}</span>
+                              <span className="rounded-md bg-cyan-500/10 border border-cyan-500/25 py-0.5 text-white font-black tabular-nums">{match.is_score_a ?? 0}</span>
+                              <span className="rounded-md bg-yellow-500/15 border border-yellow-500/40 py-0.5 text-white font-black tabular-nums">{match.final_score_a ?? 0}</span>
+                              <span className="text-purple-400 text-[10px] font-black text-right truncate">{match.team_b_name}</span>
+                              <span className="rounded-md bg-[#f5a623]/10 border border-[#f5a623]/25 py-0.5 text-white font-black tabular-nums">{match.rf_score_b ?? 0}</span>
+                              <span className="rounded-md bg-blue-500/10 border border-blue-500/25 py-0.5 text-white font-black tabular-nums">{match.bz_score_b ?? 0}</span>
+                              <span className="rounded-md bg-cyan-500/10 border border-cyan-500/25 py-0.5 text-white font-black tabular-nums">{match.is_score_b ?? 0}</span>
+                              <span className="rounded-md bg-yellow-500/15 border border-yellow-500/40 py-0.5 text-white font-black tabular-nums">{match.final_score_b ?? 0}</span>
+                            </div>
+                          )}
                         </div>
                       )}
                       <div className="flex flex-wrap gap-1 mt-2">
