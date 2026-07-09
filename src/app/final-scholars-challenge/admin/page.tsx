@@ -90,6 +90,14 @@ export default function AdminPage() {
   const fscRef = useRef<FSCState | null>(null)
   const buzzLockRef = useRef(false)
   const autoEndedRFRef = useRef(false)   // prevents double-firing auto-end
+  // Grace window for RF: when the 60s timer hits 0 we hold the phase for a
+  // few extra seconds so admin can still grade a last-second answer that
+  // came in right at the buzzer.
+  const RF_GRACE_MS = 5_000
+  const [rfGraceStart, setRfGraceStart] = useState<number | null>(null)
+  const rfGraceStartRef = useRef<number | null>(null)
+  rfGraceStartRef.current = rfGraceStart
+  const [rfGraceMs, setRfGraceMs] = useState(0)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyStateRef = useRef<any>(null) // stable ref so timer can call applyState
 
@@ -184,6 +192,9 @@ export default function AdminPage() {
         fscState?.mc_phase === 'a_playing' || fscState?.mc_phase === 'b_playing' || fscState?.mc_phase === 'c_playing' ||
         fscState?.av_phase === 'a_playing' || fscState?.av_phase === 'b_playing') {
       autoEndedRFRef.current = false
+      // Clear any stale grace state from the previous team's turn.
+      setRfGraceStart(null)
+      setRfGraceMs(0)
     }
   }, [fscState?.rf_phase, fscState?.mc_phase, fscState?.av_phase])
 
@@ -328,12 +339,25 @@ export default function AdminPage() {
       if (s.rf_phase === 'a_playing' || s.rf_phase === 'b_playing') {
         const remaining = Math.max(0, RF_TIME_MS - (Date.now() - (s.rf_timer_start ?? Date.now())))
         setTimerMs(remaining)
-        // Auto-end team's turn when timer reaches 0
-        if (remaining === 0 && !autoEndedRFRef.current) {
-          autoEndedRFRef.current = true
-          // Score is already current from live updates — just flip the phase
-          const isA = s.rf_phase === 'a_playing'
-          applyStateRef.current?.({ ...s, rf_phase: isA ? 'score_a' : 'score_b' })
+        // Timer just hit 0 → open the grace window (do NOT flip the phase yet).
+        if (remaining === 0 && rfGraceStartRef.current === null) {
+          const now = Date.now()
+          setRfGraceStart(now)
+          rfGraceStartRef.current = now
+        }
+        // While in the grace window, keep counting down the grace remaining.
+        if (rfGraceStartRef.current !== null) {
+          const graceLeft = Math.max(0, RF_GRACE_MS - (Date.now() - rfGraceStartRef.current))
+          setRfGraceMs(graceLeft)
+          // Only auto-flip when the grace window itself expires.
+          if (graceLeft === 0 && !autoEndedRFRef.current) {
+            autoEndedRFRef.current = true
+            const isA = s.rf_phase === 'a_playing'
+            applyStateRef.current?.({ ...s, rf_phase: isA ? 'score_a' : 'score_b' })
+            setRfGraceStart(null)
+            rfGraceStartRef.current = null
+            setRfGraceMs(0)
+          }
         }
       } else if ((s.bz_phase === 'buzzed_a' || s.bz_phase === 'buzzed_b' || s.bz_phase === 'second_chance') && s.bz_buzz_start) {
         setTimerMs(Math.max(0, BZ_TIME_MS - (Date.now() - s.bz_buzz_start)))
@@ -889,6 +913,8 @@ export default function AdminPage() {
     const s = fscRef.current; if (!s) return
     // Score is already current from live updates — just flip the phase
     const isA = s.rf_phase === 'a_playing'
+    // Clear the grace window if the admin explicitly ends the turn.
+    setRfGraceStart(null); setRfGraceMs(0); autoEndedRFRef.current = true
     applyState({ ...s, rf_phase: isA ? 'score_a' : 'score_b' })
   }
   const proceedToBuzzer = () => {
@@ -2386,6 +2412,14 @@ export default function AdminPage() {
                   <p className="text-xs text-slate-500 mt-1">Q {Math.min(s.rf_q_index + 1, RF_Q_COUNT)} of {RF_Q_COUNT}{s.rf_q_index >= RF_Q_COUNT ? ' ♻' : ''} · {s.rf_correct_a} correct</p>
                 </div>
 
+                {rfGraceStart !== null && (
+                  <div className="rounded-2xl border-2 border-amber-400/60 bg-amber-500/15 p-3 text-center animate-pulse">
+                    <p className="text-amber-300 text-[10px] font-black uppercase tracking-[0.3em]">⏰ Grace Window — Grade Last Answer</p>
+                    <p className="text-white text-2xl font-black mt-0.5 tabular-nums">{(rfGraceMs / 1000).toFixed(1)}s</p>
+                    <p className="text-amber-200/70 text-[10px] mt-0.5">Correct / Wrong / Skip still counts</p>
+                  </div>
+                )}
+
                 {currentRFQ && (
                   <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4">
                     <div className="flex items-center justify-between mb-2">
@@ -2455,6 +2489,14 @@ export default function AdminPage() {
                   <p className={`text-6xl font-black mt-1 ${timerWarn || timerSecs === 0 ? 'text-red-400' : 'text-purple-400'}`}>{fmtTime(timerMs)}</p>
                   <p className="text-xs text-slate-500 mt-1">Q {Math.min(s.rf_q_index + 1, RF_Q_COUNT)} of {RF_Q_COUNT}{s.rf_q_index >= RF_Q_COUNT ? ' ♻' : ''} · {s.rf_correct_b} correct</p>
                 </div>
+
+                {rfGraceStart !== null && (
+                  <div className="rounded-2xl border-2 border-amber-400/60 bg-amber-500/15 p-3 text-center animate-pulse">
+                    <p className="text-amber-300 text-[10px] font-black uppercase tracking-[0.3em]">⏰ Grace Window — Grade Last Answer</p>
+                    <p className="text-white text-2xl font-black mt-0.5 tabular-nums">{(rfGraceMs / 1000).toFixed(1)}s</p>
+                    <p className="text-amber-200/70 text-[10px] mt-0.5">Correct / Wrong / Skip still counts</p>
+                  </div>
+                )}
 
                 {currentRFQ && (
                   <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4">
