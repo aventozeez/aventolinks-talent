@@ -182,7 +182,7 @@ const mk = (p: Omit<MCPuzzle,'id'>) => ({ ...p, id: crypto.randomUUID() })
 
 const RAW_PACKS: Omit<MCPack,'id'>[] = [
   {
-    title: 'The Silent Warning',
+    title: 'The Silent Warning (Demo)',
     emoji: '🔒',
     teaser: 'Uncover the threat. Protect the school.',
     openingStory: 'At 8:15 AM, students arrived at Crescent Academy for the annual Scholars Challenge. The morning felt ordinary — buses pulled up at the gates, teachers greeted their classes, and the assembly hall began to fill with excited voices. But by 10:30 AM, something shifted. A senior teacher noticed a stranger loitering near the west corridor. Cameras had gone offline for four minutes overnight. A locker that should have been empty was warm to the touch. Nothing had happened yet — but every silent sign pointed to a plan already in motion. Someone was watching the school. Someone was waiting for the right moment. And that moment was coming fast. Students of Crescent Academy — the safety of this school now rests in your hands. Unscramble every clue, unlock the mystery, and reveal the threat before it strikes. Your time starts now.',
@@ -300,10 +300,26 @@ const POOL_3: Omit<AVQSetup,'id'>[] = [
   { text: 'What phrase is used to welcome Mikhail Kornienko home?', answer: '"Welcome home"' },
 ]
 
+// Demo pool — 10 additional questions on the same Soyuz video so admin can
+// run a practice AV round using the "Demo Pool" instead of the real 3 pools.
+const POOL_DEMO: Omit<AVQSetup,'id'>[] = [
+  { text: 'Which nation designed and operates the Soyuz spacecraft?', answer: 'Russia' },
+  { text: 'What is the international space facility the Soyuz is departing from?', answer: 'International Space Station (ISS)' },
+  { text: 'What is the main task the propulsion system performs about an hour after undocking?', answer: 'A retrograde burn to leave orbit' },
+  { text: 'What glowing envelope surrounds the descent capsule during re-entry?', answer: 'A plasma sheet' },
+  { text: 'What limits communication between the capsule and ground during peak re-entry?', answer: 'The plasma sheet blocks the radio link' },
+  { text: 'What device slows the capsule after the parachutes deploy and before landing?', answer: 'Retro rockets fired just before touchdown' },
+  { text: 'How is the exact landing spot located and reached quickly?', answer: 'Helicopters pre-positioned in the landing zone track and reach the capsule' },
+  { text: 'Which of the three crew members steps out of the capsule first at landing?', answer: 'Sergey Volkov' },
+  { text: 'What condition are astronauts typically in immediately after landing that requires the recovery team\'s help?', answer: 'Weakened by microgravity — they cannot stand on their own' },
+  { text: 'What is the phrase used to welcome the astronauts back to Earth?', answer: '"Welcome home"' },
+]
+
 const DEFAULT_AV_POOLS: Omit<AVPool,'id'>[] = [
   { title: 'Undocking & Departure from the ISS',   questions: POOL_1.map(q => ({ ...q, id: crypto.randomUUID() })) },
   { title: "Re-entry Through Earth's Atmosphere",   questions: POOL_2.map(q => ({ ...q, id: crypto.randomUUID() })) },
   { title: 'Landing & Recovery',                     questions: POOL_3.map(q => ({ ...q, id: crypto.randomUUID() })) },
+  { title: 'Demo — Soyuz Practice',                  questions: POOL_DEMO.map(q => ({ ...q, id: crypto.randomUUID() })) },
 ]
 
 // ── Default State ─────────────────────────────────────────────────────────────
@@ -568,7 +584,9 @@ export default function MCAdminPage() {
   const isPicking = ['pick_A','pick_B','pick_C'].includes(s.phase)
   const isStory = ['story_A','story_B','story_C'].includes(s.phase)
   const poolReady = (i: number) => (s.avPools[i]?.questions.length ?? 0) >= 10 && (s.avPools[i]?.questions ?? []).every(q => q.answer.trim())
-  const avPoolsReady = s.avPools.length === 3 && s.avPools.every((_, i) => poolReady(i))
+  // Ready when at least the 3 real pools are filled — the optional 4th "Demo"
+  // pool doesn't have to be complete for admin to advance.
+  const avPoolsReady = s.avPools.length >= 3 && [0,1,2].every(i => poolReady(i))
   const canBegin = s.teamA && s.teamB && s.teamC && avPoolsReady
 
   return (
