@@ -118,6 +118,14 @@ export default function AVAdmin() {
   const hydrated = useRef(false)
   const skipBroadcast = useRef(true)
 
+  // Grace window — 10s of extra time after the 60s expires so admin can still
+  // grade a last-second answer that came in right at the buzzer.
+  const AV_GRACE_MS = 10_000
+  const [avGraceStart, setAvGraceStart] = useState<number | null>(null)
+  const avGraceStartRef = useRef<number | null>(null)
+  avGraceStartRef.current = avGraceStart
+  const [avGraceMs, setAvGraceMs] = useState(0)
+
   const { connected, broadcast } = useWs((incoming) => {
     if (!hydrated.current && incoming._from_mc) {
       hydrated.current = true
@@ -134,19 +142,32 @@ export default function AVAdmin() {
     broadcast(state)
   }, [state, broadcast])
 
-  // Countdown timer — auto-ends round when it hits 0
+  // Countdown timer — 60s per team, then a 10s grace window before we flip.
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current)
     if (state.timerStart && (state.phase === 'qa_a' || state.phase === 'qa_b')) {
+      // Fresh turn → clear any stale grace from the previous team's expiry.
+      setAvGraceStart(null); avGraceStartRef.current = null; setAvGraceMs(0)
       timerRef.current = setInterval(() => {
         const remaining = Math.max(0, ROUND_MS / 1000 - (Date.now() - state.timerStart!) / 1000)
         setTimer(remaining)
-        if (remaining === 0) {
-          setState(prev => ({
-            ...prev,
-            phase: prev.phase === 'qa_a' ? 'score_a' : 'score_b',
-            timerStart: null,
-          }))
+        // Open the grace window the moment the 60s runs out — do NOT flip yet.
+        if (remaining === 0 && avGraceStartRef.current === null) {
+          const now = Date.now()
+          setAvGraceStart(now); avGraceStartRef.current = now
+        }
+        // Count the grace window down separately.
+        if (avGraceStartRef.current !== null) {
+          const graceLeft = Math.max(0, AV_GRACE_MS - (Date.now() - avGraceStartRef.current))
+          setAvGraceMs(graceLeft)
+          if (graceLeft === 0) {
+            setState(prev => ({
+              ...prev,
+              phase: prev.phase === 'qa_a' ? 'score_a' : 'score_b',
+              timerStart: null,
+            }))
+            setAvGraceStart(null); avGraceStartRef.current = null; setAvGraceMs(0)
+          }
         }
       }, 100)
     } else {
@@ -439,9 +460,18 @@ export default function AVAdmin() {
                 </div>
               )}
               {state.phase === 'qa_a' && (
-                <button onClick={() => update({ phase: 'score_a', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
-                  End {state.teamA} → Score
-                </button>
+                <>
+                  {avGraceStart !== null && (
+                    <div className="rounded-xl border-2 border-amber-400/60 bg-amber-500/15 p-3 text-center animate-pulse mb-2">
+                      <p className="text-amber-300 text-[10px] font-black uppercase tracking-[0.3em]">⏰ Grace Window — Grade Last Answer</p>
+                      <p className="text-white text-2xl font-black mt-0.5 tabular-nums">{(avGraceMs / 1000).toFixed(1)}s</p>
+                      <p className="text-amber-200/70 text-[10px] mt-0.5">Award / skip the last one before we move on.</p>
+                    </div>
+                  )}
+                  <button onClick={() => { setAvGraceStart(null); avGraceStartRef.current = null; setAvGraceMs(0); update({ phase: 'score_a', timerStart: null }) }} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
+                    End {state.teamA} → Score
+                  </button>
+                </>
               )}
               {(state.phase === 'score_a' || state.phase === 'break') && (<>
                 <div className="text-center py-4 bg-gradient-to-br from-green-500/15 to-[#0d1117] rounded-xl border-2 border-green-500/40">
@@ -471,9 +501,18 @@ export default function AVAdmin() {
                 </div>
               )}
               {state.phase === 'qa_b' && (
-                <button onClick={() => update({ phase: 'score_b', timerStart: null })} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
-                  End {state.teamB} → Score
-                </button>
+                <>
+                  {avGraceStart !== null && (
+                    <div className="rounded-xl border-2 border-amber-400/60 bg-amber-500/15 p-3 text-center animate-pulse mb-2">
+                      <p className="text-amber-300 text-[10px] font-black uppercase tracking-[0.3em]">⏰ Grace Window — Grade Last Answer</p>
+                      <p className="text-white text-2xl font-black mt-0.5 tabular-nums">{(avGraceMs / 1000).toFixed(1)}s</p>
+                      <p className="text-amber-200/70 text-[10px] mt-0.5">Award / skip the last one before we move on.</p>
+                    </div>
+                  )}
+                  <button onClick={() => { setAvGraceStart(null); avGraceStartRef.current = null; setAvGraceMs(0); update({ phase: 'score_b', timerStart: null }) }} className="w-full py-2 bg-gray-600 hover:bg-gray-500 rounded-xl font-bold text-sm">
+                    End {state.teamB} → Score
+                  </button>
+                </>
               )}
               {state.phase === 'score_b' && (<>
                 <div className="text-center py-4 bg-gradient-to-br from-blue-500/15 to-[#0d1117] rounded-xl border-2 border-blue-500/40">

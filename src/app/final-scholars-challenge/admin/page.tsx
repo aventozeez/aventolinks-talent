@@ -93,7 +93,7 @@ export default function AdminPage() {
   // Grace window for RF: when the 60s timer hits 0 we hold the phase for a
   // few extra seconds so admin can still grade a last-second answer that
   // came in right at the buzzer.
-  const RF_GRACE_MS = 5_000
+  const RF_GRACE_MS = 10_000
   const [rfGraceStart, setRfGraceStart] = useState<number | null>(null)
   const rfGraceStartRef = useRef<number | null>(null)
   rfGraceStartRef.current = rfGraceStart

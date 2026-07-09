@@ -344,6 +344,15 @@ export default function MCAdminPage() {
   const stateRef = useRef(s)
   stateRef.current = s
 
+  // Grace window for MC: when the 60s timer hits 0 admin still gets 10 extra
+  // seconds to award a last-second correct answer before the phase flips to
+  // the team's summary screen.
+  const MC_GRACE_MS = 10_000
+  const [mcGraceStart, setMcGraceStart] = useState<number | null>(null)
+  const mcGraceStartRef = useRef<number | null>(null)
+  mcGraceStartRef.current = mcGraceStart
+  const [mcGraceMs, setMcGraceMs] = useState(0)
+
   const broadcast = useCallback((st: MCState) => wsBroadcast(CHANNEL, safeForAudience(st)), [])
   const update = useCallback((st: MCState) => { setS(st); broadcast(st) }, [broadcast])
 
@@ -368,28 +377,41 @@ export default function MCAdminPage() {
     return () => { cancelled = true }
   }, [])
 
-  // Timer
+  // Timer — 60s per team, then a 10s grace window before we flip to summary.
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current)
     const playing = ['a_playing','b_playing','c_playing'].includes(s.phase)
     if (!playing || !s.timerStart) { setTimeLeft(MC_TIME_MS); return }
+    // Fresh turn → clear any stale grace from the previous team's expiry.
+    setMcGraceStart(null); setMcGraceMs(0)
+    mcGraceStartRef.current = null
+
     const tick = () => {
       const left = Math.max(0, MC_TIME_MS - (Date.now() - (stateRef.current.timerStart ?? 0)))
       setTimeLeft(left)
-      if (left === 0) {
-        const cur = stateRef.current
-        if (!['a_playing','b_playing','c_playing'].includes(cur.phase)) return
-        // Time expired → move to that team's summary screen (green/red review).
-        // Admin decides when to continue to the next team.
-        const next: MCState = {
-          ...cur,
-          phase: cur.phase === 'a_playing' ? 'summary_A' : cur.phase === 'b_playing' ? 'summary_B' : 'summary_C',
-          timerStart: null, revealed: false,
+      // Open the grace window the moment the 60s runs out — do NOT flip yet.
+      if (left === 0 && mcGraceStartRef.current === null) {
+        const now = Date.now()
+        setMcGraceStart(now); mcGraceStartRef.current = now
+      }
+      // Count the grace window down separately.
+      if (mcGraceStartRef.current !== null) {
+        const graceLeft = Math.max(0, MC_GRACE_MS - (Date.now() - mcGraceStartRef.current))
+        setMcGraceMs(graceLeft)
+        if (graceLeft === 0) {
+          const cur = stateRef.current
+          if (!['a_playing','b_playing','c_playing'].includes(cur.phase)) return
+          const next: MCState = {
+            ...cur,
+            phase: cur.phase === 'a_playing' ? 'summary_A' : cur.phase === 'b_playing' ? 'summary_B' : 'summary_C',
+            timerStart: null, revealed: false,
+          }
+          setS(next); broadcast(next); clearInterval(timerRef.current!)
+          setMcGraceStart(null); mcGraceStartRef.current = null; setMcGraceMs(0)
         }
-        setS(next); broadcast(next); clearInterval(timerRef.current!)
       }
     }
-    tick(); timerRef.current = setInterval(tick, 250)
+    tick(); timerRef.current = setInterval(tick, 200)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [s.phase, s.timerStart, broadcast])
 
@@ -455,6 +477,8 @@ export default function MCAdminPage() {
       cur.phase === 'b_playing' ? 'summary_B' :
       cur.phase === 'c_playing' ? 'summary_C' :
       cur.phase
+    // Explicit end clears the grace window too.
+    setMcGraceStart(null); mcGraceStartRef.current = null; setMcGraceMs(0)
     update({ ...cur, phase: next, timerStart: null, revealed: false })
   }
 
@@ -932,6 +956,14 @@ export default function MCAdminPage() {
               </div>
               <p className="text-center font-black text-5xl mt-2" style={{ color: timerColor }}>{fmtTime(timeLeft)}</p>
             </div>
+
+            {mcGraceStart !== null && (
+              <div className="rounded-2xl border-2 border-amber-400/60 bg-amber-500/15 p-3 text-center animate-pulse">
+                <p className="text-amber-300 text-[10px] font-black uppercase tracking-[0.3em]">⏰ Grace Window — Grade Last Answer</p>
+                <p className="text-white text-2xl font-black mt-0.5 tabular-nums">{(mcGraceMs / 1000).toFixed(1)}s</p>
+                <p className="text-amber-200/70 text-[10px] mt-0.5">Correct still counts before we move on.</p>
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-2">
               {[

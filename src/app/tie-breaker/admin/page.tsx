@@ -202,6 +202,13 @@ export default function TieBreakerAdmin() {
   const [newQ, setNewQ] = useState({ text: '', answer: '' })
   const [timeLeft, setTimeLeft] = useState(ROUND_MS)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Grace window — 10s of extra time after the 30s expires so admin can still
+  // grade a last-second answer that came in right at the buzzer.
+  const TB_GRACE_MS = 10_000
+  const [tbGraceStart, setTbGraceStart] = useState<number | null>(null)
+  const tbGraceStartRef = useRef<number | null>(null)
+  tbGraceStartRef.current = tbGraceStart
+  const [tbGraceMs, setTbGraceMs] = useState(0)
   // Refs to coordinate hydration + broadcast so we don't overwrite existing
   // DB state with the fresh DEFAULT_STATE we start with on page load.
   const hydrated = useRef(false)                 // have we accepted the DB's current state yet?
@@ -288,15 +295,29 @@ export default function TieBreakerAdmin() {
       setTimeLeft(ROUND_MS)
       return
     }
+    // Fresh turn → clear any stale grace from the previous team's expiry.
+    setTbGraceStart(null); tbGraceStartRef.current = null; setTbGraceMs(0)
+
     const tick = () => {
       const left = Math.max(0, ROUND_MS - (Date.now() - s.timerStart!))
       setTimeLeft(left)
-      if (left === 0) {
-        clearInterval(timerRef.current!)
-        if (s.phase === 'a_playing') {
-          update({ phase: 'score_a', timerStart: null, currentQ: null, showAnswer: false })
-        } else {
-          update({ phase: 'score_b', timerStart: null, currentQ: null, showAnswer: false })
+      // Open the grace window the moment the 30s runs out — do NOT flip yet.
+      if (left === 0 && tbGraceStartRef.current === null) {
+        const now = Date.now()
+        setTbGraceStart(now); tbGraceStartRef.current = now
+      }
+      // Count the grace window down separately.
+      if (tbGraceStartRef.current !== null) {
+        const graceLeft = Math.max(0, TB_GRACE_MS - (Date.now() - tbGraceStartRef.current))
+        setTbGraceMs(graceLeft)
+        if (graceLeft === 0) {
+          clearInterval(timerRef.current!)
+          if (s.phase === 'a_playing') {
+            update({ phase: 'score_a', timerStart: null, currentQ: null, showAnswer: false })
+          } else {
+            update({ phase: 'score_b', timerStart: null, currentQ: null, showAnswer: false })
+          }
+          setTbGraceStart(null); tbGraceStartRef.current = null; setTbGraceMs(0)
         }
       }
     }
@@ -416,6 +437,8 @@ export default function TieBreakerAdmin() {
   }
 
   function endRoundEarly() {
+    // Explicit end clears the grace window too.
+    setTbGraceStart(null); tbGraceStartRef.current = null; setTbGraceMs(0)
     if (isPlayingA) update({ phase: 'score_a', timerStart: null, currentQ: null, showAnswer: false })
     else if (isPlayingB) update({ phase: 'score_b', timerStart: null, currentQ: null, showAnswer: false })
   }
@@ -896,6 +919,14 @@ export default function TieBreakerAdmin() {
                   style={{ width: `${timePct * 100}%` }} />
               </div>
             </div>
+
+            {tbGraceStart !== null && (
+              <div className="rounded-xl border-2 border-amber-400/60 bg-amber-500/15 p-3 text-center animate-pulse">
+                <p className="text-amber-300 text-[10px] font-black uppercase tracking-[0.3em]">⏰ Grace Window — Grade Last Answer</p>
+                <p className="text-white text-2xl font-black mt-0.5 tabular-nums">{(tbGraceMs / 1000).toFixed(1)}s</p>
+                <p className="text-amber-200/70 text-[10px] mt-0.5">Correct / Wrong / Skip still counts.</p>
+              </div>
+            )}
 
             {/* Current question + answer */}
             {currentQ ? (
