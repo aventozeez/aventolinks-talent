@@ -983,6 +983,12 @@ export default function AdminPage() {
   }
 
   // ── IS Actions ─────────────────────────────────────────────────────────────
+  // Two-step start: admin marks 'ready' after the moderator finishes reading
+  // the problem, then clicks 'Start Timer' when teams are set.
+  const markISReady = () => {
+    const s = fscRef.current; if (!s) return
+    applyState({ ...s, is_phase: 'ready' })
+  }
   const startISTimer = () => {
     const s = fscRef.current; if (!s) return
     setIsAnswers(null); setIsGrades(null)
@@ -1030,9 +1036,10 @@ export default function AdminPage() {
     const problemScoresB = [...(s.is_problem_scores_b ?? [])]
     problemScoresA[s.is_problem_index] = gradeA
     problemScoresB[s.is_problem_index] = gradeB
+    // New order: reveal students' answers FIRST, then the correct solution.
     await applyState({
       ...s,
-      is_phase: 'solution',
+      is_phase: 'revealed',
       is_score_a: s.is_score_a + gradeA,
       is_score_b: s.is_score_b + gradeB,
       is_problem_scores_a: problemScoresA,
@@ -1044,8 +1051,9 @@ export default function AdminPage() {
     })
   }
   const showTeamResults = () => {
+    // Called from the 'revealed' screen — flip to the correct-solution reveal.
     const s = fscRef.current; if (!s) return
-    applyState({ ...s, is_phase: 'revealed' })
+    applyState({ ...s, is_phase: 'solution' })
   }
   const nextISProblem = () => {
     const s = fscRef.current; if (!s) return
@@ -2801,15 +2809,37 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* idle → start timer (first idle also shows instructions) */}
+              {/* idle → mark ready after moderator finishes reading */}
               {s.is_phase === 'idle' && (
                 <>
                   {s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0 && (
                     <AdminRoundIntro info={ROUND_INFO.innovation_sprint} />
                   )}
+                  <div className="rounded-xl border border-[#f5a623]/30 bg-[#f5a623]/5 p-3 text-center space-y-1">
+                    <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-widest">Step 1</p>
+                    <p className="text-white text-xs">Wait for the moderator to finish reading the problem, then click below.</p>
+                  </div>
+                  <button onClick={markISReady}
+                    className="w-full flex items-center justify-center gap-2 py-5 bg-white/10 hover:bg-white/20 border border-[#f5a623]/40 text-[#f5a623] font-black rounded-2xl text-base transition-colors">
+                    ✓ Moderator Done — Mark Ready
+                  </button>
+                </>
+              )}
+
+              {/* ready → admin explicitly kicks off the 60s timer */}
+              {s.is_phase === 'ready' && (
+                <>
+                  <div className="rounded-xl border-2 border-[#f5a623]/60 bg-[#f5a623]/10 p-4 text-center space-y-1 animate-pulse">
+                    <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-widest">Step 2 — Teams Ready</p>
+                    <p className="text-white text-sm font-bold">READY on the projector. Start the 60-second timer when teams are set.</p>
+                  </div>
                   <button onClick={startISTimer}
-                    className="w-full flex items-center justify-center gap-2 py-5 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
-                    <Timer size={20} /> Start Timer (60s)
+                    className="w-full flex items-center justify-center gap-2 py-5 bg-[#f5a623] text-[#0a1628] font-black rounded-2xl text-base hover:bg-[#e0941a] transition-colors">
+                    <Timer size={20} /> Start 60-second Timer
+                  </button>
+                  <button onClick={() => applyState({ ...s, is_phase: 'idle' })}
+                    className="w-full py-2 bg-transparent hover:bg-white/5 text-slate-400 rounded-lg text-[11px]">
+                    ← Not ready yet
                   </button>
                 </>
               )}
@@ -2881,14 +2911,15 @@ export default function AdminPage() {
                       ))}
                     </ol>
                   </div>
-                  <button onClick={showTeamResults}
-                    className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-base hover:bg-[#e0941a] transition-colors">
-                    <ArrowRight size={16} /> Next — Show Team Results
+                  <button onClick={nextISProblem}
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                    {s.is_problem_index + 1 >= IS_PROB_COUNT ? 'Finish Innovation Sprint' : `Next Problem (${s.is_problem_index + 2}/${IS_PROB_COUNT})`}
                   </button>
                 </div>
               )}
 
-              {/* revealed — per-problem results */}
+              {/* revealed — per-problem results (shown FIRST, solution comes after) */}
               {s.is_phase === 'revealed' && (
                 <div className="space-y-3">
                   {currentISP && (s.is_step_results_a || s.is_step_results_b) && (
@@ -2933,10 +2964,9 @@ export default function AdminPage() {
                       })}
                     </div>
                   )}
-                  <button onClick={nextISProblem}
-                    className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-base hover:bg-[#e0941a] disabled:opacity-50 transition-colors">
-                    {saving ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-                    {s.is_problem_index + 1 >= IS_PROB_COUNT ? 'Finish Innovation Sprint' : `Next Problem (${s.is_problem_index + 2}/${IS_PROB_COUNT})`}
+                  <button onClick={showTeamResults}
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-[#f5a623] text-[#0a1628] font-bold rounded-xl text-base hover:bg-[#e0941a] transition-colors">
+                    <ArrowRight size={16} /> Next — Show Correct Solution
                   </button>
                 </div>
               )}

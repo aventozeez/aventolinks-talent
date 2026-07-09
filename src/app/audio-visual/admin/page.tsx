@@ -71,7 +71,7 @@ type AVState = {
 
 const DEFAULT_STATE: AVState = {
   phase: 'idle',
-  videoUrl: 'https://www.youtube.com/embed/REc5oJUt81E?enablejsapi=1&end=120',
+  videoUrl: 'https://www.youtube.com/embed/REc5oJUt81E?enablejsapi=1',
   videoPlay: false,
   teamA: 'Team A',
   teamB: 'Team B',

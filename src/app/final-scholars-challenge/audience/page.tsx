@@ -210,12 +210,12 @@ export default function AudiencePage() {
         {/* ── Idle (no match in progress) ── */}
         {/* Handled by the top-level welcome early-return below — nothing here. */}
 
-        {/* ── Finished ── */}
+        {/* ── Finished — bold, centered final results ── */}
         {round === 'finished' && (
-          <div className="text-center space-y-6 w-full max-w-2xl">
-            <div className="text-7xl">🏆</div>
-            <h2 className="text-4xl font-black text-white">Final Results</h2>
-            <div className="grid grid-cols-2 gap-4">
+          <div className="min-h-[70vh] w-full flex flex-col items-center justify-center text-center gap-8">
+            <div className="text-8xl md:text-9xl">🏆</div>
+            <h2 className="text-6xl md:text-8xl font-black text-white tracking-tight leading-none">Final Results</h2>
+            <div className="grid grid-cols-2 gap-6 md:gap-8 w-full max-w-4xl">
               {(['a', 'b'] as const).map(team => {
                 const name = team === 'a' ? nameA : nameB
                 const rf = team === 'a' ? (s?.rf_score_a ?? 0) : (s?.rf_score_b ?? 0)
@@ -227,28 +227,26 @@ export default function AudiencePage() {
                   ? { border: 'border-green-500/40', text: 'text-green-400', dim: 'text-green-700' }
                   : { border: 'border-purple-500/40', text: 'text-purple-400', dim: 'text-purple-700' }
                 const isWinner = total > other
+                const isLoser = total < other
                 return (
-                  <div key={team} className={`bg-[#0a1628] border-2 ${color.border} rounded-3xl p-6 ${isWinner ? 'ring-2 ring-[#f5a623]/60' : ''}`}>
-                    {isWinner && <p className="text-sm font-black text-[#f5a623] text-center mb-2">🏆 WINNER</p>}
-                    <p className={`text-base font-black ${color.text} text-center`}>{name}</p>
-                    <p className={`text-6xl font-black ${color.text} text-center mt-2`}>{total}</p>
-                    <div className="mt-4 space-y-2 border-t border-white/10 pt-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">⚡ Rapid Fire</span><span className={color.text}>{rf}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">🔔 Buzzer</span><span className={color.text}>{bz}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">💡 Innovation</span><span className={color.text}>{is}</span>
-                      </div>
+                  <div key={team} className={`bg-[#0a1628] border-4 ${
+                    isWinner ? 'border-[#f5a623] shadow-[0_20px_60px_-15px_rgba(245,166,35,0.5)]' : isLoser ? 'border-red-500/40 opacity-80' : color.border
+                  } rounded-3xl p-8 md:p-10 text-center`}>
+                    {isWinner && <p className="text-lg md:text-2xl font-black text-[#f5a623] mb-3">🏆 ADVANCES</p>}
+                    {isLoser && <p className="text-sm md:text-base font-black text-red-400 mb-3 uppercase tracking-widest">Eliminated</p>}
+                    <p className={`text-xl md:text-2xl font-black ${color.text}`}>{name}</p>
+                    <p className={`text-8xl md:text-9xl font-black ${color.text} mt-4 tabular-nums leading-none`}>{total}</p>
+                    <div className="mt-6 space-y-2 border-t border-white/10 pt-4">
+                      <div className="flex justify-between text-sm md:text-base"><span className="text-slate-500">⚡ Rapid Fire</span><span className={`font-black ${color.text}`}>{rf}</span></div>
+                      <div className="flex justify-between text-sm md:text-base"><span className="text-slate-500">🔔 Buzzer</span><span className={`font-black ${color.text}`}>{bz}</span></div>
+                      <div className="flex justify-between text-sm md:text-base"><span className="text-slate-500">💡 Innovation</span><span className={`font-black ${color.text}`}>{is}</span></div>
                     </div>
                   </div>
                 )
               })}
             </div>
             {totalA === totalB && (
-              <p className="text-2xl font-black text-[#f5a623]">🤝 It&apos;s a Tie!</p>
+              <p className="text-3xl md:text-4xl font-black text-[#f5a623]">🤝 It&apos;s a Tie!</p>
             )}
           </div>
         )}
@@ -459,20 +457,23 @@ export default function AudiencePage() {
               </span>
             </div>
 
-            {/* IS Scores */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-green-950/40 border border-green-500/30 rounded-2xl p-3 text-center">
-                <p className="text-xs font-bold text-green-400 truncate">{nameA}</p>
-                <p className="text-4xl font-black text-green-400">{s?.is_score_a ?? 0}</p>
+            {/* IS Scores — hidden on compare/done so those screens speak for themselves */}
+            {s?.is_phase !== 'compare' && s?.is_phase !== 'done' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-green-950/40 border border-green-500/30 rounded-2xl p-3 text-center">
+                  <p className="text-xs font-bold text-green-400 truncate">{nameA}</p>
+                  <p className="text-4xl font-black text-green-400">{s?.is_score_a ?? 0}</p>
+                </div>
+                <div className="bg-purple-950/40 border border-purple-500/30 rounded-2xl p-3 text-center">
+                  <p className="text-xs font-bold text-purple-400 truncate">{nameB}</p>
+                  <p className="text-4xl font-black text-purple-400">{s?.is_score_b ?? 0}</p>
+                </div>
               </div>
-              <div className="bg-purple-950/40 border border-purple-500/30 rounded-2xl p-3 text-center">
-                <p className="text-xs font-bold text-purple-400 truncate">{nameB}</p>
-                <p className="text-4xl font-black text-purple-400">{s?.is_score_b ?? 0}</p>
-              </div>
-            </div>
+            )}
 
-            {/* Problem statement */}
-            {s?.is_problems?.[s?.is_problem_index ?? 0] && (
+            {/* Problem statement — hidden on compare/done so the head-to-head
+                and finish screens are score-focused, not problem-focused. */}
+            {s?.is_problems?.[s?.is_problem_index ?? 0] && s?.is_phase !== 'compare' && s?.is_phase !== 'done' && (
               <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-3xl p-8 shadow-2xl">
                 <p className="text-sm font-black text-[#f5a623] uppercase tracking-wider mb-3">Problem Statement</p>
                 <p className="text-2xl md:text-3xl font-bold text-white leading-snug text-center">
@@ -483,8 +484,16 @@ export default function AudiencePage() {
 
             {s?.is_phase === 'idle' && (
               <div className="text-center">
-                <p className="text-slate-400 text-lg">Waiting for timer to start…</p>
-                <p className="text-slate-500 text-sm mt-1">Teams will arrange the solution steps</p>
+                <p className="text-slate-400 text-lg">Moderator is reading the problem…</p>
+                <p className="text-slate-500 text-sm mt-1">The timer will start once teams are ready</p>
+              </div>
+            )}
+
+            {s?.is_phase === 'ready' && (
+              <div className="rounded-3xl border-4 border-[#f5a623] bg-[#f5a623]/10 p-10 text-center animate-pulse shadow-[0_20px_60px_-15px_rgba(245,166,35,0.5)]">
+                <p className="text-[#f5a623] text-sm md:text-base font-black uppercase tracking-[0.5em]">Ready</p>
+                <p className="text-white text-6xl md:text-8xl font-black mt-4 leading-none">GO ON MY MARK</p>
+                <p className="text-slate-300 text-base md:text-lg mt-6">Both teams — get ready to arrange the steps.</p>
               </div>
             )}
 

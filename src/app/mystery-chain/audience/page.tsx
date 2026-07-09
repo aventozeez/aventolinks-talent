@@ -871,9 +871,20 @@ export default function MCAudiencePage() {
           <p className="text-[#f5a623] text-[10px] md:text-xs font-black uppercase tracking-[0.35em]">Mystery Chain</p>
           <p className="text-white text-sm md:text-base font-black truncate">{s.activePackEmoji} {s.activePackTitle}</p>
         </div>
-        <div className="text-right">
-          <p className="text-slate-500 text-[10px] uppercase tracking-widest">Playing</p>
-          <p className="text-white text-sm md:text-base font-black truncate">{playingTeamName}</p>
+        <div className="text-right flex items-center gap-4">
+          <div>
+            <p className="text-slate-500 text-[10px] uppercase tracking-widest">Playing</p>
+            <p className="text-white text-sm md:text-base font-black truncate">{playingTeamName}</p>
+          </div>
+          {/* MC round score for the playing team only — semi + cumulative are
+              deliberately withheld until the compare screens at the end. */}
+          <div className="hidden md:block h-8 w-px bg-white/10" />
+          <div className="hidden md:block">
+            <p className="text-slate-500 text-[10px] uppercase tracking-widest">This Round</p>
+            <p className="text-[#f5a623] text-lg md:text-xl font-black tabular-nums leading-none">
+              {s.phase === 'a_playing' ? s.scoreA : s.phase === 'b_playing' ? s.scoreB : s.scoreC}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1197,30 +1208,6 @@ export default function MCAudiencePage() {
         })}
       </div>
 
-      {/* Each team's story */}
-      <div className="w-full max-w-2xl space-y-4">
-        {[
-          {name:s.teamA,rev:s.revealedA,cid:s.chosenA},
-          {name:s.teamB,rev:s.revealedB,cid:s.chosenB},
-          {name:s.teamC,rev:s.revealedC,cid:s.chosenC},
-        ].filter(t => t.rev.length > 0).map(t => {
-          const pack = s.packs.find(p => p.id === t.cid)
-          return (
-            <div key={t.name} className="bg-blue-900/10 border border-blue-800/30 rounded-2xl p-4">
-              <p className="text-blue-300 text-xs font-bold uppercase tracking-widest mb-2">
-                {t.name} — {pack?.emoji} {pack?.title}
-              </p>
-              <div className="space-y-1">
-                {t.rev.map((snippet, i) => (
-                  <p key={i} className="text-blue-100 text-sm leading-relaxed">
-                    <span className="text-blue-400 font-bold mr-1">{i + 1}.</span>{snippet}
-                  </p>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
     </div>
   )
 }

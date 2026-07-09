@@ -322,7 +322,7 @@ const defaultState = (): MCState => ({
   scoreA: 0, scoreB: 0, scoreC: 0,
   timerStart: null, storyStartAt: null, revealed: false,
   // Soyuz spacecraft re-entry documentary; capped at 120s (2 min) via end=
-  avVideoUrl: 'https://www.youtube.com/embed/REc5oJUt81E?enablejsapi=1&end=120',
+  avVideoUrl: 'https://www.youtube.com/embed/REc5oJUt81E?enablejsapi=1',
   avPools: DEFAULT_AV_POOLS.map(p => ({ ...p, id: crypto.randomUUID() })),
 })
 
@@ -479,6 +479,14 @@ export default function MCAdminPage() {
   }
 
   const reset = () => update(defaultState())
+  // Full reset: clears both mc:state and av:state so every audience projector
+  // falls back to the Welcome page, and the admin lands on a fresh setup form
+  // ready to enter the next match's teams.
+  const resetMatch = () => {
+    if (!confirm('Reset the entire match? This clears Mystery Chain and Audio Visual state. Every projector will show the Welcome page.')) return
+    wsBroadcast('av:state', { phase: 'idle' })
+    update(defaultState())
+  }
 
   // AV pool helpers (local state only — broadcast happens on Advance)
   const updateAVQ = (id: string, field: 'text' | 'answer', val: string) => {
@@ -554,9 +562,14 @@ export default function MCAdminPage() {
             </a>
             {s.phase !== 'setup' && (
               <button onClick={reset} className="text-xs bg-red-600/20 border border-red-500/30 text-red-400 px-3 py-1.5 rounded-lg">
-                Reset
+                Reset Phase
               </button>
             )}
+            <button onClick={resetMatch}
+              title="Clear all state and return to a fresh setup — projectors show Welcome"
+              className="text-xs bg-gradient-to-r from-[#006B3F] to-[#00854E] hover:brightness-110 border border-[#FFD700]/60 text-white px-3 py-1.5 rounded-lg font-black">
+              ↺ Reset Match
+            </button>
           </div>
         </div>
 

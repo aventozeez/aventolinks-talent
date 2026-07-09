@@ -33,7 +33,7 @@ export type RFPhase   =
   | 'compare'
   | 'done'
 export type BZPhase   = 'idle' | 'showing' | 'buzzed_a' | 'buzzed_b' | 'second_chance' | 'revealed' | 'done'
-export type ISPhase   = 'idle' | 'working' | 'collecting' | 'solution' | 'revealed' | 'compare' | 'done'
+export type ISPhase   = 'idle' | 'ready' | 'working' | 'collecting' | 'solution' | 'revealed' | 'compare' | 'done'
 export type BZResult  = null | 'correct_a' | 'correct_b' | 'penalty_a' | 'penalty_b' | 'bonus_a' | 'bonus_b' | 'skip'
 export type MCPhase   = 'idle' | 'story' | 'a_playing' | 'b_playing' | 'c_playing' | 'done'
 export type AVPhase   = 'idle' | 'a_playing' | 'break' | 'b_playing' | 'done'

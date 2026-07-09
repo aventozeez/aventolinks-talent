@@ -7,6 +7,41 @@ const CHANNEL = 'tie:state'
 const ROUND_MS = 30_000                // 30 seconds per team
 const DEFAULT_POOL_SIZE = 20           // 20 questions per pool
 const PTS_CORRECT = 1
+// Saved tie-breaker matches — Supabase row id.
+const TB_MATCHES_ROW_ID = 'tie_saved_matches'
+
+type SavedTBMatch = {
+  id: string
+  teamA: string
+  teamB: string
+  poolAId: string
+  poolBId: string
+  poolATitle: string
+  poolBTitle: string
+  scoreA: number
+  scoreB: number
+  correctA: number
+  correctB: number
+  winner: string   // "Tie" if scoreA === scoreB
+  played_at: string
+}
+
+async function getSavedTBMatches(): Promise<SavedTBMatch[]> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any)
+      .from('fsc_match_state').select('data').eq('id', TB_MATCHES_ROW_ID).maybeSingle()
+    return (data?.data?.matches as SavedTBMatch[]) ?? []
+  } catch { return [] }
+}
+async function saveTBMatchesList(matches: SavedTBMatch[]): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('fsc_match_state')
+      .upsert({ id: TB_MATCHES_ROW_ID, data: { matches }, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+  } catch { /* offline — matches only persist in-memory this session */ }
+}
 
 type RegisteredTeam = { id: string; name: string; school: string }
 
@@ -155,6 +190,14 @@ export default function TieBreakerAdmin() {
   const [s, setS] = useState<TBState>(DEFAULT_STATE())
   const [poolTab, setPoolTab] = useState<number>(0)  // index of pool currently open for editing
   const [teams, setTeams] = useState<RegisteredTeam[]>([])
+  const [savedTBMatches, setSavedTBMatches] = useState<SavedTBMatch[]>([])
+  const savedTBRef = useRef<SavedTBMatch[]>([])
+  savedTBRef.current = savedTBMatches
+  // Pool IDs already used in any saved (undeleted) match — hidden from the
+  // setup dropdowns so the same pool can't be replayed.
+  const usedPoolIds = new Set<string>(
+    savedTBMatches.flatMap(m => [m.poolAId, m.poolBId])
+  )
   const [editingQ, setEditingQ] = useState<string | null>(null)
   const [newQ, setNewQ] = useState({ text: '', answer: '' })
   const [timeLeft, setTimeLeft] = useState(ROUND_MS)
@@ -225,6 +268,16 @@ export default function TieBreakerAdmin() {
     return () => { cancelled = true }
   }, [])
 
+  // Load past tie-breaker matches so used pools can be locked out.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const list = await getSavedTBMatches()
+      if (!cancelled) setSavedTBMatches(list)
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   // 30-second countdown for whichever team is currently playing.
   // On expiry, auto-transition to the break screen (team A) or done (team B).
   useEffect(() => {
@@ -273,7 +326,28 @@ export default function TieBreakerAdmin() {
   }
   function goToAnnounceA() { update({ phase: 'announce_a' }) }
   function goToAnnounceB() { update({ phase: 'announce_b' }) }
-  function goToCompare()   { update({ phase: 'compare' }) }
+  function goToCompare() {
+    update({ phase: 'compare' })
+    // Persist the match on transition to compare — this is where scores are
+    // final and both pools have definitely been played through.
+    const poolA = safePools.find(p => p.id === s.chosenPoolA)
+    const poolB = safePools.find(p => p.id === s.chosenPoolB)
+    if (!poolA || !poolB) return
+    const winner = s.scoreA > s.scoreB ? s.teamA : s.scoreB > s.scoreA ? s.teamB : 'Tie'
+    const record: SavedTBMatch = {
+      id: crypto.randomUUID(),
+      teamA: s.teamA, teamB: s.teamB,
+      poolAId: poolA.id, poolBId: poolB.id,
+      poolATitle: poolA.title, poolBTitle: poolB.title,
+      scoreA: s.scoreA, scoreB: s.scoreB,
+      correctA: s.correctA, correctB: s.correctB,
+      winner,
+      played_at: new Date().toISOString(),
+    }
+    const next = [...savedTBRef.current, record]
+    setSavedTBMatches(next)
+    void saveTBMatchesList(next)
+  }
 
   function startTeamA() {
     if (!chosenPoolA || chosenPoolA.questions.length === 0) return
@@ -306,6 +380,9 @@ export default function TieBreakerAdmin() {
   function markCorrect() {
     if (activeQueue.length === 0) return
     const [, ...rest] = activeQueue
+    // Auto-advance to the score reveal if the queue just emptied — no need
+    // to burn the rest of the 30 seconds on a dead queue.
+    const queueEmpty = rest.length === 0
     if (isPlayingA) {
       update({
         queueA: rest,
@@ -313,6 +390,7 @@ export default function TieBreakerAdmin() {
         correctA: s.correctA + 1,
         currentQ: rest[0] ?? null,
         showAnswer: false,
+        ...(queueEmpty ? { phase: 'score_a' as const, timerStart: null } : {}),
       })
     } else if (isPlayingB) {
       update({
@@ -321,6 +399,7 @@ export default function TieBreakerAdmin() {
         correctB: s.correctB + 1,
         currentQ: rest[0] ?? null,
         showAnswer: false,
+        ...(queueEmpty ? { phase: 'score_b' as const, timerStart: null } : {}),
       })
     }
   }
@@ -623,9 +702,10 @@ export default function TieBreakerAdmin() {
                         <option value="">— select a pool —</option>
                         {safePools.map((pl, i) => {
                           const takenByOther = pl.id === s[otherKey]
+                          const alreadyPlayed = usedPoolIds.has(pl.id)
                           return (
-                            <option key={pl.id} value={pl.id} disabled={takenByOther || pl.questions.length === 0}>
-                              Pool {i + 1} · {pl.title} ({pl.questions.length}q){takenByOther ? ' — taken' : ''}{pl.questions.length === 0 ? ' — empty' : ''}
+                            <option key={pl.id} value={pl.id} disabled={takenByOther || alreadyPlayed || pl.questions.length === 0}>
+                              Pool {i + 1} · {pl.title} ({pl.questions.length}q){takenByOther ? ' — taken' : ''}{alreadyPlayed ? ' — already played' : ''}{pl.questions.length === 0 ? ' — empty' : ''}
                             </option>
                           )
                         })}
@@ -644,6 +724,50 @@ export default function TieBreakerAdmin() {
                 Read the rules to the room, then advance to announce {s.teamA || 'Team A'}.
               </p>
             </div>
+
+            {/* Saved tie-breaker matches — pools already played are locked
+                until the match is deleted. */}
+            {savedTBMatches.length > 0 && (
+              <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-white font-bold text-sm">Past Tie-Breaker Matches</h2>
+                  <span className="text-[10px] text-slate-500">{savedTBMatches.length} played</span>
+                </div>
+                <div className="space-y-1.5">
+                  {savedTBMatches.map(m => (
+                    <div key={m.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-xs font-bold truncate">
+                          {m.teamA} <span className="text-slate-500">vs</span> {m.teamB}
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {m.poolATitle} · {m.poolBTitle}
+                        </p>
+                        <p className="text-[10px] text-slate-500 truncate">
+                          <span className="text-green-400 font-bold">{m.scoreA}</span>
+                          <span className="mx-1 text-slate-600">—</span>
+                          <span className="text-blue-400 font-bold">{m.scoreB}</span>
+                          <span className="mx-1 text-slate-600">·</span>
+                          🏆 {m.winner}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (!window.confirm(`Delete this match? Pools "${m.poolATitle}" and "${m.poolBTitle}" will become selectable again.`)) return
+                          const next = savedTBMatches.filter(x => x.id !== m.id)
+                          setSavedTBMatches(next)
+                          void saveTBMatchesList(next)
+                        }}
+                        title="Delete match — reopens its pools"
+                        className="shrink-0 text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded text-xs font-black">
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 italic">Deleting a match reopens its pools for reuse in a future tie-breaker.</p>
+              </div>
+            )}
           </div>
         )}
 
