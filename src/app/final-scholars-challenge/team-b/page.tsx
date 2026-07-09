@@ -151,6 +151,95 @@ export default function TeamBPage() {
   const timerWarn = timerSecs <= 10 && timerSecs > 0
   const fmtTime = (ms: number) => { const sc = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(sc / 60)}:${String(sc % 60).padStart(2, '0')}` }
 
+  // ── Innovation Sprint · working — dedicated compact layout that ALWAYS
+  // fits inside the viewport (no scrolling), so students on smaller
+  // laptops can still reach the Submit button under time pressure.
+  if (round === 'innovation_sprint' && s?.is_phase === 'working') {
+    const prob = s.is_problems?.[s.is_problem_index]
+    return (
+      <div className="h-[100dvh] w-full overflow-hidden bg-[#060f1f] text-white flex flex-col select-none">
+        {/* Compact top strip — team + scores + IS badge */}
+        <div className={`${COLOR.bg} border-b ${COLOR.border} px-4 py-2 flex items-center justify-between gap-3 shrink-0`}>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-[#f5a623] text-xs font-black">💡</span>
+            <div className="min-w-0">
+              <p className={`text-[10px] font-black ${COLOR.text} uppercase tracking-widest leading-none`}>Your Team</p>
+              <p className="text-white text-sm md:text-base font-black leading-tight truncate">{myName}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 shrink-0 text-right">
+            <div>
+              <p className={`text-lg md:text-xl font-black ${COLOR.text} leading-none tabular-nums`}>{myTotalScore}</p>
+              <p className={`text-[9px] ${COLOR.text} opacity-60 leading-none mt-0.5`}>You</p>
+            </div>
+            <div className="h-8 w-px bg-white/10" />
+            <div>
+              <p className="text-base font-bold text-slate-400 leading-none tabular-nums">{theirTotalScore}</p>
+              <p className="text-[9px] text-slate-600 leading-none mt-0.5 truncate max-w-[80px]">{theirName}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Slim timer bar */}
+        <div className={`shrink-0 border-b border-white/10 ${timerWarn ? 'bg-red-500/10' : 'bg-[#f5a623]/5'}`}>
+          <div className="px-4 py-1.5 flex items-center justify-between">
+            <span className={`text-[10px] font-black uppercase tracking-widest ${timerWarn ? 'text-red-400' : 'text-[#f5a623]'}`}>
+              Problem {(s.is_problem_index ?? 0) + 1} of {s.is_problems?.length ?? 2}
+            </span>
+            <span className={`text-2xl font-black tabular-nums leading-none ${timerWarn || timerSecs === 0 ? 'text-red-400' : 'text-[#f5a623]'}`}>{fmtTime(timerMs)}</span>
+          </div>
+          <div className="h-1 bg-white/5">
+            <div
+              className={`h-full transition-all ${timerWarn ? 'bg-red-400' : 'bg-[#f5a623]'}`}
+              style={{ width: `${Math.max(0, Math.min(100, (timerMs / IS_TIME_MS) * 100))}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Problem statement — capped height with INTERNAL scroll for long text */}
+        {prob && (
+          <div className="shrink-0 border-b border-white/10 px-4 py-2 bg-[#0a1628]/60 max-h-[18dvh] overflow-y-auto">
+            <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-widest mb-1">Problem</p>
+            <p className="text-sm md:text-base text-white leading-snug">{prob.statement}</p>
+          </div>
+        )}
+
+        {/* Steps — stretch to fill remaining height evenly, no overflow */}
+        <div className="flex-1 min-h-0 flex flex-col gap-1.5 px-3 py-2 overflow-hidden">
+          <p className="shrink-0 text-[9px] text-slate-400 font-bold uppercase tracking-widest">Arrange the steps in correct order</p>
+          <div className="flex-1 min-h-0 flex flex-col gap-1.5">
+            {mySteps.map((step, idx) => (
+              <div key={idx} className="flex-1 basis-0 min-h-0 flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1">
+                <span className={`text-xs font-black w-5 text-center shrink-0 ${COLOR.text}`}>{idx + 1}</span>
+                <p className="flex-1 text-xs md:text-sm text-white leading-tight line-clamp-2">{step}</p>
+                <div className="flex flex-col gap-0.5 shrink-0">
+                  <button onClick={() => moveStep(idx, -1)} disabled={idx === 0}
+                    className="w-6 h-5 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded text-white disabled:opacity-20 transition-colors text-[10px]">▲</button>
+                  <button onClick={() => moveStep(idx, 1)} disabled={idx === mySteps.length - 1}
+                    className="w-6 h-5 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded text-white disabled:opacity-20 transition-colors text-[10px]">▼</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Submit pinned at the bottom */}
+        <div className="shrink-0 border-t border-white/10 px-3 py-2 bg-[#060f1f]">
+          {submitted ? (
+            <div className={`text-center py-2 rounded-lg border ${COLOR.border} ${COLOR.text} text-xs font-bold`}>
+              ✅ Answer submitted — waiting for the round to end
+            </div>
+          ) : (
+            <button onClick={submitManually}
+              className="w-full py-2.5 rounded-lg font-black text-sm text-[#0a1628] bg-[#f5a623] hover:bg-[#e0941a] transition-colors">
+              Submit Answer
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#060f1f] text-white flex flex-col select-none">
 
