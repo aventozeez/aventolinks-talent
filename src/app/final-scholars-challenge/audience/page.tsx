@@ -203,39 +203,6 @@ export default function AudiencePage() {
         </span>
       </div>
 
-      {/* Score board */}
-      {round === 'mystery_chain' && s?.team_c_name ? (
-        <div className="grid grid-cols-3 border-b border-white/10 shrink-0">
-          <div className="bg-green-950/40 border-r border-white/10 px-4 py-4 text-center">
-            <p className="text-xs font-black text-green-400 uppercase tracking-widest truncate">{nameA}</p>
-            <p className="text-5xl font-black text-green-400 mt-1 leading-none">{totalA}</p>
-            <p className="text-[10px] text-green-700 mt-1 font-semibold">pts</p>
-          </div>
-          <div className="bg-purple-950/40 border-r border-white/10 px-4 py-4 text-center">
-            <p className="text-xs font-black text-purple-400 uppercase tracking-widest truncate">{nameB}</p>
-            <p className="text-5xl font-black text-purple-400 mt-1 leading-none">{totalB}</p>
-            <p className="text-[10px] text-purple-700 mt-1 font-semibold">pts</p>
-          </div>
-          <div className="bg-blue-950/40 px-4 py-4 text-center">
-            <p className="text-xs font-black text-blue-400 uppercase tracking-widest truncate">{nameC}</p>
-            <p className="text-5xl font-black text-blue-400 mt-1 leading-none">{totalC}</p>
-            <p className="text-[10px] text-blue-700 mt-1 font-semibold">pts</p>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 border-b border-white/10 shrink-0">
-          <div className="bg-green-950/40 border-r border-white/10 px-8 py-5 text-center">
-            <p className="text-sm font-black text-green-400 uppercase tracking-widest truncate">{nameA}</p>
-            <p className="text-7xl font-black text-green-400 mt-1 leading-none">{totalA}</p>
-            <p className="text-xs text-green-700 mt-1 font-semibold">pts</p>
-          </div>
-          <div className="bg-purple-950/40 px-8 py-5 text-center">
-            <p className="text-sm font-black text-purple-400 uppercase tracking-widest truncate">{nameB}</p>
-            <p className="text-7xl font-black text-purple-400 mt-1 leading-none">{totalB}</p>
-            <p className="text-xs text-purple-700 mt-1 font-semibold">pts</p>
-          </div>
-        </div>
-      )}
 
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-5xl mx-auto w-full">

@@ -205,12 +205,7 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
         </svg>
       </div>
 
-      {/* ── SCOREBOARD – top strip, above scene ── */}
-      <div className="relative z-20 p-3">
-        <Scoreboard s={s} activeKey={null} />
-      </div>
-
-      {/* ── TITLE – just below scoreboard ── */}
+      {/* ── TITLE ── */}
       <div className="relative z-20 text-center pt-1 pb-2">
         <p className="text-purple-300 text-xs font-bold uppercase tracking-[0.3em]">{storyTeam} selected</p>
         <p className="text-white text-2xl font-black tracking-tight drop-shadow-lg">
@@ -831,7 +826,6 @@ export default function MCAudiencePage() {
   // Pick phase
   if (s.phase === 'pick_A' || s.phase === 'pick_B' || s.phase === 'pick_C') return (
     <div className="min-h-screen bg-[#0a0a1a] flex flex-col p-4 gap-5">
-      <Scoreboard s={s} activeKey={null} />
       <div className="text-center">
         <p className="text-purple-300 text-xs font-bold uppercase tracking-widest">Now Choosing</p>
         <p className="text-white text-3xl font-black mt-1">{pickingTeam}</p>
@@ -909,10 +903,6 @@ export default function MCAudiencePage() {
         )}
       </div>
 
-      {/* Compact score strip pinned at the bottom */}
-      <div className="shrink-0 border-t border-white/5">
-        <Scoreboard s={s} activeKey={activeTeamKey} />
-      </div>
     </div>
   )
 
