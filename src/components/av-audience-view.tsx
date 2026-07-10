@@ -272,7 +272,6 @@ export default function AVAudienceView() {
       { key: 'A', name: s.teamA, rf: s.rfA ?? 0, bz: s.bzA ?? 0, is: s.isA ?? 0, mc: s.mcOnlyA ?? 0, av: avA, total: s.scoreA, colour: '#22c55e' },
       { key: 'B', name: s.teamB, rf: s.rfB ?? 0, bz: s.bzB ?? 0, is: s.isB ?? 0, mc: s.mcOnlyB ?? 0, av: avB, total: s.scoreB, colour: '#3b82f6' },
     ] as const).slice().sort((a, b) => b.total - a.total)
-    const anyBreakdown = teams.some(t => (t.rf + t.bz + t.is + t.mc) > 0)
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#0a0a1f] text-white flex flex-col items-center justify-center gap-8 px-6 py-12">
         <div className="text-center space-y-2">
@@ -290,17 +289,13 @@ export default function AVAudienceView() {
               {i === 0 && <div className="text-4xl md:text-5xl mb-2">🏆</div>}
               <p className="text-sm md:text-base font-black uppercase tracking-widest truncate" style={{ color: t.colour }}>{t.name}</p>
               <p className="text-white text-7xl md:text-8xl font-black mt-2 md:mt-3 tabular-nums leading-none">{t.total}</p>
-              {anyBreakdown ? (
-                <div className="grid grid-cols-5 gap-1.5 mt-4">
-                  <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-1.5"><p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.rf}</p></div>
-                  <div className="rounded-lg bg-blue-500/15 border border-blue-500/40 py-1.5"><p className="text-blue-300 text-[9px] font-black uppercase tracking-widest">BZ</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.bz}</p></div>
-                  <div className="rounded-lg bg-cyan-500/15 border border-cyan-500/40 py-1.5"><p className="text-cyan-300 text-[9px] font-black uppercase tracking-widest">IS</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.is}</p></div>
-                  <div className="rounded-lg bg-purple-500/15 border border-purple-500/40 py-1.5"><p className="text-purple-300 text-[9px] font-black uppercase tracking-widest">MC</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.mc}</p></div>
-                  <div className="rounded-lg bg-white/10 border border-white/30 py-1.5"><p className="text-white/80 text-[9px] font-black uppercase tracking-widest">AV</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.av}</p></div>
-                </div>
-              ) : (
-                <p className="text-slate-400 text-sm md:text-base mt-2">Prior {t.mc} + AV {t.av}</p>
-              )}
+              <div className="grid grid-cols-5 gap-1.5 mt-4">
+                <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-1.5"><p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.rf}</p></div>
+                <div className="rounded-lg bg-blue-500/15 border border-blue-500/40 py-1.5"><p className="text-blue-300 text-[9px] font-black uppercase tracking-widest">BZ</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.bz}</p></div>
+                <div className="rounded-lg bg-cyan-500/15 border border-cyan-500/40 py-1.5"><p className="text-cyan-300 text-[9px] font-black uppercase tracking-widest">IS</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.is}</p></div>
+                <div className="rounded-lg bg-purple-500/15 border border-purple-500/40 py-1.5"><p className="text-purple-300 text-[9px] font-black uppercase tracking-widest">MC</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.mc}</p></div>
+                <div className="rounded-lg bg-white/10 border border-white/30 py-1.5"><p className="text-white/80 text-[9px] font-black uppercase tracking-widest">AV</p><p className="text-white text-sm md:text-base font-black tabular-nums">{t.av}</p></div>
+              </div>
             </div>
           ))}
         </div>
@@ -316,18 +311,30 @@ export default function AVAudienceView() {
       <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center gap-8 text-white px-6">
         <div className="text-5xl">🏁</div>
         <h2 className="text-4xl font-black text-center">Grand Final Complete</h2>
-        <div className="grid grid-cols-2 gap-4 w-full max-w-md">
+        <div className="grid grid-cols-2 gap-4 w-full max-w-3xl">
           <div className={`rounded-2xl p-6 text-center border-2 ${aWins ? 'bg-green-900/40 border-green-500' : 'bg-[#111827] border-gray-700'}`}>
             {aWins && <div className="text-2xl mb-1">🏆</div>}
             <p className="text-gray-400 text-sm">{s.teamA}</p>
             <p className="text-5xl font-black text-green-400">{s.scoreA}</p>
-            <p className="text-xs text-gray-500 mt-1">Prior {s.mcScoreA} + AV {s.scoreA - s.mcScoreA}</p>
+            <div className="grid grid-cols-5 gap-1.5 mt-3">
+              <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-1.5"><p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p><p className="text-white text-sm font-black tabular-nums">{s.rfA ?? 0}</p></div>
+              <div className="rounded-lg bg-blue-500/15 border border-blue-500/40 py-1.5"><p className="text-blue-300 text-[9px] font-black uppercase tracking-widest">BZ</p><p className="text-white text-sm font-black tabular-nums">{s.bzA ?? 0}</p></div>
+              <div className="rounded-lg bg-cyan-500/15 border border-cyan-500/40 py-1.5"><p className="text-cyan-300 text-[9px] font-black uppercase tracking-widest">IS</p><p className="text-white text-sm font-black tabular-nums">{s.isA ?? 0}</p></div>
+              <div className="rounded-lg bg-purple-500/15 border border-purple-500/40 py-1.5"><p className="text-purple-300 text-[9px] font-black uppercase tracking-widest">MC</p><p className="text-white text-sm font-black tabular-nums">{s.mcOnlyA ?? 0}</p></div>
+              <div className="rounded-lg bg-white/10 border border-white/30 py-1.5"><p className="text-white/80 text-[9px] font-black uppercase tracking-widest">AV</p><p className="text-white text-sm font-black tabular-nums">{s.scoreA - s.mcScoreA}</p></div>
+            </div>
           </div>
           <div className={`rounded-2xl p-6 text-center border-2 ${bWins ? 'bg-blue-900/40 border-blue-500' : 'bg-[#111827] border-gray-700'}`}>
             {bWins && <div className="text-2xl mb-1">🏆</div>}
             <p className="text-gray-400 text-sm">{s.teamB}</p>
             <p className="text-5xl font-black text-blue-400">{s.scoreB}</p>
-            <p className="text-xs text-gray-500 mt-1">Prior {s.mcScoreB} + AV {s.scoreB - s.mcScoreB}</p>
+            <div className="grid grid-cols-5 gap-1.5 mt-3">
+              <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-1.5"><p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p><p className="text-white text-sm font-black tabular-nums">{s.rfB ?? 0}</p></div>
+              <div className="rounded-lg bg-blue-500/15 border border-blue-500/40 py-1.5"><p className="text-blue-300 text-[9px] font-black uppercase tracking-widest">BZ</p><p className="text-white text-sm font-black tabular-nums">{s.bzB ?? 0}</p></div>
+              <div className="rounded-lg bg-cyan-500/15 border border-cyan-500/40 py-1.5"><p className="text-cyan-300 text-[9px] font-black uppercase tracking-widest">IS</p><p className="text-white text-sm font-black tabular-nums">{s.isB ?? 0}</p></div>
+              <div className="rounded-lg bg-purple-500/15 border border-purple-500/40 py-1.5"><p className="text-purple-300 text-[9px] font-black uppercase tracking-widest">MC</p><p className="text-white text-sm font-black tabular-nums">{s.mcOnlyB ?? 0}</p></div>
+              <div className="rounded-lg bg-white/10 border border-white/30 py-1.5"><p className="text-white/80 text-[9px] font-black uppercase tracking-widest">AV</p><p className="text-white text-sm font-black tabular-nums">{s.scoreB - s.mcScoreB}</p></div>
+            </div>
           </div>
         </div>
         {tie && <p className="text-yellow-400 font-black text-2xl">🤝 It&apos;s a Tie!</p>}
@@ -396,16 +403,17 @@ export default function AVAudienceView() {
   if (s.phase === 'declare_first_runnerup') {
     // If the tie-break decided it, that overrides raw scores; otherwise the
     // first runner-up is the lower cumulative score.
-    let runnerUp: { name: string; prior: number; av: number; total: number }
+    const perTeam = {
+      A: { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA,
+           rf: s.rfA ?? 0, bz: s.bzA ?? 0, is: s.isA ?? 0, mc: s.mcOnlyA ?? 0 },
+      B: { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB,
+           rf: s.rfB ?? 0, bz: s.bzB ?? 0, is: s.isB ?? 0, mc: s.mcOnlyB ?? 0 },
+    } as const
+    let runnerUp: typeof perTeam.A
     if (s.tieWinner) {
-      const runnerLetter: 'A' | 'B' = s.tieWinner === 'A' ? 'B' : 'A'
-      runnerUp = runnerLetter === 'A'
-        ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
-        : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+      runnerUp = s.tieWinner === 'A' ? perTeam.B : perTeam.A
     } else {
-      runnerUp = s.scoreA < s.scoreB
-        ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
-        : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+      runnerUp = s.scoreA < s.scoreB ? perTeam.A : perTeam.B
     }
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#2a1a0a] to-[#0a0a1a] text-white flex flex-col items-center justify-center gap-8 px-6">
@@ -416,6 +424,13 @@ export default function AVAudienceView() {
         <p className="text-slate-400 text-lg">is</p>
         <div className="bg-gradient-to-br from-yellow-900/40 to-orange-900/40 border-2 border-yellow-500/60 rounded-3xl px-16 py-12 shadow-2xl backdrop-blur-sm">
           <p className="text-6xl md:text-7xl font-black text-yellow-300 leading-tight text-center">{runnerUp.name}</p>
+          <div className="grid grid-cols-5 gap-2 mt-6 max-w-xl mx-auto">
+            <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-2"><p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p><p className="text-white text-lg font-black tabular-nums">{runnerUp.rf}</p></div>
+            <div className="rounded-lg bg-blue-500/15 border border-blue-500/40 py-2"><p className="text-blue-300 text-[9px] font-black uppercase tracking-widest">BZ</p><p className="text-white text-lg font-black tabular-nums">{runnerUp.bz}</p></div>
+            <div className="rounded-lg bg-cyan-500/15 border border-cyan-500/40 py-2"><p className="text-cyan-300 text-[9px] font-black uppercase tracking-widest">IS</p><p className="text-white text-lg font-black tabular-nums">{runnerUp.is}</p></div>
+            <div className="rounded-lg bg-purple-500/15 border border-purple-500/40 py-2"><p className="text-purple-300 text-[9px] font-black uppercase tracking-widest">MC</p><p className="text-white text-lg font-black tabular-nums">{runnerUp.mc}</p></div>
+            <div className="rounded-lg bg-white/10 border border-white/30 py-2"><p className="text-white/80 text-[9px] font-black uppercase tracking-widest">AV</p><p className="text-white text-lg font-black tabular-nums">{runnerUp.av}</p></div>
+          </div>
           <p className="text-slate-300 text-base mt-6 text-center">
             Prior rounds: <span className="font-bold text-white">{runnerUp.prior}</span>
             <span className="mx-3 text-slate-600">+</span>
@@ -433,15 +448,17 @@ export default function AVAudienceView() {
 
   // ── Dedicated Winner declaration ──
   if (s.phase === 'declare_winner') {
-    let winner: { name: string; prior: number; av: number; total: number }
+    const perTeam = {
+      A: { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA,
+           rf: s.rfA ?? 0, bz: s.bzA ?? 0, is: s.isA ?? 0, mc: s.mcOnlyA ?? 0 },
+      B: { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB,
+           rf: s.rfB ?? 0, bz: s.bzB ?? 0, is: s.isB ?? 0, mc: s.mcOnlyB ?? 0 },
+    } as const
+    let winner: typeof perTeam.A
     if (s.tieWinner) {
-      winner = s.tieWinner === 'A'
-        ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
-        : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+      winner = s.tieWinner === 'A' ? perTeam.A : perTeam.B
     } else {
-      winner = s.scoreA >= s.scoreB
-        ? { name: s.teamA, prior: s.mcScoreA, av: s.scoreA - s.mcScoreA, total: s.scoreA }
-        : { name: s.teamB, prior: s.mcScoreB, av: s.scoreB - s.mcScoreB, total: s.scoreB }
+      winner = s.scoreA >= s.scoreB ? perTeam.A : perTeam.B
     }
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#1a0f00] text-white flex flex-col items-center justify-center gap-8 px-6 overflow-hidden relative">
@@ -469,6 +486,13 @@ export default function AVAudienceView() {
             style={{textShadow: '0 4px 20px rgba(0,0,0,0.6)'}}>
             {winner.name}
           </p>
+          <div className="grid grid-cols-5 gap-2 mt-6 max-w-xl mx-auto">
+            <div className="rounded-lg bg-[#f5a623]/25 border border-[#f5a623]/60 py-2"><p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p><p className="text-white text-lg md:text-xl font-black tabular-nums">{winner.rf}</p></div>
+            <div className="rounded-lg bg-blue-500/25 border border-blue-500/60 py-2"><p className="text-blue-200 text-[9px] font-black uppercase tracking-widest">BZ</p><p className="text-white text-lg md:text-xl font-black tabular-nums">{winner.bz}</p></div>
+            <div className="rounded-lg bg-cyan-500/25 border border-cyan-500/60 py-2"><p className="text-cyan-200 text-[9px] font-black uppercase tracking-widest">IS</p><p className="text-white text-lg md:text-xl font-black tabular-nums">{winner.is}</p></div>
+            <div className="rounded-lg bg-purple-500/25 border border-purple-500/60 py-2"><p className="text-purple-200 text-[9px] font-black uppercase tracking-widest">MC</p><p className="text-white text-lg md:text-xl font-black tabular-nums">{winner.mc}</p></div>
+            <div className="rounded-lg bg-white/15 border border-white/40 py-2"><p className="text-white/90 text-[9px] font-black uppercase tracking-widest">AV</p><p className="text-white text-lg md:text-xl font-black tabular-nums">{winner.av}</p></div>
+          </div>
           <p className="text-yellow-100 text-lg mt-6 text-center font-bold">
             Prior rounds: <span className="text-white">{winner.prior}</span>
             <span className="mx-3 text-yellow-500">+</span>

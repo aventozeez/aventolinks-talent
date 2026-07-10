@@ -1045,7 +1045,6 @@ export default function MCAudiencePage() {
       { name: s.teamB, semi: s.semiB ?? 0, mc: s.scoreB, rf: s.rfB ?? 0, bz: s.bzB ?? 0, is: s.isB ?? 0, colour: '#3b82f6' },
       { name: s.teamC, semi: s.semiC ?? 0, mc: s.scoreC, rf: s.rfC ?? 0, bz: s.bzC ?? 0, is: s.isC ?? 0, colour: '#a855f7' },
     ].map(t => ({ ...t, total: t.semi + t.mc })).sort((a, b) => b.total - a.total)
-    const anyBreakdown = teams.some(t => (t.rf + t.bz + t.is) > 0)
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#0a0a1f] text-white flex flex-col items-center justify-center gap-8 px-6 py-12">
         <div className="text-center space-y-2">
@@ -1063,28 +1062,24 @@ export default function MCAudiencePage() {
               {i === 0 && <div className="text-4xl md:text-5xl mb-2">🏆</div>}
               <p className="text-sm md:text-base font-black uppercase tracking-widest truncate" style={{ color: t.colour }}>{t.name}</p>
               <p className="text-white text-6xl md:text-8xl font-black mt-2 md:mt-3 tabular-nums leading-none">{t.total}</p>
-              {anyBreakdown ? (
-                <div className="grid grid-cols-4 gap-1.5 mt-4">
-                  <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-1.5">
-                    <p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p>
-                    <p className="text-white text-sm md:text-base font-black tabular-nums">{t.rf}</p>
-                  </div>
-                  <div className="rounded-lg bg-blue-500/15 border border-blue-500/40 py-1.5">
-                    <p className="text-blue-300 text-[9px] font-black uppercase tracking-widest">BZ</p>
-                    <p className="text-white text-sm md:text-base font-black tabular-nums">{t.bz}</p>
-                  </div>
-                  <div className="rounded-lg bg-cyan-500/15 border border-cyan-500/40 py-1.5">
-                    <p className="text-cyan-300 text-[9px] font-black uppercase tracking-widest">IS</p>
-                    <p className="text-white text-sm md:text-base font-black tabular-nums">{t.is}</p>
-                  </div>
-                  <div className="rounded-lg bg-purple-500/15 border border-purple-500/40 py-1.5">
-                    <p className="text-purple-300 text-[9px] font-black uppercase tracking-widest">MC</p>
-                    <p className="text-white text-sm md:text-base font-black tabular-nums">{t.mc}</p>
-                  </div>
+              <div className="grid grid-cols-4 gap-1.5 mt-4">
+                <div className="rounded-lg bg-[#f5a623]/15 border border-[#f5a623]/40 py-1.5">
+                  <p className="text-[#f5a623] text-[9px] font-black uppercase tracking-widest">RF</p>
+                  <p className="text-white text-sm md:text-base font-black tabular-nums">{t.rf}</p>
                 </div>
-              ) : (
-                <p className="text-slate-400 text-xs md:text-sm mt-2">Semi {t.semi} + MC {t.mc}</p>
-              )}
+                <div className="rounded-lg bg-blue-500/15 border border-blue-500/40 py-1.5">
+                  <p className="text-blue-300 text-[9px] font-black uppercase tracking-widest">BZ</p>
+                  <p className="text-white text-sm md:text-base font-black tabular-nums">{t.bz}</p>
+                </div>
+                <div className="rounded-lg bg-cyan-500/15 border border-cyan-500/40 py-1.5">
+                  <p className="text-cyan-300 text-[9px] font-black uppercase tracking-widest">IS</p>
+                  <p className="text-white text-sm md:text-base font-black tabular-nums">{t.is}</p>
+                </div>
+                <div className="rounded-lg bg-purple-500/15 border border-purple-500/40 py-1.5">
+                  <p className="text-purple-300 text-[9px] font-black uppercase tracking-widest">MC</p>
+                  <p className="text-white text-sm md:text-base font-black tabular-nums">{t.mc}</p>
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -1100,7 +1095,7 @@ export default function MCAudiencePage() {
       { name: s.teamC, semi: s.semiC ?? 0, mc: s.scoreC, rf: s.rfC ?? 0, bz: s.bzC ?? 0, is: s.isC ?? 0 },
     ].map(t => ({ ...t, total: t.semi + t.mc })).sort((a, b) => b.total - a.total)
     const secondRunnerUp = teams[2]
-    const hasBreakdown = (secondRunnerUp.rf + secondRunnerUp.bz + secondRunnerUp.is) > 0
+    const hasBreakdown = true
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#1a0a2a] to-[#0a0a1a] text-white flex flex-col items-center justify-center gap-8 px-6">
         <p className="text-[#f5a623] text-sm font-bold uppercase tracking-[0.4em]">Oyo State Scholars Challenge 2026</p>
