@@ -92,6 +92,22 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
     setAudioUnlocked(true)
   }
 
+  // Auto-unlock narration on the FIRST user interaction anywhere on the page
+  // (click, key, touch) so admin never has to explicitly enable it. Browsers
+  // still require a gesture per page load, but this way it happens silently
+  // on whatever the operator clicks first — usually the fullscreen button.
+  useEffect(() => {
+    if (!isProjector) return
+    if (audioUnlocked) return
+    const unlock = () => unlockAudio()
+    window.addEventListener('pointerdown', unlock, { once: true, capture: true })
+    window.addEventListener('keydown', unlock, { once: true, capture: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlock, { capture: true })
+      window.removeEventListener('keydown', unlock, { capture: true })
+    }
+  }, [isProjector, audioUnlocked])
+
   // Sentence split — identical on every screen given identical fullText.
   const sentences = useMemo(() => {
     if (!fullText) return []
@@ -162,22 +178,10 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden relative">
 
-      {/* ── One-time audio unlock overlay — projector only, before story starts ── */}
-      {isProjector && !audioUnlocked && (
-        <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center gap-6 cursor-pointer"
-          onClick={unlockAudio}>
-          <div className="text-7xl animate-pulse">🔊</div>
-          <p className="text-white text-3xl font-black text-center px-6">Tap to enable sound</p>
-          <p className="text-slate-400 text-sm text-center max-w-md px-6">
-            Browsers require one tap before playing audio. After this, the narration will play automatically for the whole competition.
-          </p>
-          <button
-            className="mt-4 px-10 py-4 bg-[#f5a623] hover:bg-[#e0951b] text-black text-lg font-black rounded-2xl shadow-lg"
-            onClick={(e) => { e.stopPropagation(); unlockAudio() }}>
-            ▶ Enable Narration
-          </button>
-        </div>
-      )}
+      {/* Audio unlock happens automatically on the first pointer/key event
+          anywhere on the page (see the useEffect above), so no overlay is
+          shown. If for some reason the auto-unlock hasn't fired yet by the
+          time the story phase starts, click anything on screen to trigger it. */}
       {/* ── Small speaker indicator top-right (projector only, after unlock) ── */}
       {isProjector && audioUnlocked && currentSentence && (
         <div className="absolute top-3 right-3 z-30 pointer-events-none">
@@ -876,13 +880,18 @@ export default function MCAudiencePage() {
             <p className="text-slate-500 text-[10px] uppercase tracking-widest">Playing</p>
             <p className="text-white text-sm md:text-base font-black truncate">{playingTeamName}</p>
           </div>
-          {/* MC round score for the playing team only — semi + cumulative are
-              deliberately withheld until the compare screens at the end. */}
-          <div className="hidden md:block h-8 w-px bg-white/10" />
-          <div className="hidden md:block">
-            <p className="text-slate-500 text-[10px] uppercase tracking-widest">This Round</p>
-            <p className="text-[#f5a623] text-lg md:text-xl font-black tabular-nums leading-none">
+          {/* Big MC-round score card for the currently-playing team only.
+              Waiting teams' scores are hidden — semi + cumulative are only
+              revealed on the compare screens. Also shows how many puzzles
+              have been unlocked so far so the team knows their progress. */}
+          <div className="h-10 w-px bg-white/10" />
+          <div className="text-center">
+            <p className="text-slate-500 text-[9px] uppercase tracking-widest">Score</p>
+            <p className="text-[#f5a623] text-3xl md:text-4xl font-black tabular-nums leading-none">
               {s.phase === 'a_playing' ? s.scoreA : s.phase === 'b_playing' ? s.scoreB : s.scoreC}
+            </p>
+            <p className="text-slate-400 text-[9px] mt-1 tabular-nums">
+              {s.phase === 'a_playing' ? (s.revealedA?.length ?? 0) : s.phase === 'b_playing' ? (s.revealedB?.length ?? 0) : (s.revealedC?.length ?? 0)} of 10
             </p>
           </div>
         </div>

@@ -195,7 +195,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
       mk({ picture: '🔍', clue: 'Careful examination to discover the truth.', scrambled: 'YAANLSIS', answer: 'ANALYSIS', storySnippet: 'The analysis revealed a disturbing pattern.' }),
       mk({ picture: '📹', clue: 'Continuous observation.', scrambled: 'NIMTOROING', answer: 'MONITORING', storySnippet: 'Monitoring showed unusual movement around the campus.' }),
       mk({ picture: '🚨', clue: 'A signal that demands immediate action.', scrambled: 'TREAL', answer: 'ALERT', storySnippet: 'The school issued an alert.' }),
-      mk({ picture: '🚪', clue: 'Organised movement away from danger.', scrambled: 'AUEVTCAIOON', answer: 'EVACUATION', storySnippet: 'A precautionary evacuation began.' }),
+      mk({ picture: '🚪', clue: 'Organised movement away from danger.', scrambled: 'NIAETUCAOV', answer: 'EVACUATION', storySnippet: 'A precautionary evacuation began.' }),
       mk({ picture: '🛡️', clue: 'The final objective of every safety plan.', scrambled: 'NTEITCOPRO', answer: 'PROTECTION', storySnippet: 'The school and its students were finally safe under full protection.' }),
     ],
   },
@@ -208,7 +208,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
       mk({ picture: '💰', clue: 'An act of taking what does not belong to you.', scrambled: 'FHETT', answer: 'THEFT', storySnippet: 'The trophy case showed clear signs of deliberate theft.' }),
       mk({ picture: '🕵️', clue: 'A person believed to be responsible.', scrambled: 'SPSUECT', answer: 'SUSPECT', storySnippet: 'One individual quickly became the main suspect.' }),
       mk({ picture: '💭', clue: 'The reason someone commits an act.', scrambled: 'OMVITE', answer: 'MOTIVE', storySnippet: 'A motive rooted in jealousy was uncovered.' }),
-      mk({ picture: '📋', clue: 'A story offered to prove innocence.', scrambled: 'BIAILA', answer: 'ALIBI', storySnippet: 'The suspect\'s alibi did not match the timeline.' }),
+      mk({ picture: '📋', clue: 'A story offered to prove innocence.', scrambled: 'BLIAI', answer: 'ALIBI', storySnippet: 'The suspect\'s alibi did not match the timeline.' }),
       mk({ picture: '🧪', clue: 'Something that proves what happened.', scrambled: 'CEVEDENI', answer: 'EVIDENCE', storySnippet: 'Evidence was found hidden beneath the display cabinet.' }),
       mk({ picture: '👁️', clue: 'A person who saw the incident.', scrambled: 'SSENWIT', answer: 'WITNESS', storySnippet: 'A witness recalled seeing a shadow in the corridor.' }),
       mk({ picture: '🔎', clue: 'To look carefully through an area.', scrambled: 'RAECSH', answer: 'SEARCH', storySnippet: 'A thorough search of the school premises began.' }),
@@ -231,7 +231,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
       mk({ picture: '🎭', clue: 'The person ultimately responsible for a wrongdoing.', scrambled: 'TPRUCIL', answer: 'CULPRIT', storySnippet: 'The culprit was someone entrusted with securing the papers.' }),
       mk({ picture: '✏️', clue: 'Gaining advantage through dishonest means.', scrambled: 'TINCHEAG', answer: 'CHEATING', storySnippet: 'Deliberate cheating was confirmed by the examination board.' }),
       mk({ picture: '📜', clue: 'A formal investigation into a breach.', scrambled: 'YUIRNIQ', answer: 'INQUIRY', storySnippet: 'An urgent inquiry was opened by senior school officials.' }),
-      mk({ picture: '📑', clue: 'A rule that was seriously broken.', scrambled: 'CYLIPOL', answer: 'POLICY', storySnippet: 'The act violated every examination integrity policy.' }),
+      mk({ picture: '📑', clue: 'A rule that was seriously broken.', scrambled: 'CIPYLO', answer: 'POLICY', storySnippet: 'The act violated every examination integrity policy.' }),
       mk({ picture: '⚖️', clue: 'The consequence for serious misconduct.', scrambled: 'YNALEPT', answer: 'PENALTY', storySnippet: 'The student faced the ultimate academic penalty — expulsion.' }),
     ],
   },
@@ -247,10 +247,10 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
       mk({ picture: '🕵️', clue: 'A person seen near the scene.', scrambled: 'PSCUSTE', answer: 'SUSPECT', storySnippet: 'A suspect was seen near the coach\'s office at dawn.' }),
       mk({ picture: '🤫', clue: 'Something kept hidden from others.', scrambled: 'CESRTE', answer: 'SECRET', storySnippet: 'The coach had been keeping a dangerous secret.' }),
       mk({ picture: '⛓️', clue: 'Forced or pressured into doing something.', scrambled: 'DORCEF', answer: 'FORCED', storySnippet: 'Evidence showed the coach had been forced to leave.' }),
-      mk({ picture: '📞', clue: 'A communication device used to track location.', scrambled: 'LOHPNE', answer: 'PHONE', storySnippet: 'His phone contained a threatening message received that morning.' }),
+      mk({ picture: '📞', clue: 'A communication device used to track location.', scrambled: 'NEPHO', answer: 'PHONE', storySnippet: 'His phone contained a threatening message received that morning.' }),
       mk({ picture: '🗺️', clue: 'The path or direction taken to leave.', scrambled: 'UEROT', answer: 'ROUTE', storySnippet: 'Security cameras tracked the route he was taken.' }),
       mk({ picture: '🚔', clue: 'Official action taken to locate someone.', scrambled: 'DREHACSE', answer: 'SEARCHED', storySnippet: 'Authorities searched every corner of the campus.' }),
-      mk({ picture: '✅', clue: 'Brought back safe after going missing.', scrambled: 'EDRCREOV', answer: 'RECOVERED', storySnippet: 'The coach was recovered safely — and told the full story.' }),
+      mk({ picture: '✅', clue: 'Brought back safe after going missing.', scrambled: 'CDERVOEER', answer: 'RECOVERED', storySnippet: 'The coach was recovered safely — and told the full story.' }),
     ],
   },
 ]
@@ -583,6 +583,13 @@ export default function MCAdminPage() {
   const isPlaying = ['a_playing','b_playing','c_playing'].includes(s.phase)
   const isPicking = ['pick_A','pick_B','pick_C'].includes(s.phase)
   const isStory = ['story_A','story_B','story_C'].includes(s.phase)
+  // Local tick during the story phase so the progress bar / countdown animate.
+  const [, forceTick] = useState(0)
+  useEffect(() => {
+    if (!isStory) return
+    const iv = setInterval(() => forceTick(t => t + 1), 250)
+    return () => clearInterval(iv)
+  }, [isStory])
   const poolReady = (i: number) => (s.avPools[i]?.questions.length ?? 0) >= 10 && (s.avPools[i]?.questions ?? []).every(q => q.answer.trim())
   // Ready when at least the 3 real pools are filled — the optional 4th "Demo"
   // pool doesn't have to be complete for admin to advance.
@@ -941,22 +948,61 @@ export default function MCAdminPage() {
         )}
 
         {/* ─── STORY PHASE ─────────────────────────────────────────────────── */}
-        {isStory && (
-          <div className="space-y-4">
-            <div className="text-center">
-              <p className="text-purple-300 text-xs font-bold uppercase tracking-widest">{currentTeamName} chose</p>
-              <p className="text-white text-2xl font-black">{currentPack?.emoji} {currentPack?.title}</p>
+        {isStory && (() => {
+          // Estimate story duration on admin using the same formula the
+          // audience uses (75ms/char + 1500ms floor + 150ms breather per
+          // sentence). Gate the "Start Riddles" button until it elapses so
+          // admin can't cut the animation off mid-narration.
+          const fullText = currentPack?.openingStory ?? ''
+          const sentences = fullText.match(/[^.!?]+[.!?]+(?:\s+|$)/g)?.map(sn => sn.trim()).filter(Boolean) ?? (fullText ? [fullText] : [])
+          let totalMs = 0
+          sentences.forEach(sn => { totalMs += Math.max(1500, sn.length * 75) + 150 })
+          const elapsedMs = (s.storyStartAt && s.storyStartAt > 0) ? Math.max(0, Date.now() - s.storyStartAt) : 0
+          const progressPct = totalMs > 0 ? Math.min(100, (elapsedMs / totalMs) * 100) : 0
+          const animationDone = totalMs > 0 && elapsedMs >= totalMs
+          const remainingSec = Math.max(0, Math.ceil((totalMs - elapsedMs) / 1000))
+          return (
+            <div className="space-y-4">
+              <div className="text-center">
+                <p className="text-purple-300 text-xs font-bold uppercase tracking-widest">{currentTeamName} chose</p>
+                <p className="text-white text-2xl font-black">{currentPack?.emoji} {currentPack?.title}</p>
+              </div>
+
+              {/* Story progress bar — flip green when the animation completes. */}
+              <div className={`rounded-2xl border p-4 space-y-2 ${animationDone ? 'border-green-500/50 bg-green-500/10' : 'border-purple-500/30 bg-purple-500/5'}`}>
+                <div className="flex items-center justify-between text-xs font-black uppercase tracking-widest">
+                  <span className={animationDone ? 'text-green-300' : 'text-purple-300'}>
+                    {animationDone ? '✓ Animation complete' : 'Animation playing…'}
+                  </span>
+                  <span className="text-white tabular-nums">
+                    {animationDone ? 'Ready to start' : `${remainingSec}s remaining`}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div className={`h-full transition-all duration-200 ${animationDone ? 'bg-green-400' : 'bg-purple-400'}`} style={{ width: `${progressPct}%` }} />
+                </div>
+              </div>
+
+              <div className="bg-purple-900/20 border border-purple-500/30 rounded-2xl p-6 max-h-64 overflow-y-auto">
+                <p className="text-purple-300 text-xs font-bold uppercase tracking-widest mb-3">Opening Scenario</p>
+                <p className="text-white text-base leading-relaxed">{currentPack?.openingStory}</p>
+              </div>
+
+              <button onClick={startRiddles}
+                disabled={!animationDone}
+                className={`w-full font-black py-4 rounded-xl text-lg transition-colors ${
+                  animationDone
+                    ? 'bg-[#f5a623] hover:bg-[#e09510] text-black'
+                    : 'bg-white/5 border border-white/10 text-slate-500 cursor-not-allowed'
+                }`}>
+                {animationDone ? '▶ Start the Riddles — Timer Begins Now' : '⏳ Wait for the animation to finish'}
+              </button>
+              {!animationDone && (
+                <p className="text-[10px] text-slate-500 text-center italic">Timer will only start once the story animation has fully played on the projector.</p>
+              )}
             </div>
-            <div className="bg-purple-900/20 border border-purple-500/30 rounded-2xl p-6">
-              <p className="text-purple-300 text-xs font-bold uppercase tracking-widest mb-3">Opening Scenario</p>
-              <p className="text-white text-base leading-relaxed">{currentPack?.openingStory}</p>
-            </div>
-            <button onClick={startRiddles}
-              className="w-full bg-[#f5a623] hover:bg-[#e09510] text-black font-black py-4 rounded-xl text-lg">
-              ▶ Start the Riddles — Timer Begins Now
-            </button>
-          </div>
-        )}
+          )
+        })()}
 
         {/* ─── PLAYING ─────────────────────────────────────────────────────── */}
         {isPlaying && (

@@ -492,20 +492,27 @@ export default function AVAudienceView() {
 
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden">
-      <div className="bg-[#0d1117] px-6 py-3 flex items-center justify-between shrink-0 border-b border-gray-800">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
-          <span className="font-bold text-sm text-green-400">{s.teamA}</span>
-          <span className="text-xl font-black text-white ml-1">{s.scoreA}</span>
+      {/* Top bar — AV-round scores only (MC carried in is NOT included) so
+          the room sees exactly how many points each team earned during this
+          round. Numbers are big and always visible. */}
+      <div className="bg-[#0d1117] px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-800">
+        <div className="flex items-center gap-3">
+          <div className="w-3 h-3 rounded-full bg-green-400" />
+          <div>
+            <p className="font-bold text-xs text-green-400 uppercase tracking-widest truncate max-w-[160px]">{s.teamA}</p>
+            <p className="text-3xl font-black text-white tabular-nums leading-none">{avA}</p>
+          </div>
         </div>
         <div className="text-center">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-widest">Audio Visual</p>
-          <p className="text-xs text-gray-400">{currentCorrect} correct · {activeQueue.length} left in queue</p>
+          <p className="text-[10px] text-[#f5a623] font-black uppercase tracking-widest">AV Round · Live Score</p>
+          <p className="text-xs text-gray-400 mt-1">{currentCorrect} correct · {activeQueue.length} left in queue</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xl font-black text-white mr-1">{s.scoreB}</span>
-          <span className="font-bold text-sm text-blue-400">{s.teamB}</span>
-          <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="font-bold text-xs text-blue-400 uppercase tracking-widest truncate max-w-[160px]">{s.teamB}</p>
+            <p className="text-3xl font-black text-white tabular-nums leading-none">{avB}</p>
+          </div>
+          <div className="w-3 h-3 rounded-full bg-blue-400" />
         </div>
       </div>
 

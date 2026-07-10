@@ -589,23 +589,16 @@ export default function AVAdmin() {
                   )}
                   {/* Ceremony reveal buttons */}
                   <div className="flex flex-col gap-2 mt-2">
-                    {/* Tie-Breaker — always available on done. Pulses when scores are tied. */}
-                    {state.phase === 'done' && !state.tieWinner && (
-                      <button onClick={startTieBreak}
-                        className={`w-full py-2 bg-pink-600/30 hover:bg-pink-600/50 border border-pink-500/50 text-pink-300 rounded-xl font-bold text-sm ${isTied ? 'animate-pulse ring-2 ring-pink-500/40' : ''}`}>
-                        🔔 Start Tie-Breaker {isTied ? '(scores tied!)' : '(buzzer round)'}
-                      </button>
-                    )}
-                    {state.phase === 'done' && state.tieWinner && (
+                    {/* Tie-Breaker button removed — if scores are tied, admin
+                        navigates to /tie-breaker/admin manually. */}
+                    {state.phase === 'done' && isTied && (
                       <p className="text-xs text-pink-300 font-bold italic pt-1 text-center">
-                        Tie-breaker won by {state.tieWinner === 'A' ? state.teamA : state.teamB}
+                        🔔 Scores are tied — open <a href="/tie-breaker/admin" className="underline decoration-pink-300/40 hover:decoration-pink-300">/tie-breaker/admin</a> to run the rapid-fire tie-breaker before declaring winners.
                       </p>
                     )}
                     {state.phase === 'done' && (
                       <button onClick={() => update({ phase: 'declare_first_runnerup' })}
-                        disabled={isTied && !state.tieWinner}
-                        title={isTied && !state.tieWinner ? 'Break the tie first' : undefined}
-                        className="w-full py-2 bg-[#f5a623]/20 hover:bg-[#f5a623]/30 border border-[#f5a623]/50 text-[#f5a623] rounded-xl font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                        className="w-full py-2 bg-[#f5a623]/20 hover:bg-[#f5a623]/30 border border-[#f5a623]/50 text-[#f5a623] rounded-xl font-bold text-sm">
                         🥈 Declare First Runner Up
                       </button>
                     )}
