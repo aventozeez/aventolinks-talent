@@ -1089,11 +1089,16 @@ export default function MCAudiencePage() {
 
   // ── Dedicated Second Runner Up declaration ──
   if (s.phase === 'declare_second_runnerup') {
-    const teams = [
-      { name: s.teamA, semi: s.semiA ?? 0, mc: s.scoreA, rf: s.rfA ?? 0, bz: s.bzA ?? 0, is: s.isA ?? 0 },
-      { name: s.teamB, semi: s.semiB ?? 0, mc: s.scoreB, rf: s.rfB ?? 0, bz: s.bzB ?? 0, is: s.isB ?? 0 },
-      { name: s.teamC, semi: s.semiC ?? 0, mc: s.scoreC, rf: s.rfC ?? 0, bz: s.bzC ?? 0, is: s.isC ?? 0 },
+    const raw = [
+      { key: 'A' as const, name: s.teamA, semi: s.semiA ?? 0, mc: s.scoreA, rf: s.rfA ?? 0, bz: s.bzA ?? 0, is: s.isA ?? 0 },
+      { key: 'B' as const, name: s.teamB, semi: s.semiB ?? 0, mc: s.scoreB, rf: s.rfB ?? 0, bz: s.bzB ?? 0, is: s.isB ?? 0 },
+      { key: 'C' as const, name: s.teamC, semi: s.semiC ?? 0, mc: s.scoreC, rf: s.rfC ?? 0, bz: s.bzC ?? 0, is: s.isC ?? 0 },
     ].map(t => ({ ...t, total: t.semi + t.mc })).sort((a, b) => b.total - a.total)
+    // Apply the tie-breaker override the admin picked, if any.
+    const override = (s as unknown as { secondRunnerUpOverride?: 'A' | 'B' | 'C' | null }).secondRunnerUpOverride
+    const teams = override
+      ? [...raw.filter(t => t.key !== override), raw.find(t => t.key === override)!]
+      : raw
     const secondRunnerUp = teams[2]
     const hasBreakdown = true
     return (

@@ -82,6 +82,11 @@ type MCState = {
   // AV Round pre-configuration (set during setup before game starts)
   avVideoUrl: string
   avPools: AVPool[]   // 3 pools of 10; each finalist team picks one to play
+  // Manual override — set by the admin after running a tie-breaker when the
+  // bottom two cumulative totals are equal. Determines who is declared
+  // Second Runner Up (and by inference, who advances). null = no tie, use
+  // natural sort order.
+  secondRunnerUpOverride?: 'A' | 'B' | 'C' | null
 }
 
 const fmtTime = (ms: number) => {
@@ -164,6 +169,10 @@ function safeForAudience(s: MCState) {
       scrambled: puzzle.scrambled,
       answer: s.revealed ? puzzle.answer : undefined,
     } : null,
+    // Passed through so the audience declare_second_runnerup screen shows
+    // the team the admin picked after a tie-breaker, not the one that
+    // happened to land last in a stable sort.
+    secondRunnerUpOverride: s.secondRunnerUpOverride ?? null,
   }
 }
 
@@ -340,6 +349,7 @@ const defaultState = (): MCState => ({
   // Soyuz spacecraft re-entry documentary; capped at 120s (2 min) via end=
   avVideoUrl: 'https://www.youtube.com/embed/REc5oJUt81E?enablejsapi=1',
   avPools: DEFAULT_AV_POOLS.map(p => ({ ...p, id: crypto.randomUUID() })),
+  secondRunnerUpOverride: null,
 })
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -1198,15 +1208,34 @@ export default function MCAdminPage() {
         {(s.phase === 'done' || s.phase === 'declare_second_runnerup') && (() => {
           // Sort by CUMULATIVE score (semi-final + Mystery Chain).
           // The lowest cumulative is the Second Runner Up of Oyo State Scholars Challenge 2026.
-          const ranked = [
-            { name: s.teamA, semi: s.semiA, mc: s.scoreA, rf: s.rfA, bz: s.bzA, is: s.isA, packId: s.chosenA, rev: s.revealedA },
-            { name: s.teamB, semi: s.semiB, mc: s.scoreB, rf: s.rfB, bz: s.bzB, is: s.isB, packId: s.chosenB, rev: s.revealedB },
-            { name: s.teamC, semi: s.semiC, mc: s.scoreC, rf: s.rfC, bz: s.bzC, is: s.isC, packId: s.chosenC, rev: s.revealedC },
+          const rawRanked = [
+            { key: 'A' as const, name: s.teamA, semi: s.semiA, mc: s.scoreA, rf: s.rfA, bz: s.bzA, is: s.isA, packId: s.chosenA, rev: s.revealedA },
+            { key: 'B' as const, name: s.teamB, semi: s.semiB, mc: s.scoreB, rf: s.rfB, bz: s.bzB, is: s.isB, packId: s.chosenB, rev: s.revealedB },
+            { key: 'C' as const, name: s.teamC, semi: s.semiC, mc: s.scoreC, rf: s.rfC, bz: s.bzC, is: s.isC, packId: s.chosenC, rev: s.revealedC },
           ].map(t => ({ ...t, total: t.semi + t.mc }))
             .sort((a, b) => b.total - a.total)
 
+          // Tie detection — only care about the 2nd/3rd place tie because
+          // that determines who is Second Runner Up. If ranked[1] and
+          // ranked[2] share the same cumulative total (or all three do), we
+          // need the admin to run /tie-breaker/admin and manually pick.
+          const tiedForLast = rawRanked[1].total === rawRanked[2].total
+          const tiedTeams = tiedForLast
+            ? rawRanked.filter(t => t.total === rawRanked[2].total)
+            : []
+
+          // Apply override if the admin picked a winner after tie-breaker.
+          const ranked = (() => {
+            if (!tiedForLast || !s.secondRunnerUpOverride) return rawRanked
+            const loser = rawRanked.find(t => t.key === s.secondRunnerUpOverride)
+            if (!loser) return rawRanked
+            const others = rawRanked.filter(t => t.key !== s.secondRunnerUpOverride)
+            return [...others, loser]
+          })()
+
           const secondRunnerUp = ranked[2]
           const winners = ranked.slice(0, 2)
+          const tieUnresolved = tiedForLast && !s.secondRunnerUpOverride
 
           // ── Dedicated Second Runner Up declaration page ──
           if (s.phase === 'declare_second_runnerup') {
@@ -1298,12 +1327,56 @@ export default function MCAdminPage() {
                 note="Adjusts the Mystery Chain score (semi-final scores stay untouched). Ranking updates instantly."
               />
 
-              {/* Declare Second Runner Up */}
-              <button
-                onClick={() => update({ ...s, phase: 'declare_second_runnerup' })}
-                className="w-full bg-[#f5a623]/20 hover:bg-[#f5a623]/30 border border-[#f5a623]/50 text-[#f5a623] font-bold py-3 rounded-xl">
-                🥉 Declare Second Runner Up — {secondRunnerUp.name}
-              </button>
+              {/* Declare Second Runner Up — gated when 2nd/3rd are tied */}
+              {tieUnresolved ? (
+                <div className="bg-red-900/25 border-2 border-red-500/60 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <span className="text-2xl">⚠️</span>
+                    <div className="flex-1">
+                      <p className="text-red-200 font-black text-sm uppercase tracking-widest">Tie for Second Runner Up</p>
+                      <p className="text-white text-sm mt-1">
+                        {tiedTeams.map(t => t.name).join(' and ')} are level at{' '}
+                        <span className="font-black">{tiedTeams[0].total} pts</span>. Run a tie-breaker before declaring.
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="/tie-breaker/admin"
+                    target="_blank"
+                    rel="noopener"
+                    className="block text-center bg-red-500/25 hover:bg-red-500/40 border border-red-400/60 text-red-100 font-bold py-2.5 rounded-xl text-sm">
+                    ↗ Open Tie-Breaker (Rapid Fire, 30s each)
+                  </a>
+                  <p className="text-red-200/80 text-xs italic">
+                    After the tie-breaker, click the team that LOST — they become the Second Runner Up.
+                  </p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {tiedTeams.map(t => (
+                      <button
+                        key={t.key}
+                        onClick={() => update({ ...s, secondRunnerUpOverride: t.key })}
+                        className="w-full bg-[#f5a623]/15 hover:bg-[#f5a623]/25 border border-[#f5a623]/40 text-white font-bold py-2.5 rounded-xl text-sm">
+                        🥉 {t.name} lost the tie-breaker — declare Second Runner Up
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {s.secondRunnerUpOverride && (
+                    <button
+                      onClick={() => update({ ...s, secondRunnerUpOverride: null })}
+                      className="w-full bg-white/5 hover:bg-white/10 border border-white/15 text-white/70 text-xs font-bold py-2 rounded-lg">
+                      ↺ Undo tie-breaker pick
+                    </button>
+                  )}
+                  <button
+                    onClick={() => update({ ...s, phase: 'declare_second_runnerup' })}
+                    className="w-full bg-[#f5a623]/20 hover:bg-[#f5a623]/30 border border-[#f5a623]/50 text-[#f5a623] font-bold py-3 rounded-xl">
+                    🥉 Declare Second Runner Up — {secondRunnerUp.name}
+                  </button>
+                </div>
+              )}
 
               {/* Advance to AV Round */}
               <div className="bg-purple-900/20 border border-purple-500/40 rounded-2xl p-4 space-y-3">
