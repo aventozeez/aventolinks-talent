@@ -1,12 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { wsSubscribe } from '@/lib/ws-sync'
-import { FSC_CHANNEL, FSCState, getMatchState } from '@/lib/fsc-live'
+import { FSC_CHANNEL, FSCState, getMatchState, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS } from '@/lib/fsc-live'
 import ModeratorOverlay from '@/components/moderator-overlay'
 
 export default function FSCModerator() {
   const [s, setS] = useState<FSCState | null>(null)
   const [connected, setConnected] = useState(false)
+  const [, setTick] = useState(0)
 
   useEffect(() => {
     getMatchState().then(st => { if (st) setS(st) })
@@ -17,8 +18,14 @@ export default function FSCModerator() {
     const unsubReload = wsSubscribe(FSC_CHANNEL + ':reload', () => {
       if (typeof window !== 'undefined') window.location.reload()
     })
-    return () => { unsubMod(); unsubReload() }
+    const tick = setInterval(() => setTick(t => t + 1), 250)
+    return () => { unsubMod(); unsubReload(); clearInterval(tick) }
   }, [])
+
+  const now = Date.now()
+  const rfExpired = !!(s?.rf_timer_start && now - s.rf_timer_start >= RF_TIME_MS)
+  const bzExpired = !!(s?.bz_buzz_start && now - s.bz_buzz_start >= BZ_TIME_MS)
+  const isExpired = !!(s?.is_timer_start && now - s.is_timer_start >= IS_TIME_MS)
 
   // Derive overlay props from state
   let round = 'Preliminary', roundEmoji = '📖', phaseLabel = 'Waiting for admin…'
@@ -43,11 +50,13 @@ export default function FSCModerator() {
         : s.rf_phase === 'compare' ? 'Head-to-head'
         : s.rf_phase === 'idle' ? 'Instructions'
         : 'Round done'
-      if (s.rf_phase === 'a_playing' || s.rf_phase === 'b_playing') {
+      if ((s.rf_phase === 'a_playing' || s.rf_phase === 'b_playing') && !rfExpired) {
         currentQuestion = q ? `Q${idx + 1}: ${q.question}` : null
         currentAnswer = q?.answer ?? null
         nextQuestion = nq?.question ?? null
         nextAnswer = nq?.answer ?? null
+      } else if ((s.rf_phase === 'a_playing' || s.rf_phase === 'b_playing') && rfExpired) {
+        phaseLabel = "Time's up — waiting for admin to advance"
       }
     } else if (s.round === 'buzzer') {
       round = 'Buzzer'; roundEmoji = '🔔'
@@ -61,11 +70,14 @@ export default function FSCModerator() {
         : s.bz_phase === 'revealed' ? 'Answer revealed'
         : s.bz_phase === 'idle' ? 'Instructions'
         : 'Round done'
-      if (q && s.bz_phase !== 'idle' && s.bz_phase !== 'done') {
+      const buzzedExpired = (s.bz_phase === 'buzzed_a' || s.bz_phase === 'buzzed_b' || s.bz_phase === 'second_chance') && bzExpired
+      if (q && s.bz_phase !== 'idle' && s.bz_phase !== 'done' && !buzzedExpired) {
         currentQuestion = `Q${idx + 1}: ${q.question}`
         currentAnswer = q.answer
         nextQuestion = nq?.question ?? null
         nextAnswer = nq?.answer ?? null
+      } else if (buzzedExpired) {
+        phaseLabel = "Time's up — waiting for admin to advance"
       }
     } else if (s.round === 'innovation_sprint') {
       round = 'Innovation Sprint'; roundEmoji = '💡'
@@ -81,7 +93,9 @@ export default function FSCModerator() {
         : s.is_phase === 'revealed' ? `Problem ${idx + 1} — score`
         : s.is_phase === 'compare' ? 'Head-to-head'
         : 'Round done'
-      if (p) {
+      if (s.is_phase === 'working' && isExpired) {
+        phaseLabel = "Time's up — waiting for admin to advance"
+      } else if (p) {
         currentQuestion = `Problem ${idx + 1}: ${p.statement}`
         currentAnswer = null
         nextQuestion = np?.statement ?? null

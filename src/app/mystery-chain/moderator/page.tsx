@@ -4,6 +4,7 @@ import { wsSubscribe } from '@/lib/ws-sync'
 import ModeratorOverlay from '@/components/moderator-overlay'
 
 const CHANNEL = 'mc:state:mod'
+const MC_MS = 60_000
 
 type MCPuzzle = { id: string; picture: string; clue: string; scrambled: string; answer: string; storySnippet: string }
 type MCPack = { id: string; title: string; emoji: string; puzzles: MCPuzzle[] }
@@ -13,19 +14,24 @@ type MCState = {
   packs: MCPack[]
   chosenA: string | null; chosenB: string | null; chosenC: string | null
   queueA: MCPuzzle[]; queueB: MCPuzzle[]; queueC: MCPuzzle[]
+  timerStart?: number | null
 }
 
 export default function MCModerator() {
   const [s, setS] = useState<MCState | null>(null)
   const [connected, setConnected] = useState(false)
+  const [, setTick] = useState(0)
 
   useEffect(() => {
     const unsub = wsSubscribe(CHANNEL, p => {
       setConnected(true)
       if (p) setS(p as MCState)
     })
-    return () => { unsub() }
+    const tick = setInterval(() => setTick(t => t + 1), 250)
+    return () => { unsub(); clearInterval(tick) }
   }, [])
+
+  const expired = !!(s?.timerStart && Date.now() - s.timerStart >= MC_MS)
 
   let phaseLabel = 'Waiting for admin…'
   let currentQuestion: string | null = null
@@ -65,7 +71,10 @@ export default function MCModerator() {
       : s.phase === 'done' ? 'Round done'
       : s.phase
 
-    if ((s.phase === 'a_playing' || s.phase === 'b_playing' || s.phase === 'c_playing') && puzzle) {
+    const playing = s.phase === 'a_playing' || s.phase === 'b_playing' || s.phase === 'c_playing'
+    if (playing && expired) {
+      phaseLabel = "Time's up — waiting for admin to advance"
+    } else if (playing && puzzle) {
       currentQuestion = `${activeName} · ${puzzle.picture} ${puzzle.clue}`
       currentAnswer = puzzle.answer
       nextQuestion = nextPuzzle ? `${nextPuzzle.picture} ${nextPuzzle.clue}` : null

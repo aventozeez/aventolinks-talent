@@ -4,6 +4,7 @@ import { wsSubscribe } from '@/lib/ws-sync'
 import ModeratorOverlay from '@/components/moderator-overlay'
 
 const CHANNEL = 'tie:state'
+const TB_MS = 30_000
 
 type TBQuestion = { id: string; text: string; answer: string }
 type TBPool = { id: string; title: string; questions: TBQuestion[] }
@@ -14,19 +15,24 @@ type TBState = {
   chosenPoolA: string | null; chosenPoolB: string | null
   queueA: TBQuestion[]; queueB: TBQuestion[]
   currentQ: TBQuestion | null
+  timerStart?: number | null
 }
 
 export default function TBModerator() {
   const [s, setS] = useState<TBState | null>(null)
   const [connected, setConnected] = useState(false)
+  const [, setTick] = useState(0)
 
   useEffect(() => {
     const unsub = wsSubscribe(CHANNEL, p => {
       setConnected(true)
       if (p) setS(p as TBState)
     })
-    return () => { unsub() }
+    const tick = setInterval(() => setTick(t => t + 1), 250)
+    return () => { unsub(); clearInterval(tick) }
   }, [])
+
+  const expired = !!(s?.timerStart && Date.now() - s.timerStart >= TB_MS)
 
   let phaseLabel = 'Waiting for admin…'
   let currentQuestion: string | null = null
@@ -53,7 +59,10 @@ export default function TBModerator() {
       : s.phase === 'setup' ? 'Setup'
       : s.phase
 
-    if ((s.phase === 'a_playing' || s.phase === 'b_playing') && q) {
+    const playing = s.phase === 'a_playing' || s.phase === 'b_playing'
+    if (playing && expired) {
+      phaseLabel = "Time's up — waiting for admin to advance"
+    } else if (playing && q) {
       currentQuestion = pool ? `${pool.title}: ${q.text}` : q.text
       currentAnswer = q.answer
       if (nq && nq.id !== q.id) {

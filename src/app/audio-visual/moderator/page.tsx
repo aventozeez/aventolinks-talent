@@ -4,6 +4,7 @@ import { wsSubscribe } from '@/lib/ws-sync'
 import ModeratorOverlay from '@/components/moderator-overlay'
 
 const CHANNEL = 'av:state'
+const AV_MS = 60_000
 
 type AVQuestion = { id: string; text: string; answer: string; revealed: boolean; answeredBy: 'A' | 'B' | null }
 type AVPool = { id: string; title: string; questions: AVQuestion[] }
@@ -14,6 +15,7 @@ type AVState = {
   chosenPoolA: string | null; chosenPoolB: string | null
   queueA: AVQuestion[]; queueB: AVQuestion[]
   correctA: number; correctB: number
+  timerStart?: number | null
   tieQuestions?: AVQuestion[]
   tieCurrentIdx?: number
   tieBuzzedBy?: 'A' | 'B' | null
@@ -22,14 +24,18 @@ type AVState = {
 export default function AVModerator() {
   const [s, setS] = useState<AVState | null>(null)
   const [connected, setConnected] = useState(false)
+  const [, setTick] = useState(0)
 
   useEffect(() => {
     const unsub = wsSubscribe(CHANNEL, p => {
       setConnected(true)
       if (p) setS(p as AVState)
     })
-    return () => { unsub() }
+    const tick = setInterval(() => setTick(t => t + 1), 250)
+    return () => { unsub(); clearInterval(tick) }
   }, [])
+
+  const expired = !!(s?.timerStart && Date.now() - s.timerStart >= AV_MS)
 
   let phaseLabel = 'Waiting for admin…'
   let currentQuestion: string | null = null
@@ -59,7 +65,9 @@ export default function AVModerator() {
       : s.phase === 'done' ? 'Round done'
       : s.phase
 
-    if ((isA || isB) && q) {
+    if ((isA || isB) && expired) {
+      phaseLabel = "Time's up — waiting for admin to advance"
+    } else if ((isA || isB) && q) {
       currentQuestion = `Q${correct + 1} · ${pool?.title ?? ''}: ${q.text}`
       currentAnswer = q.answer
       nextQuestion = nq?.text ?? null
