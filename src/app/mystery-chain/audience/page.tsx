@@ -182,19 +182,13 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
           audience page loads (not just during story phase) so narration is
           armed before the first animation. Any click dismisses it. */}
       {isProjector && !audioUnlocked && (
-        <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center gap-6 cursor-pointer"
-          onClick={unlockAudio}>
-          <div className="text-8xl animate-pulse">🔊</div>
-          <p className="text-white text-4xl md:text-5xl font-black text-center px-6">Tap to enable sound</p>
-          <p className="text-slate-400 text-base text-center max-w-lg px-6">
-            Browsers require one tap before playing audio. After you tap, the narration will play automatically for every round of the competition.
-          </p>
-          <button
-            className="mt-4 px-12 py-5 bg-[#f5a623] hover:bg-[#e0951b] text-black text-xl font-black rounded-2xl shadow-lg"
-            onClick={(e) => { e.stopPropagation(); unlockAudio() }}>
-            ▶ Enable Narration
-          </button>
-        </div>
+        <button
+          onClick={unlockAudio}
+          title="Only the projected screen needs sound — other audience screens can ignore this."
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 bg-[#f5a623] hover:bg-[#e0951b] text-black text-sm font-black rounded-full shadow-[0_6px_20px_rgba(245,166,35,0.45)] ring-2 ring-black/20 animate-pulse">
+          <span className="text-base">🔊</span>
+          <span>Tap to enable sound</span>
+        </button>
       )}
       {/* ── Small speaker indicator top-right (projector only, after unlock) ── */}
       {isProjector && audioUnlocked && currentSentence && (
