@@ -2951,8 +2951,8 @@ export default function AdminPage() {
                   {currentISP && (s.is_step_results_a || s.is_step_results_b) && (
                     <div className="bg-[#0a1628] border border-white/10 rounded-2xl p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-[10px] font-bold text-[#f5a623] uppercase tracking-widest">Problem {s.is_problem_index + 1} of {IS_PROB_COUNT} — Results</p>
-                        <p className="text-[10px] text-slate-500">Cumulative shown below</p>
+                        <p className="text-[10px] font-bold text-[#f5a623] uppercase tracking-widest">Problem {s.is_problem_index + 1} of {IS_PROB_COUNT} — Score</p>
+                        <p className="text-[10px] text-slate-500">Cumulative shown on H2H at end</p>
                       </div>
                       {(['a', 'b'] as const).map(team => {
                         const answer = team === 'a' ? (isAnswers?.a ?? s.is_team_a_answer) : (isAnswers?.b ?? s.is_team_b_answer)
@@ -2961,16 +2961,12 @@ export default function AdminPage() {
                         const problemScore = team === 'a'
                           ? (s.is_problem_scores_a?.[s.is_problem_index] ?? 0)
                           : (s.is_problem_scores_b?.[s.is_problem_index] ?? 0)
-                        const total = team === 'a' ? s.is_score_a : s.is_score_b
                         const color = team === 'a' ? 'text-green-400' : 'text-purple-400'
                         return (
                           <div key={team} className={`rounded-xl p-3 border ${team === 'a' ? 'border-green-500/30' : 'border-purple-500/30'}`}>
                             <div className="flex items-center justify-between mb-2">
                               <p className={`text-xs font-bold ${color}`}>{name}</p>
-                              <div className="text-right">
-                                <p className={`text-lg font-black ${color}`}>+{problemScore} pts</p>
-                                <p className="text-[10px] text-slate-500">Total so far: {total}</p>
-                              </div>
+                              <p className={`text-lg font-black ${color}`}>{problemScore} pts</p>
                             </div>
                             {answer && stepResults && currentISP.steps.map((correctStep, i) => {
                               const teamStep = answer[i] ?? ''

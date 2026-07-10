@@ -607,17 +607,18 @@ export default function AudiencePage() {
                     </div>
                   )}
 
-                  {/* Per-problem scores (this problem only) + cumulative note */}
+                  {/* Per-problem scores — this problem only, no running total.
+                      Cumulative shows on the H2H compare screen at end of round. */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-green-950/40 border border-green-500/40 rounded-2xl p-5 text-center">
                       <p className="text-base font-black text-green-400">{nameA}</p>
-                      <p className="text-5xl font-black text-green-400 mt-1">+{problemScoreA}</p>
-                      <p className="text-xs text-green-700">Problem {idx + 1} · IS total {s.is_score_a}</p>
+                      <p className="text-5xl md:text-6xl font-black text-green-400 mt-1 tabular-nums">{problemScoreA}</p>
+                      <p className="text-xs text-green-700 mt-1">Problem {idx + 1} score</p>
                     </div>
                     <div className="bg-purple-950/40 border border-purple-500/40 rounded-2xl p-5 text-center">
                       <p className="text-base font-black text-purple-400">{nameB}</p>
-                      <p className="text-5xl font-black text-purple-400 mt-1">+{problemScoreB}</p>
-                      <p className="text-xs text-purple-700">Problem {idx + 1} · IS total {s.is_score_b}</p>
+                      <p className="text-5xl md:text-6xl font-black text-purple-400 mt-1 tabular-nums">{problemScoreB}</p>
+                      <p className="text-xs text-purple-700 mt-1">Problem {idx + 1} score</p>
                     </div>
                   </div>
                 </div>

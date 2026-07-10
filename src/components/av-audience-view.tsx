@@ -492,28 +492,27 @@ export default function AVAudienceView() {
 
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden">
-      {/* Top bar — AV-round scores only (MC carried in is NOT included) so
-          the room sees exactly how many points each team earned during this
-          round. Numbers are big and always visible. */}
-      <div className="bg-[#0d1117] px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-800">
-        <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-green-400" />
-          <div>
-            <p className="font-bold text-xs text-green-400 uppercase tracking-widest truncate max-w-[160px]">{s.teamA}</p>
-            <p className="text-3xl font-black text-white tabular-nums leading-none">{avA}</p>
+      {/* Prominent AV-round scoreboard — huge team score cards, brighter
+          backgrounds, always visible during play. AV-round-only (MC carry-in
+          is NOT included) so the room sees points earned in this round only. */}
+      <div className="bg-[#0d1117] px-4 md:px-8 py-4 shrink-0 border-b-2 border-[#f5a623]/40">
+        <p className="text-center text-[#f5a623] text-[10px] md:text-xs font-black uppercase tracking-[0.4em] mb-2">AV Round · Live Score</p>
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-3 md:gap-6 items-stretch">
+          <div className="rounded-2xl border-2 border-green-500/60 bg-gradient-to-br from-green-500/25 to-green-500/5 p-4 md:p-5 text-center">
+            <p className="font-black text-[10px] md:text-xs text-green-300 uppercase tracking-widest truncate">{s.teamA}</p>
+            <p className="text-5xl md:text-7xl font-black text-white tabular-nums leading-none mt-2">{avA}</p>
+          </div>
+          <div className="flex items-center justify-center px-2">
+            <div className="text-slate-500 text-2xl md:text-3xl font-black">vs</div>
+          </div>
+          <div className="rounded-2xl border-2 border-blue-500/60 bg-gradient-to-br from-blue-500/25 to-blue-500/5 p-4 md:p-5 text-center">
+            <p className="font-black text-[10px] md:text-xs text-blue-300 uppercase tracking-widest truncate">{s.teamB}</p>
+            <p className="text-5xl md:text-7xl font-black text-white tabular-nums leading-none mt-2">{avB}</p>
           </div>
         </div>
-        <div className="text-center">
-          <p className="text-[10px] text-[#f5a623] font-black uppercase tracking-widest">AV Round · Live Score</p>
-          <p className="text-xs text-gray-400 mt-1">{currentCorrect} correct · {activeQueue.length} left in queue</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <p className="font-bold text-xs text-blue-400 uppercase tracking-widest truncate max-w-[160px]">{s.teamB}</p>
-            <p className="text-3xl font-black text-white tabular-nums leading-none">{avB}</p>
-          </div>
-          <div className="w-3 h-3 rounded-full bg-blue-400" />
-        </div>
+        <p className="text-center text-xs text-gray-400 mt-3">
+          {currentCorrect} correct · {activeQueue.length} left in queue
+        </p>
       </div>
 
       <div className="py-3 px-6 text-center shrink-0" style={{ background: `${teamColor}18` }}>
