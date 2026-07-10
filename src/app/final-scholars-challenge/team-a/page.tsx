@@ -331,6 +331,19 @@ export default function TeamAPage() {
                     <p className="text-slate-500 text-sm mt-1">Watch the timer!</p>
                   </div>
                 )}
+
+                {/* Live round scores — mirrors the audience view so students
+                    always see the same running total the projector shows. */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={`bg-green-950/40 border ${COLOR.border} rounded-2xl p-4 text-center`}>
+                    <p className={`text-xs font-bold ${COLOR.text} truncate`}>{myName}</p>
+                    <p className={`text-3xl font-black ${COLOR.text}`}>{s.rf_score_a}</p>
+                  </div>
+                  <div className="bg-purple-950/40 border border-purple-500/30 rounded-2xl p-4 text-center">
+                    <p className="text-xs font-bold text-purple-400 truncate">{theirName}</p>
+                    <p className="text-3xl font-black text-purple-400">{s.rf_score_b}</p>
+                  </div>
+                </div>
               </>
             )}
 
@@ -616,6 +629,51 @@ export default function TeamAPage() {
                 )}
               </div>
             )}
+
+            {/* Head-to-head compare — mirrors the audience view so the team
+                sees the same per-problem table + total the projector shows. */}
+            {s?.is_phase === 'compare' && (() => {
+              const a = s.is_score_a
+              const b = s.is_score_b
+              const aWins = a > b
+              const bWins = b > a
+              return (
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <p className="text-[10px] font-black text-[#f5a623] uppercase tracking-[0.4em]">Innovation Sprint · Final</p>
+                    <h2 className="text-2xl font-black text-white mt-1">Head-to-Head</h2>
+                  </div>
+                  <div className="bg-[#0a1628] border border-white/10 rounded-2xl overflow-hidden">
+                    <div className="grid grid-cols-3 bg-white/5">
+                      <div className="px-3 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Problem</div>
+                      <div className={`px-3 py-2 text-[9px] font-black ${COLOR.text} uppercase tracking-widest text-center truncate`}>{myName}</div>
+                      <div className="px-3 py-2 text-[9px] font-black text-purple-400 uppercase tracking-widest text-center truncate">{theirName}</div>
+                    </div>
+                    {Array.from({ length: (s.is_problems?.length ?? 2) }).map((_, i) => {
+                      const pa = s.is_problem_scores_a?.[i] ?? 0
+                      const pb = s.is_problem_scores_b?.[i] ?? 0
+                      return (
+                        <div key={i} className="grid grid-cols-3 border-t border-white/5">
+                          <div className="px-3 py-3 text-sm font-bold text-white">Problem {i + 1}</div>
+                          <div className={`px-3 py-3 text-center text-xl font-black ${pa >= pb ? COLOR.text : 'text-slate-500'}`}>{pa}</div>
+                          <div className={`px-3 py-3 text-center text-xl font-black ${pb >= pa ? 'text-purple-300' : 'text-slate-500'}`}>{pb}</div>
+                        </div>
+                      )
+                    })}
+                    <div className="grid grid-cols-3 border-t-2 border-[#f5a623]/40 bg-[#f5a623]/5">
+                      <div className="px-3 py-3 text-sm font-black text-[#f5a623] uppercase tracking-widest">Total</div>
+                      <div className={`px-3 py-3 text-center text-3xl font-black ${aWins ? COLOR.text : 'text-white'}`}>{a}</div>
+                      <div className={`px-3 py-3 text-center text-3xl font-black ${bWins ? 'text-purple-300' : 'text-white'}`}>{b}</div>
+                    </div>
+                  </div>
+                  <p className="text-center text-white text-lg font-black">
+                    {aWins ? `🏆 ${myName} wins the Innovation Sprint`
+                      : bWins ? `🏆 ${theirName} wins the Innovation Sprint`
+                      : `🤝 It's a tie at ${a}`}
+                  </p>
+                </div>
+              )
+            })()}
 
             {s?.is_phase === 'done' && (
               <div className="text-center py-4 space-y-2">
