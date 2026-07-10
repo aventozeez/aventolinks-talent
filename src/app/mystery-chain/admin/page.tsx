@@ -369,7 +369,10 @@ export default function MCAdminPage() {
   mcGraceStartRef.current = mcGraceStart
   const [mcGraceMs, setMcGraceMs] = useState(0)
 
-  const broadcast = useCallback((st: MCState) => wsBroadcast(CHANNEL, safeForAudience(st)), [])
+  const broadcast = useCallback((st: MCState) => {
+    wsBroadcast(CHANNEL, safeForAudience(st))
+    wsBroadcast(CHANNEL + ':mod', st)
+  }, [])
   const update = useCallback((st: MCState) => { setS(st); broadcast(st) }, [broadcast])
 
   // Load registered teams from Supabase on mount so setup can pick from a

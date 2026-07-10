@@ -208,6 +208,8 @@ export default function AdminPage() {
     setFscState(newState)
     // 2. Broadcast to viewers instantly — before any DB write
     wsBroadcast(FSC_CHANNEL + ':state', safeForViewers(newState))
+    // 2b. Also broadcast raw state (with answers) to moderator screens.
+    wsBroadcast(FSC_CHANNEL + ':mod', newState)
     // 3. Persist to DB in background (non-blocking)
     saveMatchState(newState).catch(() => {})
   }, [])
@@ -243,7 +245,10 @@ export default function AdminPage() {
       fscRef.current = s
       // Re-broadcast current state so all viewer pages sync immediately
       // (use a short delay to ensure channelRef is set after subscribe)
-      setTimeout(() => wsBroadcast(FSC_CHANNEL + ':state', safeForViewers(s)), 500)
+      setTimeout(() => {
+        wsBroadcast(FSC_CHANNEL + ':state', safeForViewers(s))
+        wsBroadcast(FSC_CHANNEL + ':mod', s)
+      }, 500)
     }
     setFscLoading(false)
   }, [])
@@ -307,6 +312,7 @@ export default function AdminPage() {
       fscRef.current = latest
       setFscState(latest)
       wsBroadcast(FSC_CHANNEL + ':state', safeForViewers(latest))
+      wsBroadcast(FSC_CHANNEL + ':mod', latest)
     }, 500)
     return () => clearInterval(id)
   }, [])
