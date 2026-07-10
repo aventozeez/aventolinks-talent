@@ -87,7 +87,10 @@ export default function AudiencePage() {
     if (!s) return null
     if (round === 'rapid_fire' && s.rf_phase === 'idle' && s.rf_score_a === 0 && s.rf_score_b === 0 && s.rf_q_index === 0) return ROUND_INFO.rapid_fire
     if (round === 'buzzer' && s.bz_phase === 'idle' && s.bz_score_a === 0 && s.bz_score_b === 0 && s.bz_q_index === 0) return ROUND_INFO.buzzer
-    if (round === 'innovation_sprint' && s.is_phase === 'idle' && s.is_score_a === 0 && s.is_score_b === 0 && s.is_problem_index === 0) return ROUND_INFO.innovation_sprint
+    // IS instructions only stay on screen until admin clicks 'Reveal Problem'
+    // (is_intro_done flag). After that, the projector should show the problem
+    // statement so the moderator can read it aloud.
+    if (round === 'innovation_sprint' && s.is_phase === 'idle' && s.is_score_a === 0 && s.is_score_b === 0 && s.is_problem_index === 0 && !s.is_intro_done) return ROUND_INFO.innovation_sprint
     return null
   })()
 

@@ -2812,28 +2812,50 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* idle → mark ready after moderator finishes reading */}
-              {s.is_phase === 'idle' && (
-                <>
-                  {s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0 && (
-                    <AdminRoundIntro info={ROUND_INFO.innovation_sprint} />
-                  )}
-                  <div className="rounded-xl border border-[#f5a623]/30 bg-[#f5a623]/5 p-3 text-center space-y-1">
-                    <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-widest">Step 1</p>
-                    <p className="text-white text-xs">Wait for the moderator to finish reading the problem, then click below.</p>
-                  </div>
-                  <button onClick={markISReady}
-                    className="w-full flex items-center justify-center gap-2 py-5 bg-white/10 hover:bg-white/20 border border-[#f5a623]/40 text-[#f5a623] font-black rounded-2xl text-base transition-colors">
-                    ✓ Moderator Done — Mark Ready
-                  </button>
-                </>
-              )}
+              {/* idle — two-step intro on Problem 1 (instructions → problem
+                  statement), single step on Problem 2+ (problem statement only). */}
+              {s.is_phase === 'idle' && (() => {
+                const firstProblem = s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0
+                const showingInstructions = firstProblem && !s.is_intro_done
+                return (
+                  <>
+                    {firstProblem && !s.is_intro_done && (
+                      <AdminRoundIntro info={ROUND_INFO.innovation_sprint} />
+                    )}
+                    {showingInstructions ? (
+                      <>
+                        <div className="rounded-xl border border-[#f5a623]/30 bg-[#f5a623]/5 p-3 text-center space-y-1">
+                          <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-widest">Step 1</p>
+                          <p className="text-white text-xs">Read the rules to the room. When you&apos;re done, reveal the problem so the moderator can read it.</p>
+                        </div>
+                        <button onClick={() => applyState({ ...s, is_intro_done: true })}
+                          className="w-full flex items-center justify-center gap-2 py-5 bg-white/10 hover:bg-white/20 border border-[#f5a623]/40 text-[#f5a623] font-black rounded-2xl text-base transition-colors">
+                          <ArrowRight size={20} /> Instructions Read — Reveal Problem
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="rounded-xl border border-[#f5a623]/30 bg-[#f5a623]/5 p-3 text-center space-y-1">
+                          <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-widest">{firstProblem ? 'Step 2' : 'Step 1'}</p>
+                          <p className="text-white text-xs">Wait for the moderator to finish reading the problem, then click below.</p>
+                        </div>
+                        <button onClick={markISReady}
+                          className="w-full flex items-center justify-center gap-2 py-5 bg-white/10 hover:bg-white/20 border border-[#f5a623]/40 text-[#f5a623] font-black rounded-2xl text-base transition-colors">
+                          ✓ Moderator Done — Mark Ready
+                        </button>
+                      </>
+                    )}
+                  </>
+                )
+              })()}
 
               {/* ready → admin explicitly kicks off the 60s timer */}
-              {s.is_phase === 'ready' && (
+              {s.is_phase === 'ready' && (() => {
+                const firstProblem = s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0
+                return (
                 <>
                   <div className="rounded-xl border-2 border-[#f5a623]/60 bg-[#f5a623]/10 p-4 text-center space-y-1 animate-pulse">
-                    <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-widest">Step 2 — Teams Ready</p>
+                    <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-widest">{firstProblem ? 'Step 3' : 'Step 2'} — Teams Ready</p>
                     <p className="text-white text-sm font-bold">READY on the projector. Start the 60-second timer when teams are set.</p>
                   </div>
                   <button onClick={startISTimer}
@@ -2845,7 +2867,8 @@ export default function AdminPage() {
                     ← Not ready yet
                   </button>
                 </>
-              )}
+                )
+              })()}
 
               {/* working → timer running */}
               {s.is_phase === 'working' && (

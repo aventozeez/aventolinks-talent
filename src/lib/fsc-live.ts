@@ -107,6 +107,10 @@ export type FSCState = {
   // side-by-side. Index N holds the score awarded on problem N (0-indexed).
   is_problem_scores_a: number[]
   is_problem_scores_b: number[]
+  // Two-step intro on Problem 1: false while the projector still shows the
+  // round instructions; flipped true when admin clicks 'Reveal Problem' so
+  // the projector swaps to the problem statement. Ignored on Problem 2+.
+  is_intro_done: boolean
 
   // ── Mystery Chain (3-Team Final) ──
   mc_phase: MCPhase
@@ -150,7 +154,7 @@ export const makeDefaultState = (a = 'Team A', b = 'Team B', c?: string): FSCSta
   is_phase: 'idle', is_problem_index: 0, is_problems: [],
   is_timer_start: null, is_team_a_answer: null, is_team_b_answer: null,
   is_step_results_a: null, is_step_results_b: null,
-  is_problem_scores_a: [], is_problem_scores_b: [],
+  is_problem_scores_a: [], is_problem_scores_b: [], is_intro_done: false,
   mc_phase: 'idle', mc_scenario_title: '', mc_opening_story: '',
   mc_puzzles_a: [], mc_puzzles_b: [], mc_puzzles_c: [],
   mc_q_index: 0, mc_timer_start: null,

@@ -528,10 +528,10 @@ export default function TeamAPage() {
             </div>
 
             {s?.is_phase === 'idle' && (
-              (s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0) ? (
+              (s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0 && !s.is_intro_done) ? (
                 <RoundInstructionsInline
                   info={ROUND_INFO.innovation_sprint}
-                  footerHint="Waiting for the moderator to read the first problem…"
+                  footerHint="Waiting for the moderator to reveal the first problem…"
                 />
               ) : (
                 <div className="text-center py-8 space-y-2">
@@ -614,6 +614,35 @@ export default function TeamAPage() {
                   ? <p className={`text-xs ${COLOR.text}`}>✅ Your answer was submitted</p>
                   : <p className="text-xs text-red-400">Submitting your arrangement…</p>
                 }
+              </div>
+            )}
+
+            {/* Correct-solution reveal — mirrors the audience/projector.
+                Steps come across from the admin only in this phase (see
+                broadcastableState in fsc-live.ts). */}
+            {s?.is_phase === 'solution' && s.is_problems?.[s.is_problem_index] && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="h-px flex-1 max-w-[60px] bg-gradient-to-r from-transparent to-green-400/60" />
+                  <p className="inline-flex items-center gap-2 rounded-full border border-green-400/40 bg-green-500/10 px-3 py-1 text-[10px] font-black text-green-300 uppercase tracking-[0.35em]">
+                    <span className="text-sm leading-none">✓</span> Correct Solution
+                  </p>
+                  <span className="h-px flex-1 max-w-[60px] bg-gradient-to-l from-transparent to-green-400/60" />
+                </div>
+                <ol className="space-y-2">
+                  {s.is_problems[s.is_problem_index].steps.map((step, i) => (
+                    <li key={i}
+                      className="relative flex items-center gap-3 rounded-2xl border border-green-400/50 bg-gradient-to-r from-green-500/25 via-green-500/10 to-green-500/5 px-3 py-3 overflow-hidden">
+                      <span className="pointer-events-none absolute inset-0 bg-green-400/[0.06]" />
+                      <span className="relative shrink-0 w-8 h-8 rounded-full bg-green-500 text-[#052e13] text-sm font-black flex items-center justify-center shadow-lg ring-2 ring-green-300/50">
+                        {i + 1}
+                      </span>
+                      <p className="relative flex-1 text-sm font-semibold text-white leading-snug">{step}</p>
+                      <span className="relative shrink-0 text-green-300 text-xl font-black leading-none">✓</span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="text-center text-slate-500 text-xs italic">Head-to-head coming up →</p>
               </div>
             )}
 
