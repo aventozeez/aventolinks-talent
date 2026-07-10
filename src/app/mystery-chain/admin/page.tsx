@@ -363,7 +363,7 @@ export default function MCAdminPage() {
   // Grace window for MC: when the 60s timer hits 0 admin still gets 10 extra
   // seconds to award a last-second correct answer before the phase flips to
   // the team's summary screen.
-  const MC_GRACE_MS = 10_000
+  const MC_GRACE_MS = 5_000
   const [mcGraceStart, setMcGraceStart] = useState<number | null>(null)
   const mcGraceStartRef = useRef<number | null>(null)
   mcGraceStartRef.current = mcGraceStart

@@ -204,7 +204,7 @@ export default function TieBreakerAdmin() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Grace window — 10s of extra time after the 30s expires so admin can still
   // grade a last-second answer that came in right at the buzzer.
-  const TB_GRACE_MS = 10_000
+  const TB_GRACE_MS = 5_000
   const [tbGraceStart, setTbGraceStart] = useState<number | null>(null)
   const tbGraceStartRef = useRef<number | null>(null)
   tbGraceStartRef.current = tbGraceStart

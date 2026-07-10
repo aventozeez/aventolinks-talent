@@ -120,7 +120,7 @@ export default function AVAdmin() {
 
   // Grace window — 10s of extra time after the 60s expires so admin can still
   // grade a last-second answer that came in right at the buzzer.
-  const AV_GRACE_MS = 10_000
+  const AV_GRACE_MS = 5_000
   const [avGraceStart, setAvGraceStart] = useState<number | null>(null)
   const avGraceStartRef = useRef<number | null>(null)
   avGraceStartRef.current = avGraceStart
