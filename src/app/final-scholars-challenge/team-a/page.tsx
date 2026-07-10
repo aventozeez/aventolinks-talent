@@ -7,6 +7,8 @@ import {
   getMatchState, subscribeToMatch,
   RF_Q_COUNT, RF_TIME_MS, BZ_TIME_MS, IS_TIME_MS,
 } from '@/lib/fsc-live'
+import RoundInstructionsInline from '@/components/round-instructions-inline'
+import { ROUND_INFO } from '@/lib/round-info'
 
 const TEAM: 'a' | 'b' = 'a'
 const COLOR = { bg: 'bg-green-950/60', border: 'border-green-500/30', text: 'text-green-400', buzz: 'bg-green-500 hover:bg-green-400 border-green-400 shadow-green-500/40', buzzed: 'bg-green-600/40 border-green-400/60 text-green-300' }
@@ -291,11 +293,37 @@ export default function TeamAPage() {
               <span className="text-[#f5a623] text-sm font-black">⚡ Rapid Fire Round</span>
             </div>
 
+            {/* idle (first-time before match starts) → show the full round
+                instructions on the team page as well as the projector. */}
             {(s?.rf_phase === 'idle') && (
-              <div className="text-center py-8 space-y-2">
-                <p className="text-4xl">⚡</p>
-                <p className="text-white font-bold">Rapid Fire is about to start!</p>
-                <p className="text-slate-400 text-sm">10 questions in 60 seconds</p>
+              <RoundInstructionsInline
+                info={ROUND_INFO.rapid_fire}
+                footerHint="Waiting for the moderator to announce the first team…"
+              />
+            )}
+
+            {/* announce_a → team-a is being announced as up first */}
+            {s?.rf_phase === 'announce_a' && (
+              <div className={`rounded-2xl border-4 ${COLOR.border} bg-green-500/15 p-6 text-center animate-pulse shadow-[0_16px_40px_-12px_rgba(34,197,94,0.5)]`}>
+                <p className={`text-[10px] font-black uppercase tracking-[0.35em] ${COLOR.text}`}>Up First</p>
+                <p className={`text-3xl md:text-4xl font-black text-white mt-3 leading-none`}>You&apos;re Up!</p>
+                <p className="text-slate-300 text-sm mt-4">Get ready — your 60-second Rapid Fire is about to start.</p>
+              </div>
+            )}
+
+            {/* announce_b → team-a is done and team-b is being announced */}
+            {s?.rf_phase === 'announce_b' && (
+              <div className="space-y-3">
+                <div className={`bg-[#0a1628] border ${COLOR.border} rounded-2xl p-5 text-center`}>
+                  <p className={`text-xs font-bold ${COLOR.text}`}>{myName} — Done!</p>
+                  <p className={`text-4xl font-black ${COLOR.text} mt-1`}>{s.rf_score_a} pts</p>
+                  <p className="text-xs text-slate-500 mt-1">{s.rf_correct_a} correct out of {RF_Q_COUNT}</p>
+                </div>
+                <div className="bg-purple-500/15 border-2 border-purple-500/50 rounded-2xl p-5 text-center animate-pulse">
+                  <p className="text-purple-300 text-[10px] font-black uppercase tracking-[0.35em]">Up Next</p>
+                  <p className="text-2xl font-black text-white mt-2">{theirName}</p>
+                  <p className="text-slate-300 text-xs mt-3">Their 60-second Rapid Fire is about to start.</p>
+                </div>
               </div>
             )}
 
@@ -347,17 +375,11 @@ export default function TeamAPage() {
               </>
             )}
 
-            {(s?.rf_phase === 'score_a' || s?.rf_phase === 'announce_b') && (
-              <div className="space-y-3">
-                <div className={`bg-[#0a1628] border ${COLOR.border} rounded-2xl p-5 text-center`}>
-                  <p className={`text-xs font-bold ${COLOR.text}`}>{myName} — Done!</p>
-                  <p className={`text-4xl font-black ${COLOR.text} mt-1`}>{s.rf_score_a} pts</p>
-                  <p className="text-xs text-slate-500 mt-1">{s.rf_correct_a} correct out of {RF_Q_COUNT}</p>
-                </div>
-                <div className="bg-[#0a1628] border border-purple-500/20 rounded-2xl p-4 text-center">
-                  <p className="text-purple-400 font-semibold text-sm">{theirName}&apos;s turn is next</p>
-                  <p className="text-slate-500 text-xs mt-1">10 questions in 60 seconds</p>
-                </div>
+            {s?.rf_phase === 'score_a' && (
+              <div className={`bg-[#0a1628] border ${COLOR.border} rounded-2xl p-5 text-center`}>
+                <p className={`text-xs font-bold ${COLOR.text}`}>{myName} — Done!</p>
+                <p className={`text-4xl font-black ${COLOR.text} mt-1`}>{s.rf_score_a} pts</p>
+                <p className="text-xs text-slate-500 mt-1">{s.rf_correct_a} correct out of {RF_Q_COUNT}</p>
               </div>
             )}
 
@@ -397,10 +419,17 @@ export default function TeamAPage() {
             </div>
 
             {s?.bz_phase === 'idle' && (
-              <div className="text-center py-6">
-                <p className="text-4xl animate-bounce">🔔</p>
-                <p className="text-white font-bold mt-2">Next question coming…</p>
-              </div>
+              (s.bz_q_index === 0 && s.bz_score_a === 0 && s.bz_score_b === 0) ? (
+                <RoundInstructionsInline
+                  info={ROUND_INFO.buzzer}
+                  footerHint="Waiting for the first question…"
+                />
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-4xl animate-bounce">🔔</p>
+                  <p className="text-white font-bold mt-2">Next question coming…</p>
+                </div>
+              )
             )}
 
             {s?.bz_phase === 'showing' && (
@@ -499,17 +528,24 @@ export default function TeamAPage() {
             </div>
 
             {s?.is_phase === 'idle' && (
-              <div className="text-center py-8 space-y-2">
-                <p className="text-4xl">💡</p>
-                <p className="text-white font-bold">Problem coming up…</p>
-                <p className="text-slate-400 text-sm">Arrange the solution steps in the correct order</p>
-                {s.is_problems?.[s.is_problem_index]?.statement && (
-                  <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-2xl p-5 text-left mt-4">
-                    <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-wider mb-2">Problem Statement</p>
-                    <p className="text-base text-white font-medium leading-relaxed">{s.is_problems[s.is_problem_index].statement}</p>
-                  </div>
-                )}
-              </div>
+              (s.is_problem_index === 0 && s.is_score_a === 0 && s.is_score_b === 0) ? (
+                <RoundInstructionsInline
+                  info={ROUND_INFO.innovation_sprint}
+                  footerHint="Waiting for the moderator to read the first problem…"
+                />
+              ) : (
+                <div className="text-center py-8 space-y-2">
+                  <p className="text-4xl">💡</p>
+                  <p className="text-white font-bold">Problem coming up…</p>
+                  <p className="text-slate-400 text-sm">Arrange the solution steps in the correct order</p>
+                  {s.is_problems?.[s.is_problem_index]?.statement && (
+                    <div className="bg-[#0a1628] border border-[#f5a623]/30 rounded-2xl p-5 text-left mt-4">
+                      <p className="text-[10px] text-[#f5a623] font-bold uppercase tracking-wider mb-2">Problem Statement</p>
+                      <p className="text-base text-white font-medium leading-relaxed">{s.is_problems[s.is_problem_index].statement}</p>
+                    </div>
+                  )}
+                </div>
+              )
             )}
 
             {s?.is_phase === 'ready' && (
