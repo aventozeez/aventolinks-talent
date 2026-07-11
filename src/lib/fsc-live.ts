@@ -457,7 +457,7 @@ export async function saveSavedMatchesList(matches: SavedMatch[]): Promise<void>
 export const stateSig = (s: FSCState) =>
   [s.round, s.rf_phase, s.rf_q_index, s.rf_correct_a, s.rf_correct_b,
    s.bz_phase, s.bz_q_index, s.bz_last_result,
-   s.is_phase, s.is_problem_index,
+   s.is_phase, s.is_problem_index, s.is_intro_done,
    s.rf_score_a, s.rf_score_b, s.bz_score_a, s.bz_score_b, s.is_score_a, s.is_score_b,
    s.is_team_a_answer?.length ?? -1, s.is_team_b_answer?.length ?? -1,
    s.mc_phase, s.mc_q_index, s.mc_revealed, s.mc_score_a, s.mc_score_b, s.mc_score_c,

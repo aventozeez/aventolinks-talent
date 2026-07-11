@@ -345,6 +345,7 @@ export default function TieBreakerAdmin() {
     if (!chosenPoolA || !chosenPoolB) return
     if (s.chosenPoolA === s.chosenPoolB) return
     if (chosenPoolA.questions.length === 0 || chosenPoolB.questions.length === 0) return
+    if (usedPoolIds.has(chosenPoolA.id) || usedPoolIds.has(chosenPoolB.id)) return
     update({ phase: 'intro' })
   }
   function goToAnnounceA() { update({ phase: 'announce_a' }) }
@@ -739,9 +740,14 @@ export default function TieBreakerAdmin() {
                   )
                 })}
               </div>
+              {(chosenPoolA && usedPoolIds.has(chosenPoolA.id)) || (chosenPoolB && usedPoolIds.has(chosenPoolB.id)) ? (
+                <p className="text-red-300 text-xs bg-red-900/20 border border-red-500/30 rounded-lg px-3 py-2 text-center">
+                  ⚠️ One or both chosen pools have already been used in a past tie-breaker. Pick a fresh pool for each team.
+                </p>
+              ) : null}
               <button
                 onClick={goToInstructions}
-                disabled={!s.teamA.trim() || !s.teamB.trim() || !chosenPoolA || !chosenPoolB || s.chosenPoolA === s.chosenPoolB || chosenPoolA.questions.length === 0 || chosenPoolB.questions.length === 0}
+                disabled={!s.teamA.trim() || !s.teamB.trim() || !chosenPoolA || !chosenPoolB || s.chosenPoolA === s.chosenPoolB || chosenPoolA.questions.length === 0 || chosenPoolB.questions.length === 0 || usedPoolIds.has(chosenPoolA.id) || usedPoolIds.has(chosenPoolB.id)}
                 className="w-full bg-pink-600 hover:bg-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-3 rounded-xl text-sm">
                 📋 Show Instructions on Screen
               </button>
