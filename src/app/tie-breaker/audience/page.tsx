@@ -18,23 +18,33 @@ type TBPhase =
   | 'announce_b'
   | 'b_playing'
   | 'score_b'
+  | 'announce_c'
+  | 'c_playing'
+  | 'score_c'
   | 'compare'
 
 type TBState = {
   phase: TBPhase
+  threeTeam?: boolean
   teamA: string
   teamB: string
+  teamC?: string
   priorA: number
   priorB: number
+  priorC?: number
   pools: TBPool[]
   chosenPoolA: string | null
   chosenPoolB: string | null
+  chosenPoolC?: string | null
   queueA: TBQuestion[]
   queueB: TBQuestion[]
+  queueC?: TBQuestion[]
   scoreA: number
   scoreB: number
+  scoreC?: number
   correctA: number
   correctB: number
+  correctC?: number
   timerStart: number | null
   currentQ: TBQuestion | null
   showAnswer: boolean
@@ -151,6 +161,43 @@ export default function TieBreakerAudience() {
         <p className="text-slate-400 text-base md:text-lg">
           {s.correctB} correct in 30 seconds{poolTitle ? ` · ${poolTitle}` : ''}
         </p>
+        <p className="text-yellow-300 font-bold text-xl md:text-2xl animate-pulse mt-4">{s.threeTeam ? `⏳ ${s.teamC ?? 'Team C'} is up next…` : '📊 Comparing results…'}</p>
+      </div>
+    )
+  }
+
+  // ── Announce Team C (3-team mode) ─────────────────────────────────────
+  if (s.phase === 'announce_c') {
+    const poolTitle = s.pools?.find(p => p.id === s.chosenPoolC)?.title
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-950 via-[#0a1628] to-purple-950 flex flex-col items-center justify-center gap-8 text-white px-6 text-center">
+        <p className="text-purple-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">Up Next</p>
+        <div className="text-9xl">🎤</div>
+        <h1 className="text-6xl md:text-8xl font-black text-purple-300 leading-tight">{s.teamC}</h1>
+        <p className="text-white text-2xl md:text-3xl font-bold">is up last</p>
+        {poolTitle && (
+          <p className="text-slate-300 text-lg md:text-xl">
+            Playing <span className="font-black text-white">{poolTitle}</span> · 30 seconds
+          </p>
+        )}
+        <p className="text-slate-500 text-sm italic animate-pulse">Waiting for the host to start the timer…</p>
+      </div>
+    )
+  }
+
+  // ── Score reveal — Team C (3-team mode) ────────────────────────────────
+  if (s.phase === 'score_c') {
+    const poolTitle = s.pools?.find(p => p.id === s.chosenPoolC)?.title
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-950 via-[#0a1628] to-purple-950 flex flex-col items-center justify-center gap-6 text-white px-6 text-center">
+        <p className="text-purple-300 text-sm md:text-base font-black uppercase tracking-[0.4em]">{s.teamC} — Score</p>
+        <div className="bg-purple-500/15 border-4 border-purple-500/60 rounded-3xl px-16 py-10 shadow-[0_20px_60px_-10px_rgba(168,85,247,0.4)]">
+          <p className="text-white text-[10rem] md:text-[12rem] font-black leading-none">{s.scoreC ?? 0}</p>
+          <p className="text-purple-300 text-lg md:text-xl mt-2 font-bold">points</p>
+        </div>
+        <p className="text-slate-400 text-base md:text-lg">
+          {s.correctC ?? 0} correct in 30 seconds{poolTitle ? ` · ${poolTitle}` : ''}
+        </p>
         <p className="text-yellow-300 font-bold text-xl md:text-2xl animate-pulse mt-4">📊 Comparing results…</p>
       </div>
     )
@@ -158,79 +205,90 @@ export default function TieBreakerAudience() {
 
   // ── Compare — final head-to-head with advance / out ────────────────────
   if (s.phase === 'compare') {
-    const aWins = s.scoreA > s.scoreB
-    const bWins = s.scoreB > s.scoreA
-    const tie = s.scoreA === s.scoreB
+    const rows = [
+      { key: 'A' as const, name: s.teamA, score: s.scoreA, colour: 'green' as const },
+      { key: 'B' as const, name: s.teamB, score: s.scoreB, colour: 'blue' as const },
+      ...(s.threeTeam ? [{ key: 'C' as const, name: s.teamC ?? 'Team C', score: s.scoreC ?? 0, colour: 'purple' as const }] : []),
+    ]
+    const top = Math.max(...rows.map(r => r.score))
+    const bottom = Math.min(...rows.map(r => r.score))
+    const stillTied = top === bottom
+    const winners = rows.filter(r => r.score === top).map(r => r.name).join(', ')
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#1a0f00] via-[#2a1500] to-[#1a0f00] text-white flex flex-col items-center justify-center gap-8 px-6 overflow-hidden relative py-12">
         <p className="text-yellow-400 text-sm md:text-base font-black uppercase tracking-[0.4em] z-10">Tie-Breaker Result</p>
-        <div className="text-8xl md:text-9xl z-10">{tie ? '🤝' : '🏆'}</div>
-        <div className="grid grid-cols-2 gap-6 w-full max-w-3xl z-10">
-          <div className={`rounded-3xl p-8 text-center border-4 ${
-            aWins ? 'bg-green-500/25 border-green-400 shadow-[0_20px_60px_-15px_rgba(34,197,94,0.5)]'
-            : bWins ? 'bg-red-950/40 border-red-500/50 opacity-70'
-            : 'bg-white/5 border-white/10'
-          }`}>
-            {aWins && <div className="text-4xl mb-2">🏆</div>}
-            {bWins && <p className="text-red-400 text-xs md:text-sm font-black uppercase tracking-widest mb-2">Eliminated</p>}
-            <p className="text-green-300 text-sm md:text-base font-black uppercase tracking-widest">{s.teamA}</p>
-            <p className="text-white text-7xl md:text-8xl font-black mt-2">{s.scoreA}</p>
-            <p className={`text-sm md:text-base mt-3 font-black uppercase tracking-widest ${aWins ? 'text-yellow-300' : bWins ? 'text-red-300' : 'text-slate-500'}`}>
-              {aWins ? 'Advances' : bWins ? 'Out' : 'Tied'}
-            </p>
-          </div>
-          <div className={`rounded-3xl p-8 text-center border-4 ${
-            bWins ? 'bg-blue-500/25 border-blue-400 shadow-[0_20px_60px_-15px_rgba(59,130,246,0.5)]'
-            : aWins ? 'bg-red-950/40 border-red-500/50 opacity-70'
-            : 'bg-white/5 border-white/10'
-          }`}>
-            {bWins && <div className="text-4xl mb-2">🏆</div>}
-            {aWins && <p className="text-red-400 text-xs md:text-sm font-black uppercase tracking-widest mb-2">Eliminated</p>}
-            <p className="text-blue-300 text-sm md:text-base font-black uppercase tracking-widest">{s.teamB}</p>
-            <p className="text-white text-7xl md:text-8xl font-black mt-2">{s.scoreB}</p>
-            <p className={`text-sm md:text-base mt-3 font-black uppercase tracking-widest ${bWins ? 'text-yellow-300' : aWins ? 'text-red-300' : 'text-slate-500'}`}>
-              {bWins ? 'Advances' : aWins ? 'Out' : 'Tied'}
-            </p>
-          </div>
+        <div className="text-8xl md:text-9xl z-10">{stillTied ? '🤝' : '🏆'}</div>
+        <div className={`grid ${s.threeTeam ? 'grid-cols-3' : 'grid-cols-2'} gap-4 md:gap-6 w-full max-w-5xl z-10`}>
+          {rows.map(r => {
+            const wins = !stillTied && r.score === top
+            const out = !stillTied && r.score === bottom && bottom < top
+            const border = wins
+              ? r.colour === 'green' ? 'bg-green-500/25 border-green-400 shadow-[0_20px_60px_-15px_rgba(34,197,94,0.5)]'
+                : r.colour === 'blue' ? 'bg-blue-500/25 border-blue-400 shadow-[0_20px_60px_-15px_rgba(59,130,246,0.5)]'
+                : 'bg-purple-500/25 border-purple-400 shadow-[0_20px_60px_-15px_rgba(168,85,247,0.5)]'
+              : out ? 'bg-red-950/40 border-red-500/50 opacity-70'
+              : 'bg-white/5 border-white/10'
+            const text = r.colour === 'green' ? 'text-green-300' : r.colour === 'blue' ? 'text-blue-300' : 'text-purple-300'
+            return (
+              <div key={r.key} className={`rounded-3xl p-6 md:p-8 text-center border-4 ${border}`}>
+                {wins && <div className="text-4xl mb-2">🏆</div>}
+                {out && <p className="text-red-400 text-xs md:text-sm font-black uppercase tracking-widest mb-2">Eliminated</p>}
+                <p className={`${text} text-sm md:text-base font-black uppercase tracking-widest`}>{r.name}</p>
+                <p className="text-white text-6xl md:text-7xl font-black mt-2">{r.score}</p>
+                <p className={`text-sm mt-3 font-black uppercase tracking-widest ${wins ? 'text-yellow-300' : out ? 'text-red-300' : 'text-slate-500'}`}>
+                  {wins ? (s.threeTeam ? 'Safe' : 'Advances') : out ? 'Out' : 'Tied'}
+                </p>
+              </div>
+            )
+          })}
         </div>
-        {tie
+        {stillTied
           ? <p className="text-yellow-400 font-black text-2xl md:text-3xl z-10">It&apos;s still a tie!</p>
-          : <p className="text-yellow-300 font-black text-2xl md:text-3xl z-10">{aWins ? s.teamA : s.teamB} advances</p>}
+          : <p className="text-yellow-300 font-black text-2xl md:text-3xl z-10 text-center">{winners} {winners.includes(',') ? 'advance' : 'advances'}</p>}
       </div>
     )
   }
 
-  // ── Live rapid fire (a_playing or b_playing) ───────────────────────────
+  // ── Live rapid fire (a/b/c playing) ────────────────────────────────────
   const isPlayingA = s.phase === 'a_playing'
-  const teamColour = isPlayingA ? '#22c55e' : '#3b82f6'
-  const playingName = isPlayingA ? s.teamA : s.teamB
-  const activeQueue = isPlayingA ? s.queueA : s.queueB
+  const isPlayingB = s.phase === 'b_playing'
+  const isPlayingC = s.phase === 'c_playing'
+  const teamColour = isPlayingA ? '#22c55e' : isPlayingB ? '#3b82f6' : '#a855f7'
+  const playingName = isPlayingA ? s.teamA : isPlayingB ? s.teamB : (s.teamC ?? 'Team C')
+  const activeQueue = isPlayingA ? s.queueA : isPlayingB ? s.queueB : (s.queueC ?? [])
   const currentQ = activeQueue[0] ?? s.currentQ
-  const chosenPoolId = isPlayingA ? s.chosenPoolA : s.chosenPoolB
+  const chosenPoolId = isPlayingA ? s.chosenPoolA : isPlayingB ? s.chosenPoolB : (s.chosenPoolC ?? null)
   const chosenPool = s.pools?.find(p => p.id === chosenPoolId) ?? null
   const timeLeft = s.timerStart ? Math.max(0, ROUND_MS - (now - s.timerStart)) : ROUND_MS
   const timePct = timeLeft / ROUND_MS
   const timeColour = timePct > 0.4 ? '#22c55e' : timePct > 0.2 ? '#f59e0b' : '#ef4444'
-  const correctSoFar = isPlayingA ? s.correctA : s.correctB
+  const correctSoFar = isPlayingA ? s.correctA : isPlayingB ? s.correctB : (s.correctC ?? 0)
 
   return (
     <div className="min-h-screen bg-[#06080f] text-white flex flex-col overflow-hidden">
       {/* Score bar */}
-      <div className="bg-[#0d1117] px-6 py-3 flex items-center justify-between border-b border-gray-800">
-        <div className="flex items-center gap-2">
+      <div className="bg-[#0d1117] px-6 py-3 flex items-center justify-between border-b border-gray-800 gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
           <span className="font-bold text-sm text-green-400">{s.teamA}</span>
           <span className="text-xl font-black text-white ml-1">{s.scoreA}</span>
         </div>
-        <div className="text-center">
+        <div className="text-center flex-1">
           <p className="text-xs text-gray-500 font-medium uppercase tracking-widest">Tie-Breaker · Rapid Fire</p>
           <p className="text-xs text-gray-400">{correctSoFar} correct so far</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <span className="text-xl font-black text-white mr-1">{s.scoreB}</span>
           <span className="font-bold text-sm text-blue-400">{s.teamB}</span>
           <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />
         </div>
+        {s.threeTeam && (
+          <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-white/10">
+            <span className="text-xl font-black text-white mr-1">{s.scoreC ?? 0}</span>
+            <span className="font-bold text-sm text-purple-400">{s.teamC}</span>
+            <div className="w-2.5 h-2.5 rounded-full bg-purple-400" />
+          </div>
+        )}
       </div>
 
       {/* Playing team banner */}

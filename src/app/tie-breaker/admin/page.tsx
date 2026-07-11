@@ -14,15 +14,20 @@ type SavedTBMatch = {
   id: string
   teamA: string
   teamB: string
+  teamC?: string
   poolAId: string
   poolBId: string
+  poolCId?: string
   poolATitle: string
   poolBTitle: string
+  poolCTitle?: string
   scoreA: number
   scoreB: number
+  scoreC?: number
   correctA: number
   correctB: number
-  winner: string   // "Tie" if scoreA === scoreB
+  correctC?: number
+  winner: string   // team name, "Tie", or comma-separated names for multi-way tie
   played_at: string
 }
 
@@ -57,23 +62,35 @@ type TBPhase =
   | 'announce_b'
   | 'b_playing'
   | 'score_b'
+  | 'announce_c'
+  | 'c_playing'
+  | 'score_c'
   | 'compare'
 
 type TBState = {
   phase: TBPhase
+  // 3-team mode (used for a 3-way MC tie). Optional to keep older payloads
+  // backward-compatible — everything defaults to the classic A-vs-B flow.
+  threeTeam?: boolean
   teamA: string
   teamB: string
+  teamC?: string
   priorA: number
   priorB: number
+  priorC?: number
   pools: TBPool[]                // multiple pools; the host picks a DIFFERENT one per team
   chosenPoolA: string | null     // pool team A played (locked when their round starts)
   chosenPoolB: string | null     // pool team B played (locked when their round starts)
+  chosenPoolC?: string | null
   queueA: TBQuestion[]
   queueB: TBQuestion[]
+  queueC?: TBQuestion[]
   scoreA: number
   scoreB: number
+  scoreC?: number
   correctA: number
   correctB: number
+  correctC?: number
   timerStart: number | null
   currentQ: TBQuestion | null
   showAnswer: boolean
@@ -173,14 +190,16 @@ const makeEmptyPool = (n: number): TBPool => ({
 
 const DEFAULT_STATE = (): TBState => ({
   phase: 'setup',
-  teamA: '', teamB: '',
-  priorA: 0, priorB: 0,
+  threeTeam: false,
+  teamA: '', teamB: '', teamC: '',
+  priorA: 0, priorB: 0, priorC: 0,
   pools: DEFAULT_POOLS(),
   chosenPoolA: null,
   chosenPoolB: null,
-  queueA: [], queueB: [],
-  scoreA: 0, scoreB: 0,
-  correctA: 0, correctB: 0,
+  chosenPoolC: null,
+  queueA: [], queueB: [], queueC: [],
+  scoreA: 0, scoreB: 0, scoreC: 0,
+  correctA: 0, correctB: 0, correctC: 0,
   timerStart: null,
   currentQ: null,
   showAnswer: false,
@@ -196,7 +215,7 @@ export default function TieBreakerAdmin() {
   // Pool IDs already used in any saved (undeleted) match — hidden from the
   // setup dropdowns so the same pool can't be replayed.
   const usedPoolIds = new Set<string>(
-    savedTBMatches.flatMap(m => [m.poolAId, m.poolBId])
+    savedTBMatches.flatMap(m => [m.poolAId, m.poolBId, m.poolCId].filter(Boolean) as string[])
   )
   const [editingQ, setEditingQ] = useState<string | null>(null)
   const [newQ, setNewQ] = useState({ text: '', answer: '' })
@@ -291,7 +310,7 @@ export default function TieBreakerAdmin() {
   // On expiry, auto-transition to the break screen (team A) or done (team B).
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current)
-    if (!s.timerStart || (s.phase !== 'a_playing' && s.phase !== 'b_playing')) {
+    if (!s.timerStart || (s.phase !== 'a_playing' && s.phase !== 'b_playing' && s.phase !== 'c_playing')) {
       setTimeLeft(ROUND_MS)
       return
     }
@@ -312,11 +331,11 @@ export default function TieBreakerAdmin() {
         setTbGraceMs(graceLeft)
         if (graceLeft === 0) {
           clearInterval(timerRef.current!)
-          if (s.phase === 'a_playing') {
-            update({ phase: 'score_a', timerStart: null, currentQ: null, showAnswer: false })
-          } else {
-            update({ phase: 'score_b', timerStart: null, currentQ: null, showAnswer: false })
-          }
+          const nextPhase: TBPhase =
+            s.phase === 'a_playing' ? 'score_a'
+            : s.phase === 'b_playing' ? 'score_b'
+            : 'score_c'
+          update({ phase: nextPhase, timerStart: null, currentQ: null, showAnswer: false })
           setTbGraceStart(null); tbGraceStartRef.current = null; setTbGraceMs(0)
         }
       }
@@ -330,34 +349,59 @@ export default function TieBreakerAdmin() {
   // ── Actions ──────────────────────────────────────────────────────────────
   const isPlayingA = s.phase === 'a_playing'
   const isPlayingB = s.phase === 'b_playing'
-  const activeQueue: TBQuestion[] = isPlayingA ? s.queueA : isPlayingB ? s.queueB : []
+  const isPlayingC = s.phase === 'c_playing'
+  const activeQueue: TBQuestion[] = isPlayingA ? s.queueA : isPlayingB ? s.queueB : isPlayingC ? (s.queueC ?? []) : []
   // Guard everywhere against missing pools — a DB row from before the refactor
   // won't have this field, so we normalise defensively.
   const safePools = s.pools ?? []
   const chosenPoolA = safePools.find(p => p.id === s.chosenPoolA) ?? null
   const chosenPoolB = safePools.find(p => p.id === s.chosenPoolB) ?? null
+  const chosenPoolC = safePools.find(p => p.id === s.chosenPoolC) ?? null
   // Which pool is the currently-playing team on? Used for headers + break/done screens.
-  const activePool = isPlayingA ? chosenPoolA : isPlayingB ? chosenPoolB : null
+  const activePool = isPlayingA ? chosenPoolA : isPlayingB ? chosenPoolB : isPlayingC ? chosenPoolC : null
 
   // Setup → Intro: pools + names locked in, show instructions on projector.
   function goToInstructions() {
     if (!s.teamA.trim() || !s.teamB.trim()) return
     if (!chosenPoolA || !chosenPoolB) return
-    if (s.chosenPoolA === s.chosenPoolB) return
     if (chosenPoolA.questions.length === 0 || chosenPoolB.questions.length === 0) return
     if (usedPoolIds.has(chosenPoolA.id) || usedPoolIds.has(chosenPoolB.id)) return
+    // Distinct pools per team
+    if (s.chosenPoolA === s.chosenPoolB) return
+    if (s.threeTeam) {
+      if (!(s.teamC ?? '').trim()) return
+      if (!chosenPoolC || chosenPoolC.questions.length === 0) return
+      if (usedPoolIds.has(chosenPoolC.id)) return
+      if (s.chosenPoolC === s.chosenPoolA || s.chosenPoolC === s.chosenPoolB) return
+    }
     update({ phase: 'intro' })
   }
   function goToAnnounceA() { update({ phase: 'announce_a' }) }
   function goToAnnounceB() { update({ phase: 'announce_b' }) }
+  function goToAnnounceC() { update({ phase: 'announce_c' }) }
   function goToCompare() {
     update({ phase: 'compare' })
     // Persist the match on transition to compare — this is where scores are
-    // final and both pools have definitely been played through.
+    // final and every pool has definitely been played through.
     const poolA = safePools.find(p => p.id === s.chosenPoolA)
     const poolB = safePools.find(p => p.id === s.chosenPoolB)
     if (!poolA || !poolB) return
-    const winner = s.scoreA > s.scoreB ? s.teamA : s.scoreB > s.scoreA ? s.teamB : 'Tie'
+    // Winner logic: 2-team mode = simple compare. 3-team mode = highest score
+    // wins, ties named together.
+    let winner: string
+    if (s.threeTeam) {
+      const scoreC = s.scoreC ?? 0
+      const rows = [
+        { name: s.teamA, score: s.scoreA },
+        { name: s.teamB, score: s.scoreB },
+        { name: s.teamC ?? 'Team C', score: scoreC },
+      ]
+      const top = Math.max(...rows.map(r => r.score))
+      const leaders = rows.filter(r => r.score === top)
+      winner = leaders.length === 1 ? leaders[0].name : leaders.map(l => l.name).join(', ') + ' (tie)'
+    } else {
+      winner = s.scoreA > s.scoreB ? s.teamA : s.scoreB > s.scoreA ? s.teamB : 'Tie'
+    }
     const record: SavedTBMatch = {
       id: crypto.randomUUID(),
       teamA: s.teamA, teamB: s.teamB,
@@ -367,6 +411,13 @@ export default function TieBreakerAdmin() {
       correctA: s.correctA, correctB: s.correctB,
       winner,
       played_at: new Date().toISOString(),
+      ...(s.threeTeam && chosenPoolC ? {
+        teamC: s.teamC,
+        poolCId: chosenPoolC.id,
+        poolCTitle: chosenPoolC.title,
+        scoreC: s.scoreC ?? 0,
+        correctC: s.correctC ?? 0,
+      } : {}),
     }
     const next = [...savedTBRef.current, record]
     setSavedTBMatches(next)
@@ -401,6 +452,20 @@ export default function TieBreakerAdmin() {
     })
   }
 
+  function startTeamC() {
+    if (!chosenPoolC || chosenPoolC.questions.length === 0) return
+    const queue = chosenPoolC.questions.map(q => ({ ...q }))
+    update({
+      phase: 'c_playing',
+      queueC: queue,
+      scoreC: 0,
+      correctC: 0,
+      timerStart: Date.now(),
+      currentQ: queue[0] ?? null,
+      showAnswer: false,
+    })
+  }
+
   function markCorrect() {
     if (activeQueue.length === 0) return
     const [, ...rest] = activeQueue
@@ -425,6 +490,15 @@ export default function TieBreakerAdmin() {
         showAnswer: false,
         ...(queueEmpty ? { phase: 'score_b' as const, timerStart: null } : {}),
       })
+    } else if (isPlayingC) {
+      update({
+        queueC: rest,
+        scoreC: (s.scoreC ?? 0) + PTS_CORRECT,
+        correctC: (s.correctC ?? 0) + 1,
+        currentQ: rest[0] ?? null,
+        showAnswer: false,
+        ...(queueEmpty ? { phase: 'score_c' as const, timerStart: null } : {}),
+      })
     }
   }
 
@@ -435,6 +509,7 @@ export default function TieBreakerAdmin() {
     const next = [...rest, first]
     if (isPlayingA) update({ queueA: next, currentQ: next[0] ?? null, showAnswer: false })
     else if (isPlayingB) update({ queueB: next, currentQ: next[0] ?? null, showAnswer: false })
+    else if (isPlayingC) update({ queueC: next, currentQ: next[0] ?? null, showAnswer: false })
   }
 
   function endRoundEarly() {
@@ -442,15 +517,16 @@ export default function TieBreakerAdmin() {
     setTbGraceStart(null); tbGraceStartRef.current = null; setTbGraceMs(0)
     if (isPlayingA) update({ phase: 'score_a', timerStart: null, currentQ: null, showAnswer: false })
     else if (isPlayingB) update({ phase: 'score_b', timerStart: null, currentQ: null, showAnswer: false })
+    else if (isPlayingC) update({ phase: 'score_c', timerStart: null, currentQ: null, showAnswer: false })
   }
 
   // Runs another rapid-fire — same teams, questions cycled from the start.
   function playAnotherRound() {
     update({
       phase: 'setup',
-      chosenPoolA: null, chosenPoolB: null,
-      queueA: [], queueB: [],
-      scoreA: 0, scoreB: 0, correctA: 0, correctB: 0,
+      chosenPoolA: null, chosenPoolB: null, chosenPoolC: null,
+      queueA: [], queueB: [], queueC: [],
+      scoreA: 0, scoreB: 0, scoreC: 0, correctA: 0, correctB: 0, correctC: 0,
       timerStart: null, currentQ: null, showAnswer: false,
     })
   }
@@ -527,7 +603,7 @@ export default function TieBreakerAdmin() {
         </div>
 
         {/* Score strip */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid ${s.threeTeam ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
           <div className={`rounded-xl p-3 text-center border ${
             isPlayingA ? 'bg-green-500/20 border-green-500' : 'bg-white/5 border-white/10'
           }`}>
@@ -544,6 +620,16 @@ export default function TieBreakerAdmin() {
             <p className="text-white text-2xl font-black">{s.scoreB}</p>
             {s.priorB > 0 && <p className="text-slate-500 text-[10px]">Prior: {s.priorB}</p>}
           </div>
+          {s.threeTeam && (
+            <div className={`rounded-xl p-3 text-center border ${
+              isPlayingC ? 'bg-purple-500/20 border-purple-500' : 'bg-white/5 border-white/10'
+            }`}>
+              {isPlayingC && <p className="text-purple-300 text-[10px] font-bold uppercase tracking-widest">Playing</p>}
+              <p className="text-slate-300 text-xs font-semibold truncate">{s.teamC || 'Team C'}</p>
+              <p className="text-white text-2xl font-black">{s.scoreC ?? 0}</p>
+              {(s.priorC ?? 0) > 0 && <p className="text-slate-500 text-[10px]">Prior: {s.priorC}</p>}
+            </div>
+          )}
         </div>
 
         {/* Setup */}
@@ -556,8 +642,18 @@ export default function TieBreakerAdmin() {
                 questions as they can. <b className="text-white">+1</b> per correct, no negative marks.
                 Wrong or skipped questions cycle to the back so teams can retry.
               </p>
-              <div className="grid grid-cols-2 gap-3">
-                {(['A', 'B'] as const).map(letter => {
+              <label className="flex items-center gap-2 rounded-lg bg-purple-500/10 border border-purple-500/40 px-3 py-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!s.threeTeam}
+                  onChange={e => update({ threeTeam: e.target.checked } as Partial<TBState>)}
+                  className="w-4 h-4 accent-purple-500"
+                />
+                <span className="text-purple-200 text-xs font-bold uppercase tracking-widest">3-team tie-breaker</span>
+                <span className="text-purple-300/60 text-[10px] italic ml-auto">Use when the MC round is tied between 3 teams</span>
+              </label>
+              <div className={`grid ${s.threeTeam ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
+                {(s.threeTeam ? (['A', 'B', 'C'] as const) : (['A', 'B'] as const)).map(letter => {
                   const nameKey = `team${letter}` as const
                   const priorKey = `prior${letter}` as const
                   return (
@@ -565,7 +661,7 @@ export default function TieBreakerAdmin() {
                       <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Team {letter}</label>
                       {teams.length > 0 ? (
                         <select
-                          value={s[nameKey]}
+                          value={s[nameKey] ?? ''}
                           onChange={e => update({ [nameKey]: e.target.value } as Partial<TBState>)}
                           className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm">
                           <option value="">— select team —</option>
@@ -575,7 +671,7 @@ export default function TieBreakerAdmin() {
                         </select>
                       ) : (
                         <input
-                          value={s[nameKey]}
+                          value={s[nameKey] ?? ''}
                           onChange={e => update({ [nameKey]: e.target.value } as Partial<TBState>)}
                           placeholder={`Team ${letter} name`}
                           className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm" />
@@ -710,24 +806,24 @@ export default function TieBreakerAdmin() {
                 <h2 className="text-white font-bold text-sm">Assign a Pool to Each Team</h2>
                 <p className="text-slate-500 text-[10px]">Must be different pools</p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {(['A', 'B'] as const).map(letter => {
+              <div className={`grid ${s.threeTeam ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
+                {(s.threeTeam ? (['A', 'B', 'C'] as const) : (['A', 'B'] as const)).map(letter => {
                   const key = `chosenPool${letter}` as const
-                  const otherKey = letter === 'A' ? 'chosenPoolB' : 'chosenPoolA'
+                  const otherKeys = (['A', 'B', 'C'] as const).filter(l => l !== letter).map(l => `chosenPool${l}` as const)
                   const teamName = s[`team${letter}` as const] || `Team ${letter}`
-                  const colour = letter === 'A' ? 'green' : 'blue'
+                  const colour = letter === 'A' ? 'green' : letter === 'B' ? 'blue' : 'purple'
                   return (
                     <div key={letter} className="space-y-1.5">
                       <label className={`text-[10px] text-${colour}-400 font-bold uppercase tracking-widest`}>
                         Pool for {teamName}
                       </label>
                       <select
-                        value={s[key] ?? ''}
+                        value={(s[key] as string | null | undefined) ?? ''}
                         onChange={e => update({ [key]: e.target.value || null } as Partial<TBState>)}
                         className={`w-full bg-slate-800 border border-${colour}-500/40 rounded-lg px-2 py-2 text-white text-sm`}>
                         <option value="">— select a pool —</option>
                         {safePools.map((pl, i) => {
-                          const takenByOther = pl.id === s[otherKey]
+                          const takenByOther = otherKeys.some(k => pl.id === s[k])
                           const alreadyPlayed = usedPoolIds.has(pl.id)
                           return (
                             <option key={pl.id} value={pl.id} disabled={takenByOther || alreadyPlayed || pl.questions.length === 0}>
@@ -740,14 +836,24 @@ export default function TieBreakerAdmin() {
                   )
                 })}
               </div>
-              {(chosenPoolA && usedPoolIds.has(chosenPoolA.id)) || (chosenPoolB && usedPoolIds.has(chosenPoolB.id)) ? (
+              {(chosenPoolA && usedPoolIds.has(chosenPoolA.id)) || (chosenPoolB && usedPoolIds.has(chosenPoolB.id)) || (s.threeTeam && chosenPoolC && usedPoolIds.has(chosenPoolC.id)) ? (
                 <p className="text-red-300 text-xs bg-red-900/20 border border-red-500/30 rounded-lg px-3 py-2 text-center">
-                  ⚠️ One or both chosen pools have already been used in a past tie-breaker. Pick a fresh pool for each team.
+                  ⚠️ One or more chosen pools have already been used in a past tie-breaker. Pick fresh pools for every team.
                 </p>
               ) : null}
               <button
                 onClick={goToInstructions}
-                disabled={!s.teamA.trim() || !s.teamB.trim() || !chosenPoolA || !chosenPoolB || s.chosenPoolA === s.chosenPoolB || chosenPoolA.questions.length === 0 || chosenPoolB.questions.length === 0 || usedPoolIds.has(chosenPoolA.id) || usedPoolIds.has(chosenPoolB.id)}
+                disabled={
+                  !s.teamA.trim() || !s.teamB.trim() || !chosenPoolA || !chosenPoolB
+                  || s.chosenPoolA === s.chosenPoolB
+                  || chosenPoolA.questions.length === 0 || chosenPoolB.questions.length === 0
+                  || usedPoolIds.has(chosenPoolA.id) || usedPoolIds.has(chosenPoolB.id)
+                  || (s.threeTeam && (
+                    !(s.teamC ?? '').trim() || !chosenPoolC || chosenPoolC.questions.length === 0
+                    || usedPoolIds.has(chosenPoolC.id)
+                    || s.chosenPoolC === s.chosenPoolA || s.chosenPoolC === s.chosenPoolB
+                  ))
+                }
                 className="w-full bg-pink-600 hover:bg-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-3 rounded-xl text-sm">
                 📋 Show Instructions on Screen
               </button>
@@ -770,14 +876,19 @@ export default function TieBreakerAdmin() {
                       <div className="flex-1 min-w-0">
                         <p className="text-white text-xs font-bold truncate">
                           {m.teamA} <span className="text-slate-500">vs</span> {m.teamB}
+                          {m.teamC && <><span className="text-slate-500"> vs</span> {m.teamC}</>}
                         </p>
                         <p className="text-[10px] text-slate-400 truncate">
-                          {m.poolATitle} · {m.poolBTitle}
+                          {m.poolATitle} · {m.poolBTitle}{m.poolCTitle ? ` · ${m.poolCTitle}` : ''}
                         </p>
                         <p className="text-[10px] text-slate-500 truncate">
                           <span className="text-green-400 font-bold">{m.scoreA}</span>
                           <span className="mx-1 text-slate-600">—</span>
                           <span className="text-blue-400 font-bold">{m.scoreB}</span>
+                          {m.teamC && <>
+                            <span className="mx-1 text-slate-600">—</span>
+                            <span className="text-purple-400 font-bold">{m.scoreC ?? 0}</span>
+                          </>}
                           <span className="mx-1 text-slate-600">·</span>
                           🏆 {m.winner}
                         </p>
@@ -889,6 +1000,49 @@ export default function TieBreakerAdmin() {
                 {s.correctB} correct · {chosenPoolB?.title}
               </p>
             </div>
+            {s.threeTeam ? (
+              <button
+                onClick={goToAnnounceC}
+                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-black py-3 rounded-xl text-sm">
+                ▶ Announce {s.teamC || 'Team C'}
+              </button>
+            ) : (
+              <button
+                onClick={goToCompare}
+                className="w-full bg-pink-600 hover:bg-pink-500 text-white font-black py-3 rounded-xl text-sm">
+                ▶ Show Final Comparison
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Announce Team C (3-team mode only) */}
+        {s.phase === 'announce_c' && (
+          <div className="bg-gradient-to-br from-purple-500/10 to-[#0a1628] border border-purple-500/40 rounded-2xl p-5 space-y-4 text-center">
+            <p className="text-purple-300 text-[10px] font-bold uppercase tracking-[0.3em]">Up Next</p>
+            <p className="text-white text-2xl font-black">{s.teamC}</p>
+            <p className="text-slate-400 text-xs">
+              Playing <b className="text-white">{chosenPoolC?.title}</b> · 30 seconds
+            </p>
+            <button
+              onClick={startTeamC}
+              disabled={!chosenPoolC || chosenPoolC.questions.length === 0}
+              className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-black py-3 rounded-xl text-sm">
+              ▶ Start {s.teamC}&apos;s 30 seconds
+            </button>
+          </div>
+        )}
+
+        {/* Score reveal — Team C (3-team mode only) */}
+        {s.phase === 'score_c' && (
+          <div className="space-y-3">
+            <div className="bg-gradient-to-br from-purple-500/15 to-[#0a1628] border-2 border-purple-500/50 rounded-2xl p-5 text-center space-y-2">
+              <p className="text-purple-300 text-[10px] font-bold uppercase tracking-[0.3em]">{s.teamC} — Score</p>
+              <p className="text-white text-6xl font-black">{s.scoreC ?? 0}</p>
+              <p className="text-slate-400 text-xs">
+                {s.correctC ?? 0} correct · {chosenPoolC?.title}
+              </p>
+            </div>
             <button
               onClick={goToCompare}
               className="w-full bg-pink-600 hover:bg-pink-500 text-white font-black py-3 rounded-xl text-sm">
@@ -897,15 +1051,15 @@ export default function TieBreakerAdmin() {
           </div>
         )}
 
-        {/* Playing (either team) */}
-        {(isPlayingA || isPlayingB) && (
+        {/* Playing (any team) */}
+        {(isPlayingA || isPlayingB || isPlayingC) && (
           <div className="space-y-3">
             {/* Timer */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <p className={`text-[10px] font-bold uppercase tracking-widest ${isPlayingA ? 'text-green-300' : 'text-blue-300'}`}>
-                    {isPlayingA ? s.teamA : s.teamB} · Rapid Fire
+                  <p className={`text-[10px] font-bold uppercase tracking-widest ${isPlayingA ? 'text-green-300' : isPlayingB ? 'text-blue-300' : 'text-purple-300'}`}>
+                    {isPlayingA ? s.teamA : isPlayingB ? s.teamB : s.teamC} · Rapid Fire
                   </p>
                   <p className="text-white text-sm font-bold">
                     {activeQueue.length} left {activePool ? `· ${activePool.title}` : ''}
@@ -968,27 +1122,33 @@ export default function TieBreakerAdmin() {
 
             <button onClick={endRoundEarly}
               className="w-full py-2 border border-slate-600 hover:border-slate-400 text-slate-400 hover:text-white rounded-lg text-xs">
-              End Round Early → {isPlayingA ? 'Break' : 'Results'}
+              End Round Early → {isPlayingA || (isPlayingB && s.threeTeam) ? 'Break' : 'Results'}
             </button>
           </div>
         )}
 
         {/* Compare — final side-by-side + advance / out */}
-        {s.phase === 'compare' && (
+        {s.phase === 'compare' && (() => {
+          const rows = [
+            { key: 'A' as const, name: s.teamA, score: s.scoreA, colour: 'green' },
+            { key: 'B' as const, name: s.teamB, score: s.scoreB, colour: 'blue' },
+            ...(s.threeTeam ? [{ key: 'C' as const, name: s.teamC ?? 'Team C', score: s.scoreC ?? 0, colour: 'purple' }] : []),
+          ]
+          const top = Math.max(...rows.map(r => r.score))
+          const bottom = Math.min(...rows.map(r => r.score))
+          const stillTied = top === bottom  // everyone level
+          const advancesName = rows.filter(r => r.score === top).map(r => r.name).join(', ')
+          const eliminated = rows.filter(r => r.score === bottom && bottom < top).map(r => r.name).join(', ')
+          return (
           <div className="space-y-3">
             <div className="bg-gradient-to-br from-yellow-500/15 to-orange-500/15 border-2 border-yellow-500/60 rounded-2xl p-4 text-center space-y-3">
               <p className="text-yellow-300 text-[10px] font-bold uppercase tracking-[0.3em]">Tie-Breaker Result</p>
-              <div className="grid grid-cols-2 gap-2">
-                {(['A', 'B'] as const).map(letter => {
-                  const isA = letter === 'A'
-                  const name = isA ? s.teamA : s.teamB
-                  const score = isA ? s.scoreA : s.scoreB
-                  const other = isA ? s.scoreB : s.scoreA
-                  const advances = score > other
-                  const out = score < other
-                  const colour = isA ? 'green' : 'blue'
+              <div className={`grid ${s.threeTeam ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+                {rows.map(r => {
+                  const advances = !stillTied && r.score === top
+                  const out = !stillTied && r.score === bottom && bottom < top
                   return (
-                    <div key={letter}
+                    <div key={r.key}
                       className={`rounded-xl p-3 border ${
                         advances ? 'bg-yellow-500/20 border-yellow-500'
                         : out ? 'bg-red-950/40 border-red-500/40 opacity-70'
@@ -996,22 +1156,24 @@ export default function TieBreakerAdmin() {
                       }`}>
                       {advances && <p className="text-yellow-300 text-2xl leading-none mb-0.5">🏆</p>}
                       {out && <p className="text-red-400 text-xs font-black uppercase tracking-widest">Out</p>}
-                      <p className={`text-${colour}-300 text-[10px] font-bold uppercase tracking-widest truncate`}>{name}</p>
-                      <p className="text-white text-3xl font-black">{score}</p>
+                      <p className={`text-${r.colour}-300 text-[10px] font-bold uppercase tracking-widest truncate`}>{r.name}</p>
+                      <p className="text-white text-3xl font-black">{r.score}</p>
                       <p className={`text-[10px] mt-0.5 font-bold uppercase ${advances ? 'text-yellow-300' : out ? 'text-red-300' : 'text-slate-500'}`}>
-                        {advances ? 'Advances' : out ? 'Eliminated' : 'Tied'}
+                        {advances ? (s.threeTeam ? 'Safe' : 'Advances') : out ? 'Eliminated' : 'Tied'}
                       </p>
                     </div>
                   )
                 })}
               </div>
-              <p className="text-white text-lg font-black pt-2">
-                {s.scoreA === s.scoreB
+              <p className="text-white text-base font-black pt-2">
+                {stillTied
                   ? '🤝 Still tied — run another round on fresh pools'
-                  : `${s.scoreA > s.scoreB ? s.teamA : s.teamB} advances`}
+                  : s.threeTeam
+                    ? `${eliminated} finishes at the bottom${eliminated.includes(',') ? ' (still tied)' : ''}. ${advancesName} advance${advancesName.includes(',') ? '' : 's'}.`
+                    : `${advancesName} advances`}
               </p>
             </div>
-            {s.scoreA === s.scoreB ? (
+            {stillTied ? (
               <button onClick={playAnotherRound}
                 className="w-full bg-pink-600 hover:bg-pink-500 text-white font-black py-3 rounded-xl text-sm">
                 🔔 Still Tied · Run Another Rapid Fire
@@ -1023,7 +1185,8 @@ export default function TieBreakerAdmin() {
               </button>
             )}
           </div>
-        )}
+          )
+        })()}
       </div>
     </div>
   )
