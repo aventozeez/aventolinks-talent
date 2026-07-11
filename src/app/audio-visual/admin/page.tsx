@@ -373,10 +373,27 @@ export default function AVAdmin() {
         </div>
 
         {!fromMC && state.phase === 'idle' && (
-          <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-2xl px-5 py-4 text-center">
-            <p className="text-yellow-400 font-bold text-sm">⏳ Waiting for Mystery Chain to finish</p>
-            <p className="text-gray-400 text-xs mt-1">This page is configured from the Mystery Chain admin. Teams and questions will appear automatically when the host advances the top 2.</p>
-          </div>
+          <ManualMatchSeed
+            defaultPools={state.pools}
+            onSeed={(seed) => {
+              hydrated.current = true
+              skipBroadcast.current = false
+              setState(prev => ({
+                ...prev,
+                _from_mc: true,   // treat as if MC handed off — unlocks all the fromMC UI
+                teamA: seed.teamA,
+                teamB: seed.teamB,
+                rfA: seed.rfA, rfB: seed.rfB,
+                bzA: seed.bzA, bzB: seed.bzB,
+                isA: seed.isA, isB: seed.isB,
+                mcOnlyA: seed.mcA, mcOnlyB: seed.mcB,
+                mcScoreA: seed.rfA + seed.bzA + seed.isA + seed.mcA,
+                mcScoreB: seed.rfB + seed.bzB + seed.isB + seed.mcB,
+                scoreA: seed.rfA + seed.bzA + seed.isA + seed.mcA,
+                scoreB: seed.rfB + seed.bzB + seed.isB + seed.mcB,
+              }))
+            }}
+          />
         )}
 
         {fromMC && state.phase === 'idle' && (
@@ -830,6 +847,97 @@ export default function AVAdmin() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Manual seed form ─────────────────────────────────────────────────────────
+// Shown on the AV admin idle screen when no MC handoff has arrived. Lets the
+// host type in team names and per-round scores (RF/BZ/IS/MC) so the Grand
+// Final can start standalone. Values feed the same fields the MC handoff
+// would populate, so every cumulative/compare/declaration screen works.
+
+type ManualSeed = {
+  teamA: string; teamB: string
+  rfA: number; rfB: number
+  bzA: number; bzB: number
+  isA: number; isB: number
+  mcA: number; mcB: number
+}
+
+function ManualMatchSeed({ defaultPools, onSeed }: { defaultPools: AVPool[]; onSeed: (s: ManualSeed) => void }) {
+  const [teamA, setTeamA] = useState('Team A')
+  const [teamB, setTeamB] = useState('Team B')
+  const [rfA, setRfA] = useState(0); const [rfB, setRfB] = useState(0)
+  const [bzA, setBzA] = useState(0); const [bzB, setBzB] = useState(0)
+  const [isA, setIsA] = useState(0); const [isB, setIsB] = useState(0)
+  const [mcA, setMcA] = useState(0); const [mcB, setMcB] = useState(0)
+
+  const totalA = rfA + bzA + isA + mcA
+  const totalB = rfB + bzB + isB + mcB
+  const ready = teamA.trim() && teamB.trim() && defaultPools.length > 0
+
+  const numInput = (val: number, on: (n: number) => void, colour: string) => (
+    <input type="number" min={0} value={val}
+      onChange={e => on(Math.max(0, parseInt(e.target.value || '0', 10)))}
+      className={`w-full bg-black/40 border border-${colour}-500/40 rounded-lg px-2 py-1.5 text-white font-black text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-${colour}-400/40`} />
+  )
+
+  return (
+    <div className="bg-[#0d1f3c] border border-[#f5a623]/40 rounded-2xl p-5 space-y-4">
+      <div className="text-center">
+        <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-[0.35em]">Two ways to start</p>
+        <p className="text-white text-sm mt-1"><span className="text-slate-400">Wait for Mystery Chain to auto-advance the top 2, or</span> enter the previous scores manually below.</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 items-start">
+        <div className="space-y-2">
+          <p className="text-green-300 text-[10px] font-black uppercase tracking-widest">Team A</p>
+          <input type="text" value={teamA} onChange={e => setTeamA(e.target.value)}
+            className="w-full bg-black/40 border border-green-500/40 rounded-lg px-3 py-2 text-white font-bold focus:outline-none focus:ring-2 focus:ring-green-400/40" />
+        </div>
+        <div className="space-y-2">
+          <p className="text-blue-300 text-[10px] font-black uppercase tracking-widest">Team B</p>
+          <input type="text" value={teamB} onChange={e => setTeamB(e.target.value)}
+            className="w-full bg-black/40 border border-blue-500/40 rounded-lg px-3 py-2 text-white font-bold focus:outline-none focus:ring-2 focus:ring-blue-400/40" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[70px_1fr_1fr] gap-2 items-center text-center">
+        <div />
+        <p className="text-green-300 text-[10px] font-black uppercase tracking-widest">A</p>
+        <p className="text-blue-300 text-[10px] font-black uppercase tracking-widest">B</p>
+
+        <p className="text-[#f5a623] text-[10px] font-black uppercase tracking-widest text-left">Rapid Fire</p>
+        {numInput(rfA, setRfA, 'green')}
+        {numInput(rfB, setRfB, 'blue')}
+
+        <p className="text-blue-300 text-[10px] font-black uppercase tracking-widest text-left">Buzzer</p>
+        {numInput(bzA, setBzA, 'green')}
+        {numInput(bzB, setBzB, 'blue')}
+
+        <p className="text-cyan-300 text-[10px] font-black uppercase tracking-widest text-left">Sprint</p>
+        {numInput(isA, setIsA, 'green')}
+        {numInput(isB, setIsB, 'blue')}
+
+        <p className="text-purple-300 text-[10px] font-black uppercase tracking-widest text-left">Mystery</p>
+        {numInput(mcA, setMcA, 'green')}
+        {numInput(mcB, setMcB, 'blue')}
+
+        <p className="text-white text-[10px] font-black uppercase tracking-widest text-left">Total</p>
+        <p className="text-white text-lg font-black tabular-nums bg-green-500/10 rounded-lg py-1.5">{totalA}</p>
+        <p className="text-white text-lg font-black tabular-nums bg-blue-500/10 rounded-lg py-1.5">{totalB}</p>
+      </div>
+
+      <button
+        disabled={!ready}
+        onClick={() => onSeed({ teamA: teamA.trim(), teamB: teamB.trim(), rfA, rfB, bzA, bzB, isA, isB, mcA, mcB })}
+        className="w-full py-3 rounded-xl bg-[#f5a623] hover:bg-[#e0951b] disabled:bg-slate-700 disabled:text-slate-500 text-black font-black">
+        ✅ Seed Manual AV Match
+      </button>
+      {defaultPools.length === 0 && (
+        <p className="text-red-300 text-xs italic text-center">No AV pools loaded. Configure them on the Mystery Chain admin's AV setup first.</p>
+      )}
     </div>
   )
 }
