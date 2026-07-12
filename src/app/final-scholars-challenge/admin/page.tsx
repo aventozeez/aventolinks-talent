@@ -243,12 +243,19 @@ export default function AdminPage() {
   }, [])
 
   const loadFSCState = useCallback(async () => {
-    const s = await getMatchState()
+    // Race Supabase against an 8s timeout so a slow/offline network doesn't
+    // trap the admin on the spinner forever. On timeout / error we hand back
+    // null; the admin can still create a fresh match locally.
+    let s: Awaited<ReturnType<typeof getMatchState>> = null
+    try {
+      s = await Promise.race([
+        getMatchState(),
+        new Promise<null>((_, reject) => setTimeout(() => reject(new Error('supabase timeout')), 8000)),
+      ])
+    } catch { s = null }
     setFscState(s)
     if (s) {
       fscRef.current = s
-      // Re-broadcast current state so all viewer pages sync immediately
-      // (use a short delay to ensure channelRef is set after subscribe)
       setTimeout(() => {
         wsBroadcast(FSC_CHANNEL + ':state', safeForViewers(s))
         wsBroadcast(FSC_CHANNEL + ':mod', s)
