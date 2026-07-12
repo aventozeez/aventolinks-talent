@@ -979,7 +979,11 @@ export default function MCAdminPage() {
           // admin can't cut the animation off mid-narration.
           const fullText = currentPack?.openingStory ?? ''
           const sentences = fullText.match(/[^.!?]+[.!?]+(?:\s+|$)/g)?.map(sn => sn.trim()).filter(Boolean) ?? (fullText ? [fullText] : [])
-          let totalMs = 0
+          // Mirror the audience: 3s pre-roll before sentences start speaking,
+          // then the sentence timeline. Admin gates on the full duration so
+          // 'Start Riddles' can't fire while the narration is still playing.
+          const PREROLL_MS = 3000
+          let totalMs = PREROLL_MS
           sentences.forEach(sn => { totalMs += Math.max(1500, sn.length * 75) + 150 })
           const elapsedMs = (s.storyStartAt && s.storyStartAt > 0) ? Math.max(0, Date.now() - s.storyStartAt) : 0
           const progressPct = totalMs > 0 ? Math.min(100, (elapsedMs / totalMs) * 100) : 0

@@ -137,13 +137,18 @@ function StoryPhase({ s, storyTeam }: { s: MCAudienceState; storyTeam: string })
     return () => clearInterval(iv)
   }, [])
 
-  const elapsed = storyStartAt > 0 ? Math.max(0, tick - storyStartAt) : 0
+  // 3-second pre-roll before the first sentence so the projector operator
+  // has a moment to tap "Enable sound" before narration begins.
+  const PREROLL_MS = 3000
+  const rawElapsed = storyStartAt > 0 ? Math.max(0, tick - storyStartAt) : 0
+  const elapsed = Math.max(0, rawElapsed - PREROLL_MS)
+  const inPreroll = storyStartAt > 0 && rawElapsed < PREROLL_MS
   let currentIdx = -1
-  if (storyStartAt > 0 && sentences.length > 0 && elapsed < totalMs) {
+  if (!inPreroll && storyStartAt > 0 && sentences.length > 0 && elapsed < totalMs) {
     currentIdx = cumulative.findIndex(c => elapsed < c)
   }
   const currentSentence = currentIdx >= 0 ? sentences[currentIdx] : ''
-  const done = storyStartAt > 0 && elapsed >= totalMs
+  const done = storyStartAt > 0 && !inPreroll && elapsed >= totalMs
 
   // Speak whichever sentence is currently showing. Every projector speaks,
   // driven by wall-clock so multiple projectors stay in sync.
@@ -824,7 +829,7 @@ export default function MCAudiencePage() {
         <p className="text-slate-400 text-sm mt-1">Select your mystery below</p>
       </div>
       <div className="grid grid-cols-2 gap-4 flex-1">
-        {s.packs.map(pack => {
+        {s.packs.filter(p => !/\(demo\)|demo —/i.test(p.title || '')).map(pack => {
           const taken = takenIds.includes(pack.id)
           const takenBy = taken ? (pack.id === s.chosenA ? s.teamA : pack.id === s.chosenB ? s.teamB : s.teamC) : null
           return (

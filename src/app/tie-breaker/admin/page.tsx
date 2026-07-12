@@ -5,7 +5,7 @@ import { supabase, supabaseAdmin } from '@/lib/supabase'
 
 const CHANNEL = 'tie:state'
 const ROUND_MS = 30_000                // 30 seconds per team
-const DEFAULT_POOL_SIZE = 20           // 20 questions per pool
+const DEFAULT_POOL_SIZE = 30           // 30 questions per pool (min for a valid pool)
 const PTS_CORRECT = 1
 // Saved tie-breaker matches — Supabase row id.
 const TB_MATCHES_ROW_ID = 'tie_saved_matches'
@@ -120,6 +120,16 @@ const POOL_1: Omit<TBQuestion, 'id'>[] = [
   { text: 'Who was the first person to walk on the moon?', answer: 'Neil Armstrong' },
   { text: 'What language is spoken in Brazil?', answer: 'Portuguese' },
   { text: 'What is the boiling point of water in Celsius?', answer: '100' },
+  { text: 'Which is the largest country in the world by area?', answer: 'Russia' },
+  { text: 'What is the smallest country in the world?', answer: 'Vatican City' },
+  { text: 'Which planet has the most moons?', answer: 'Saturn' },
+  { text: 'What is the longest river in the world?', answer: 'Nile' },
+  { text: 'Who is the author of "Harry Potter"?', answer: 'J.K. Rowling' },
+  { text: 'What is the hardest natural substance?', answer: 'Diamond' },
+  { text: 'Which gas do humans breathe in to survive?', answer: 'Oxygen' },
+  { text: 'In which country are the ancient Pyramids of Giza?', answer: 'Egypt' },
+  { text: 'What is the freezing point of water in Celsius?', answer: '0' },
+  { text: 'Which continent is Antarctica?', answer: 'Antarctica' },
 ]
 
 const POOL_2: Omit<TBQuestion, 'id'>[] = [
@@ -143,6 +153,16 @@ const POOL_2: Omit<TBQuestion, 'id'>[] = [
   { text: 'Which colour appears in the centre of the Nigerian flag?', answer: 'White' },
   { text: "What is Nigeria's oil-producing region commonly called?", answer: 'Niger Delta' },
   { text: 'Which body of water lies between Nigeria and Cameroon?', answer: 'Gulf of Guinea' },
+  { text: 'Which African country has three capital cities?', answer: 'South Africa' },
+  { text: 'What is the capital of Ethiopia?', answer: 'Addis Ababa' },
+  { text: 'Which African country was never colonised?', answer: 'Ethiopia' },
+  { text: 'What is the currency of South Africa?', answer: 'Rand' },
+  { text: 'What is the capital of Senegal?', answer: 'Dakar' },
+  { text: 'Which sea lies to the east of Africa?', answer: 'Indian Ocean' },
+  { text: 'Which African country is home to Mount Kenya?', answer: 'Kenya' },
+  { text: 'Who was the second President of Nigeria after independence?', answer: 'Shehu Shagari' },
+  { text: 'Which African river passes through Egypt?', answer: 'Nile' },
+  { text: 'What is the capital of Morocco?', answer: 'Rabat' },
 ]
 
 const POOL_3: Omit<TBQuestion, 'id'>[] = [
@@ -166,6 +186,16 @@ const POOL_3: Omit<TBQuestion, 'id'>[] = [
   { text: 'What is the study of earthquakes called?', answer: 'Seismology' },
   { text: 'What is the freezing point of water in Fahrenheit?', answer: '32' },
   { text: 'Who was the first female Prime Minister of the United Kingdom?', answer: 'Margaret Thatcher' },
+  { text: 'What is the chemical symbol for silver?', answer: 'Ag' },
+  { text: 'What is the SI unit of electric current?', answer: 'Ampere' },
+  { text: 'What planet is known as the "morning star"?', answer: 'Venus' },
+  { text: 'How many chambers does the human heart have?', answer: '4' },
+  { text: 'Who discovered penicillin?', answer: 'Alexander Fleming' },
+  { text: 'What is the pH of pure water?', answer: '7' },
+  { text: 'What is the tallest tree species in the world?', answer: 'Redwood' },
+  { text: 'How many colors are in a rainbow?', answer: '7' },
+  { text: 'What is the smallest unit of matter?', answer: 'Atom' },
+  { text: 'How many sides does a hexagon have?', answer: '6' },
 ]
 
 const makeQ = (q: Omit<TBQuestion, 'id'>): TBQuestion => ({ ...q, id: crypto.randomUUID() })
