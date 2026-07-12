@@ -144,6 +144,10 @@ export default function AdminPage() {
   const [savedMatches, setSavedMatches] = useState<SavedMatch[]>([])
   const [matchesLoading, setMatchesLoading] = useState(false)
   const [showAddMatch, setShowAddMatch] = useState(false)
+  // Demo pools hidden from the create-match dropdowns by default so admin
+  // can't accidentally seed a real match with rehearsal pools.
+  const [showDemo, setShowDemo] = useState(false)
+  const isDemo = (name: string) => /\(demo\)|demo pool|demo —/i.test(name || '')
   const [newMatchName, setNewMatchName] = useState('')
   const [newMatchTeamA, setNewMatchTeamA] = useState('')
   const [newMatchTeamB, setNewMatchTeamB] = useState('')
@@ -2147,6 +2151,11 @@ export default function AdminPage() {
                   )
                 })}
               </div>
+              <label className="flex items-center gap-2 rounded-lg bg-purple-500/10 border border-purple-500/30 px-2.5 py-1.5 cursor-pointer select-none w-fit">
+                <input type="checkbox" checked={showDemo} onChange={e => setShowDemo(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-purple-500" />
+                <span className="text-[10px] text-purple-200 font-bold uppercase tracking-widest">🔧 Show demo pools</span>
+              </label>
               {([
                 ['⚡ RF Pool — Team A',        newMatchRFPool,   setNewMatchRFPool,   'rapid_fire', newMatchRFPoolB],
                 ['⚡ RF Pool — Team B',        newMatchRFPoolB,  setNewMatchRFPoolB,  'rapid_fire', newMatchRFPool],
@@ -2162,7 +2171,7 @@ export default function AdminPage() {
                       <option value="">— Select Pool —</option>
                       {(() => {
                         const usedPoolIds = new Set(savedMatches.flatMap(m => [m.rf_pool_id, m.rf_pool_id_b, m.bz_pool_id, m.is_pool_id, m.is_pool_id_2].filter(Boolean)))
-                        return pools.filter(p => p.type === type && p.id !== (exclude ?? '')).map(p => {
+                        return pools.filter(p => p.type === type && p.id !== (exclude ?? '') && (showDemo || !isDemo(p.name))).map(p => {
                           const used = usedPoolIds.has(p.id)
                           return (
                             <option key={p.id} value={p.id} disabled={used}>
@@ -2331,7 +2340,7 @@ export default function AdminPage() {
                           <select value={t.val} onChange={e => t.set(e.target.value)}
                             className="flex-1 bg-[#060f1f] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-400">
                             <option value="">— Select pool —</option>
-                            {pools.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            {pools.filter(p => showDemo || !isDemo(p.name)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                           </select>
                         </div>
                       ))}

@@ -191,7 +191,7 @@ const mk = (p: Omit<MCPuzzle,'id'>) => ({ ...p, id: crypto.randomUUID() })
 
 const RAW_PACKS: Omit<MCPack,'id'>[] = [
   {
-    title: 'The Silent Warning (Demo)',
+    title: 'The Silent Warning',
     emoji: '🔒',
     teaser: 'Uncover the threat. Protect the school.',
     openingStory: 'At 8:15 AM, students arrived at Crescent Academy for the annual Scholars Challenge. The morning felt ordinary — buses pulled up at the gates, teachers greeted their classes, and the assembly hall began to fill with excited voices. But by 10:30 AM, something shifted. A senior teacher noticed a stranger loitering near the west corridor. Cameras had gone offline for four minutes overnight. A locker that should have been empty was warm to the touch. Nothing had happened yet — but every silent sign pointed to a plan already in motion. Someone was watching the school. Someone was waiting for the right moment. And that moment was coming fast. Students of Crescent Academy — the safety of this school now rests in your hands. Unscramble every clue, unlock the mystery, and reveal the threat before it strikes. Your time starts now.',
@@ -209,7 +209,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
     ],
   },
   {
-    title: 'The Missing Trophy',
+    title: 'The Missing Trophy (Demo)',
     emoji: '🏆',
     teaser: 'The trophy vanished. The ceremony cannot wait.',
     openingStory: 'The morning of the Awards Ceremony, Crescent Academy\'s championship trophy was gone. The great glass cabinet in the main hall — polished the night before — now stood empty, the felt still bearing the faint outline of where the trophy had rested for twenty years. The hall had been locked from the outside all night. The security log listed only three names with keys: the principal, the janitor, and the head prefect. And yet, at 6:47 AM, a fresh scratch marked the frame of the cabinet, a single glove lay under a chair, and the CCTV feed had gone dark for exactly nine minutes. The ceremony begins in one hour. The parents are already arriving. The press is on their way. Students of Crescent Academy — the honour of this school is now in your hands. Unscramble every clue, unlock the mystery, and expose the truth before the ceremony begins. Your time starts now.',
@@ -360,6 +360,10 @@ export default function MCAdminPage() {
   const [timeLeft, setTimeLeft] = useState(MC_TIME_MS)
   const [avSent, setAvSent] = useState(false)
   const [avOpen, setAvOpen] = useState(false)
+  // Demo content is hidden from selection surfaces by default so the admin
+  // can't accidentally start a real match with rehearsal packs/pools.
+  const [showDemo, setShowDemo] = useState(false)
+  const isDemo = (title: string) => /\(demo\)|demo —/i.test(title || '')
   const [avTab, setAvTab] = useState<number>(0)   // 0 / 1 / 2 → which of the 3 pools is being edited
   const [newQ, setNewQ] = useState({ text: '', answer: '' })
   const [editingQ, setEditingQ] = useState<string | null>(null)
@@ -732,9 +736,16 @@ export default function MCAdminPage() {
               </div>
 
               <div className="bg-[#0d1f3c] border border-slate-700 rounded-xl p-3 space-y-2">
-                <h2 className="text-white font-bold text-sm">4 Mysteries</h2>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-white font-bold text-sm">Mysteries</h2>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input type="checkbox" checked={showDemo} onChange={e => setShowDemo(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-purple-500" />
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">🔧 Show demo</span>
+                  </label>
+                </div>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {s.packs.map(p => (
+                  {s.packs.filter(p => showDemo || !isDemo(p.title)).map(p => (
                     <div key={p.id} className="bg-slate-800/50 border border-slate-600/50 rounded-lg p-1.5">
                       <p className="text-base leading-none">{p.emoji}</p>
                       <p className="text-white font-bold text-[11px] mt-1 leading-tight">{p.title}</p>
@@ -930,7 +941,7 @@ export default function MCAdminPage() {
               <p className="text-slate-400 text-sm mt-1">Select a mystery to unlock</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              {s.packs.map(pack => {
+              {s.packs.filter(pack => showDemo || !isDemo(pack.title)).map(pack => {
                 const taken = takenIds.includes(pack.id)
                 const takenBy = taken
                   ? pack.id === s.chosenA ? s.teamA : pack.id === s.chosenB ? s.teamB : s.teamC

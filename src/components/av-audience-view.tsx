@@ -143,7 +143,7 @@ export default function AVAudienceView() {
         <h1 className="text-4xl md:text-5xl font-black text-center">{pickingTeam}</h1>
         <p className="text-slate-400 text-base">Choose one of the pools below</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl w-full">
-          {(s.pools ?? []).map((pl, i) => {
+          {(s.pools ?? []).filter(pl => !/\(demo\)|demo —/i.test(pl.title || '')).map((pl, i) => {
             const taken = pl.id === takenId
             return (
               <div key={pl.id} className={`rounded-2xl p-5 border-2 text-center ${

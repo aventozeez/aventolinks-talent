@@ -110,8 +110,13 @@ function useWs(onIncoming: (s: AVState) => void) {
   return { connected, broadcast }
 }
 
+const isDemo = (title: string) => /\(demo\)|demo —/i.test(title || '')
+
 export default function AVAdmin() {
   const [state, setState] = useState<AVState>(DEFAULT_STATE)
+  // Demo pools are hidden from the pick surfaces by default. Flip on to
+  // rehearse with the Soyuz Practice pool.
+  const [showDemo, setShowDemo] = useState(false)
   const [timer, setTimer] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -464,15 +469,25 @@ export default function AVAdmin() {
               </>)}
               {state.phase === 'pick_pool_a' && (
                 <div>
-                  <p className="text-white font-bold text-sm mb-2 text-center">{state.teamA} — pick one pool</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-white font-bold text-sm text-center flex-1">{state.teamA} — pick one pool</p>
+                    <label className="flex items-center gap-1 cursor-pointer select-none shrink-0">
+                      <input type="checkbox" checked={showDemo} onChange={e => setShowDemo(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-purple-500" />
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">🔧 Demo</span>
+                    </label>
+                  </div>
                   <div className="grid grid-cols-1 gap-2">
-                    {state.pools.map((pl, i) => (
-                      <button key={pl.id} onClick={() => pickPoolA(pl.id)}
-                        className="text-left px-3 py-2 bg-green-900/30 hover:bg-green-800/40 border border-green-500/40 rounded-xl">
-                        <p className="text-green-400 text-[10px] font-bold uppercase tracking-widest">Pool {i + 1}</p>
-                        <p className="text-white font-bold text-sm">{pl.title}</p>
-                      </button>
-                    ))}
+                    {state.pools.filter(pl => showDemo || !isDemo(pl.title)).map((pl) => {
+                      const originalIdx = state.pools.findIndex(p2 => p2.id === pl.id)
+                      return (
+                        <button key={pl.id} onClick={() => pickPoolA(pl.id)}
+                          className="text-left px-3 py-2 bg-green-900/30 hover:bg-green-800/40 border border-green-500/40 rounded-xl">
+                          <p className="text-green-400 text-[10px] font-bold uppercase tracking-widest">Pool {originalIdx + 1}</p>
+                          <p className="text-white font-bold text-sm">{pl.title}</p>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -502,9 +517,16 @@ export default function AVAdmin() {
               </>)}
               {state.phase === 'pick_pool_b' && (
                 <div>
-                  <p className="text-white font-bold text-sm mb-2 text-center">{state.teamB} — pick one pool</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-white font-bold text-sm text-center flex-1">{state.teamB} — pick one pool</p>
+                    <label className="flex items-center gap-1 cursor-pointer select-none shrink-0">
+                      <input type="checkbox" checked={showDemo} onChange={e => setShowDemo(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-purple-500" />
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">🔧 Demo</span>
+                    </label>
+                  </div>
                   <div className="grid grid-cols-1 gap-2">
-                    {state.pools.filter(pl => pl.id !== state.chosenPoolA).map((pl) => {
+                    {state.pools.filter(pl => pl.id !== state.chosenPoolA && (showDemo || !isDemo(pl.title))).map((pl) => {
                       const originalIdx = state.pools.findIndex(p2 => p2.id === pl.id)
                       return (
                         <button key={pl.id} onClick={() => pickPoolB(pl.id)}
