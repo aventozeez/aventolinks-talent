@@ -804,34 +804,14 @@ export default function MCAudiencePage() {
     <WelcomeScreen subtitle="Team names and semi-final scores are being entered. Sit tight — the mystery begins soon." />
   )
 
-  // Intro
+  // Intro — full-page room-facing rules using the shared instructions layout
+  // so it matches every other round (RF/BZ/IS/AV/TB).
   if (s.phase === 'intro') return (
-    <div className="min-h-screen bg-[#0a0a1a] flex flex-col items-center justify-center p-6 gap-8">
-      <div className="text-center">
-        <p className="text-[#f5a623] text-xs font-bold uppercase tracking-widest mb-2">Grand Finale</p>
-        <h1 className="text-white text-4xl font-black">🔮 Mystery Chain</h1>
-        <p className="text-slate-400 text-base mt-3 max-w-lg text-center">
-          Four mysteries are waiting to be unlocked. Each team chooses one — then has{' '}
-          <span className="text-[#f5a623] font-bold">60 seconds</span> to unscramble the words and reveal the full story.
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
-        {s.packs.map(p => (
-          <div key={p.id} className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center">
-            <p className="text-4xl mb-2">{p.emoji}</p>
-            <p className="text-white font-black text-sm">{p.title}</p>
-            <p className="text-slate-500 text-xs mt-1">{p.teaser}</p>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-3 w-full max-w-lg">
-        {[s.teamA, s.teamB, s.teamC].map((t, i) => (
-          <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
-            <p className="text-slate-500 text-xs">Team {['A','B','C'][i]}</p>
-            <p className="text-white font-bold text-sm">{t}</p>
-          </div>
-        ))}
-      </div>
+    <div className={`min-h-screen w-full text-white flex items-center justify-center px-6 py-12 bg-gradient-to-br ${ROUND_INFO.mystery_chain.gradient}`}>
+      <RoundInstructionsInline
+        info={ROUND_INFO.mystery_chain}
+        footerHint={`${s.teamA} · ${s.teamB} · ${s.teamC} — waiting for the host to start…`}
+      />
     </div>
   )
 

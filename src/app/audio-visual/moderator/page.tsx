@@ -65,13 +65,15 @@ export default function AVModerator() {
       : s.phase === 'done' ? 'Round done'
       : s.phase
 
-    if ((isA || isB) && expired) {
-      phaseLabel = "Time's up — waiting for admin to advance"
-    } else if ((isA || isB) && q) {
+    if ((isA || isB) && q) {
       currentQuestion = `Q${correct + 1} · ${pool?.title ?? ''}: ${q.text}`
       currentAnswer = q.answer
       nextQuestion = nq?.text ?? null
       nextAnswer = nq?.answer ?? null
+      // Even after the 60s runs out, the admin still has a 5s grace window
+      // to grade a last-second answer — keep the answer visible for them,
+      // just flag the phase so the moderator knows time is up.
+      if (expired) phaseLabel = "Time's up — grace window · admin still grading"
     } else if (s.phase === 'tie_break') {
       const tq = (s.tieQuestions ?? [])[s.tieCurrentIdx ?? 0]
       if (tq) {
