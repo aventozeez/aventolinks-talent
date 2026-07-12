@@ -417,7 +417,7 @@ export default function AVAudienceView() {
     }
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#2a1a0a] to-[#0a0a1a] text-white flex flex-col items-center justify-center gap-8 px-6">
-        <p className="text-yellow-300 text-sm font-bold uppercase tracking-[0.4em]">Oyo State Scholars Challenge 2026</p>
+        <p className="text-yellow-300 text-sm font-bold uppercase tracking-[0.4em]">Aventolinks Scholars Challenge 2026 · Oyo State Edition</p>
         <div className="text-9xl animate-bounce">🥈</div>
         <p className="text-yellow-200 text-lg font-bold uppercase tracking-widest">And the</p>
         <h1 className="text-6xl md:text-8xl font-black text-white leading-tight text-center">First Runner Up</h1>
@@ -474,7 +474,7 @@ export default function AVAudienceView() {
             </div>
           ))}
         </div>
-        <p className="text-yellow-400 text-sm font-bold uppercase tracking-[0.4em] z-10">Oyo State Scholars Challenge 2026</p>
+        <p className="text-yellow-400 text-sm font-bold uppercase tracking-[0.4em] z-10">Aventolinks Scholars Challenge 2026 · Oyo State Edition</p>
         <div className="text-[10rem] animate-pulse z-10">🏆</div>
         <p className="text-yellow-300 text-xl font-bold uppercase tracking-widest z-10">The Champion of Champions</p>
         <h1 className="text-7xl md:text-9xl font-black text-yellow-300 leading-tight text-center z-10 drop-shadow-2xl"
@@ -502,7 +502,7 @@ export default function AVAudienceView() {
           </p>
         </div>
         <p className="text-yellow-200 text-base font-bold text-center z-10">
-          🎉 Congratulations {winner.name} — Champions of the Oyo State Scholars Challenge 2026 🎉
+          🎉 Congratulations {winner.name} — Champions of the Aventolinks Scholars Challenge 2026 · Oyo State Edition 🎉
         </p>
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes float {

@@ -1222,7 +1222,7 @@ export default function MCAdminPage() {
         {/* ─── DONE (Regular results screen) ─────────────────────────────── */}
         {(s.phase === 'done' || s.phase === 'declare_second_runnerup') && (() => {
           // Sort by CUMULATIVE score (semi-final + Mystery Chain).
-          // The lowest cumulative is the Second Runner Up of Oyo State Scholars Challenge 2026.
+          // The lowest cumulative is the Second Runner Up of Aventolinks Scholars Challenge 2026 · Oyo State Edition.
           const rawRanked = [
             { key: 'A' as const, name: s.teamA, semi: s.semiA, mc: s.scoreA, rf: s.rfA, bz: s.bzA, is: s.isA, packId: s.chosenA, rev: s.revealedA },
             { key: 'B' as const, name: s.teamB, semi: s.semiB, mc: s.scoreB, rf: s.rfB, bz: s.bzB, is: s.isB, packId: s.chosenB, rev: s.revealedB },
@@ -1256,7 +1256,7 @@ export default function MCAdminPage() {
           if (s.phase === 'declare_second_runnerup') {
             return (
               <div className="min-h-[75vh] flex flex-col items-center justify-center gap-6 text-center px-4">
-                <p className="text-[#f5a623] text-xs font-bold uppercase tracking-[0.3em]">Oyo State Scholars Challenge 2026</p>
+                <p className="text-[#f5a623] text-xs font-bold uppercase tracking-[0.3em]">Aventolinks Scholars Challenge 2026 · Oyo State Edition</p>
                 <div className="text-7xl animate-bounce">🥉</div>
                 <p className="text-purple-300 text-sm font-bold uppercase tracking-widest">And the</p>
                 <h1 className="text-5xl md:text-6xl font-black text-white leading-tight">Second Runner Up</h1>

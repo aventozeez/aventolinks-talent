@@ -1,7 +1,8 @@
 import Image from 'next/image'
 
 export const COMPETITION_NAME = 'Aventolinks Scholars Challenge 2026'
-export const COMPETITION_REGION = 'Oyo State'
+export const COMPETITION_REGION = 'Oyo State Edition'
+export const COMPETITION_FULL = 'Aventolinks Scholars Challenge 2026 · Oyo State Edition'
 
 type Props = {
   /** 'corner' floats in the top-right; 'inline' renders in place for use inside headers */
@@ -24,8 +25,8 @@ export default function CompetitionBadge({ variant = 'corner', tone = 'dark' }: 
   return (
     <div
       className={shell}
-      aria-label={`${COMPETITION_NAME} — ${COMPETITION_REGION}`}
-      title={`${COMPETITION_NAME} — ${COMPETITION_REGION}`}
+      aria-label={COMPETITION_FULL}
+      title={COMPETITION_FULL}
     >
       <div className="relative w-6 h-6 rounded-full overflow-hidden ring-1 ring-white/30 shrink-0 bg-white">
         <Image

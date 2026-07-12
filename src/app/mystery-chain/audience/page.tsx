@@ -1088,7 +1088,7 @@ export default function MCAudiencePage() {
     const hasBreakdown = true
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#1a0a2a] to-[#0a0a1a] text-white flex flex-col items-center justify-center gap-8 px-6">
-        <p className="text-[#f5a623] text-sm font-bold uppercase tracking-[0.4em]">Oyo State Scholars Challenge 2026</p>
+        <p className="text-[#f5a623] text-sm font-bold uppercase tracking-[0.4em]">Aventolinks Scholars Challenge 2026 · Oyo State Edition</p>
         <div className="text-9xl animate-bounce">🥉</div>
         <p className="text-purple-300 text-lg font-bold uppercase tracking-widest">And the</p>
         <h1 className="text-6xl md:text-8xl font-black text-white leading-tight text-center">Second Runner Up</h1>

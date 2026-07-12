@@ -1,5 +1,6 @@
 'use client'
 import Image from 'next/image'
+import CompetitionTitle from './competition-title'
 
 /**
  * Colourful, mature welcome splash used on the audience projector before any
@@ -32,16 +33,10 @@ export default function WelcomeScreen({ subtitle }: { subtitle?: string }) {
           </div>
         </div>
 
-        {/* Eyebrow + title */}
+        {/* Eyebrow + 3-line competition title */}
         <div className="space-y-4">
-          <p className="text-[#FFD700] text-sm md:text-base font-black uppercase tracking-[0.5em]">Oyo State</p>
-          <h1 className="text-5xl md:text-8xl font-black leading-[1.05] text-white">
-            Welcome to the
-            <span className="block mt-2 bg-gradient-to-r from-[#FFD700] via-[#F5A623] to-[#FFD700] bg-clip-text text-transparent drop-shadow-[0_8px_24px_rgba(245,166,35,0.35)]">
-              Scholars Challenge
-            </span>
-            <span className="block mt-3 text-white/95">2026</span>
-          </h1>
+          <p className="text-white/60 text-xs md:text-sm font-semibold uppercase tracking-[0.35em]">Welcome to the</p>
+          <CompetitionTitle size="xl" gradient />
         </div>
 
         {/* Divider */}
