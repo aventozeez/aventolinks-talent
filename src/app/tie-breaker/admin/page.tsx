@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { wsSubscribe, wsBroadcast } from '@/lib/ws-sync'
 import { supabase, supabaseAdmin } from '@/lib/supabase'
+import { uuid } from '@/lib/uuid'
 
 const CHANNEL = 'tie:state'
 const ROUND_MS = 30_000                // 30 seconds per team
@@ -198,9 +199,9 @@ const POOL_3: Omit<TBQuestion, 'id'>[] = [
   { text: 'How many sides does a hexagon have?', answer: '6' },
 ]
 
-const makeQ = (q: Omit<TBQuestion, 'id'>): TBQuestion => ({ ...q, id: crypto.randomUUID() })
+const makeQ = (q: Omit<TBQuestion, 'id'>): TBQuestion => ({ ...q, id: uuid() })
 const makePool = (title: string, arr: Omit<TBQuestion, 'id'>[]): TBPool => ({
-  id: crypto.randomUUID(),
+  id: uuid(),
   title,
   questions: arr.map(makeQ),
 })
@@ -213,7 +214,7 @@ const DEFAULT_POOLS = () => [
 
 // Blank pool used when the host clicks "+ New Pool"
 const makeEmptyPool = (n: number): TBPool => ({
-  id: crypto.randomUUID(),
+  id: uuid(),
   title: `Pool ${n}`,
   questions: [],
 })
@@ -433,7 +434,7 @@ export default function TieBreakerAdmin() {
       winner = s.scoreA > s.scoreB ? s.teamA : s.scoreB > s.scoreA ? s.teamB : 'Tie'
     }
     const record: SavedTBMatch = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       teamA: s.teamA, teamB: s.teamB,
       poolAId: poolA.id, poolBId: poolB.id,
       poolATitle: poolA.title, poolBTitle: poolB.title,

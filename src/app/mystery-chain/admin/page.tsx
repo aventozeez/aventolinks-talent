@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { wsBroadcast } from '@/lib/ws-sync'
 import { supabase, supabaseAdmin } from '@/lib/supabase'
+import { uuid } from '@/lib/uuid'
 import PointAdjuster from '@/components/point-adjuster'
 import AdminRoundIntro from '@/components/round-instructions-admin'
 import { ROUND_INFO } from '@/lib/round-info'
@@ -187,7 +188,7 @@ function toEmbedUrl(url: string): string {
 
 // ── 4 Mystery Packs ──────────────────────────────────────────────────────────
 
-const mk = (p: Omit<MCPuzzle,'id'>) => ({ ...p, id: crypto.randomUUID() })
+const mk = (p: Omit<MCPuzzle,'id'>) => ({ ...p, id: uuid() })
 
 const RAW_PACKS: Omit<MCPack,'id'>[] = [
   {
@@ -264,7 +265,7 @@ const RAW_PACKS: Omit<MCPack,'id'>[] = [
   },
 ]
 
-const PACKS: MCPack[] = RAW_PACKS.map(p => ({ ...p, id: crypto.randomUUID() }))
+const PACKS: MCPack[] = RAW_PACKS.map(p => ({ ...p, id: uuid() }))
 
 // ── Default AV Pools — Soyuz spacecraft video ────────────────────────────────
 // Three themed pools of 10 questions each; students pick one pool per team.
@@ -325,10 +326,10 @@ const POOL_DEMO: Omit<AVQSetup,'id'>[] = [
 ]
 
 const DEFAULT_AV_POOLS: Omit<AVPool,'id'>[] = [
-  { title: 'Undocking & Departure from the ISS',   questions: POOL_1.map(q => ({ ...q, id: crypto.randomUUID() })) },
-  { title: "Re-entry Through Earth's Atmosphere",   questions: POOL_2.map(q => ({ ...q, id: crypto.randomUUID() })) },
-  { title: 'Landing & Recovery',                     questions: POOL_3.map(q => ({ ...q, id: crypto.randomUUID() })) },
-  { title: 'Demo — Soyuz Practice',                  questions: POOL_DEMO.map(q => ({ ...q, id: crypto.randomUUID() })) },
+  { title: 'Undocking & Departure from the ISS',   questions: POOL_1.map(q => ({ ...q, id: uuid() })) },
+  { title: "Re-entry Through Earth's Atmosphere",   questions: POOL_2.map(q => ({ ...q, id: uuid() })) },
+  { title: 'Landing & Recovery',                     questions: POOL_3.map(q => ({ ...q, id: uuid() })) },
+  { title: 'Demo — Soyuz Practice',                  questions: POOL_DEMO.map(q => ({ ...q, id: uuid() })) },
 ]
 
 // ── Default State ─────────────────────────────────────────────────────────────
@@ -348,7 +349,7 @@ const defaultState = (): MCState => ({
   timerStart: null, storyStartAt: null, revealed: false,
   // Soyuz spacecraft re-entry documentary; capped at 120s (2 min) via end=
   avVideoUrl: 'https://www.youtube.com/embed/REc5oJUt81E?enablejsapi=1',
-  avPools: DEFAULT_AV_POOLS.map(p => ({ ...p, id: crypto.randomUUID() })),
+  avPools: DEFAULT_AV_POOLS.map(p => ({ ...p, id: uuid() })),
   secondRunnerUpOverride: null,
 })
 
@@ -566,7 +567,7 @@ export default function MCAdminPage() {
   }
   const addAVQ = () => {
     if (!newQ.text.trim()) return
-    const q: AVQSetup = { id: crypto.randomUUID(), text: newQ.text.trim(), answer: newQ.answer.trim() }
+    const q: AVQSetup = { id: uuid(), text: newQ.text.trim(), answer: newQ.answer.trim() }
     setS(p => ({
       ...p,
       avPools: p.avPools.map((pl, i) =>
